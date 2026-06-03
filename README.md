@@ -23,19 +23,50 @@ No external dependencies are required for the mock backend. Real TTS backends ma
 Run the bundled acceptance demo to confirm everything works:
 
 ```bash
-python acceptance.py
+python acceptance.py sample.srt --mock
 ```
 
-Expected output:
+---
+
+## Sample SRT and mock-backend output
+
+Given `sample.srt`:
+
+```srt
+1
+00:00:00,000 --> 00:00:02,500
+<emotion:happy>Welcome to Dubbing Studio!
+
+2
+00:00:03,000 --> 00:00:06,200
+<rate:slow>This pipeline converts subtitles into timed audio segments.
+
+3
+00:00:07,000 --> 00:00:09,800
+<emotion:excited><rate:fast>The mock backend calculates durations without any network calls.
+
+4
+00:00:10,200 --> 00:00:13,500
+Multilingual support enables dubbing in any target language.
+
+5
+00:00:14,000 --> 00:00:17,000
+<emotion:calm><pitch:low>Voice cloning requires explicit written consent from the voice owner.
+```
+
+Running `python -m dubbing dub sample.srt` prints:
 
 ```
-Timed segment plan — 5 segment(s)
-
-#     Start           End             Tags                               Text
------------------------------------------------------------------------------
-1     00:00:00,000    00:00:02,500    emotion:happy                      Welcome to Dubbing Studio!
-...
+[0–2500] Welcome to Dubbing Studio!
+[3000–6200] This pipeline converts subtitles into timed audio segments.
+[7000–9800] The mock backend calculates durations without any network calls.
+[10200–13500] Multilingual support enables dubbing in any target language.
+[14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
+
+The mock backend assigns `duration_ms = len(clean_text) * 60`. The `TimelineAligner` always maps the TTS duration onto the original SRT window, so output timestamps match the SRT exactly. Prosody tags are stripped before synthesis and forwarded to the backend as `ProsodyTag` objects on each `Segment`.
+
+---
 
 Dub a single SRT file to stdout:
 
