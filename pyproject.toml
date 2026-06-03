@@ -5,6 +5,7 @@ requires-python = ">=3.10"
 
 [project.scripts]
 dubbing-cli = "dubbing.__main__:main"
+tts-studio = "tts_studio.__main__:main"
 
 [project.optional-dependencies]
 dev = [
