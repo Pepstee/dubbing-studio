@@ -1,43 +1,55 @@
 #!/usr/bin/env python3
-"""Acceptance demo: runs the dubbing pipeline on the bundled sample.srt using the mock backend."""
+"""Acceptance demo: prints a segment plan table using the mock TTS backend."""
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
-# Keep the project importable when run directly without installation.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from dubbing.backends.mock import MockTTSBackend
-from dubbing.pipeline import DubbingPipeline
-
-
-def _fmt_ms(ms: int) -> str:
-    h, rem = divmod(ms, 3_600_000)
-    m, rem = divmod(rem, 60_000)
-    s, ms_ = divmod(rem, 1_000)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms_:03d}"
+from tts_studio.mock_backend import MockTTSBackend
+from tts_studio.pipeline import DubbingPipeline
+from tts_studio.srt_parser import parse_srt
 
 
 def main() -> None:
-    sample = Path(__file__).parent / "sample.srt"
-    pipeline = DubbingPipeline(backend=MockTTSBackend())
-    segments = pipeline.run(sample)
+    parser = argparse.ArgumentParser(description="Acceptance demo for TTS Studio dubbing pipeline.")
+    parser.add_argument("srt", help="Path to the .srt file")
+    parser.add_argument("--mock", action="store_true", help="Use mock TTS backend (no network calls)")
+    args = parser.parse_args()
 
-    print(f"Timed segment plan — {len(segments)} segment(s)\n")
-    header = f"{'#':<4}  {'Start':<15} {'End':<15} {'Tags':<34} Text"
+    srt_path = Path(args.srt)
+    if not srt_path.exists():
+        print(f"Error: SRT file not found: {srt_path}", file=sys.stderr)
+        sys.exit(1)
+
+    segments = parse_srt(srt_path)
+    pipeline = DubbingPipeline(MockTTSBackend())
+    results = pipeline.run(segments)
+
+    col = (5, 20, 42, 13)
+    header = (
+        f"{'#':<{col[0]}}  "
+        f"{'Start–End (ms)':<{col[1]}}  "
+        f"{'Text excerpt':<{col[2]}}  "
+        f"{'stretch_ratio':<{col[3]}}"
+    )
+    print(f"Segment plan — {len(segments)} segment(s)\n")
     print(header)
     print("-" * len(header))
-    for ts in segments:
-        seg = ts.segment
-        tags = ", ".join(f"{t.name}:{t.value}" for t in seg.tags) or "—"
+
+    for seg, result in zip(segments, results):
+        window_ms = seg.end_ms - seg.start_ms
+        ratio = result.duration_ms / window_ms if window_ms > 0 else float("nan")
+        excerpt = (seg.text[:39] + "...") if len(seg.text) > 42 else seg.text
+        timing = f"{seg.start_ms}–{seg.end_ms}"
         print(
-            f"{seg.entry.index:<4}  "
-            f"{_fmt_ms(ts.start_ms):<15} "
-            f"{_fmt_ms(ts.end_ms):<15} "
-            f"{tags:<34} "
-            f"{seg.entry.text}"
+            f"{seg.index:<{col[0]}}  "
+            f"{timing:<{col[1]}}  "
+            f"{excerpt:<{col[2]}}  "
+            f"{ratio:<{col[3]}.3f}"
         )
 
 
