@@ -229,3 +229,106 @@ def test_zero_timestamp_entry():
     entries = parse_srt_string(srt)
     assert entries[0].start_ms == 0
     assert entries[0].end_ms == 500
+
+
+# ---------------------------------------------------------------------------
+# Round-trip: every field on every entry
+# ---------------------------------------------------------------------------
+
+def test_round_trip_all_fields():
+    entries = parse_srt_string(THREE_ENTRY_SRT)
+    assert entries[0] == SRTEntry(index=1, start_ms=1_000, end_ms=2_500, text="Hello world")
+    assert entries[1] == SRTEntry(index=2, start_ms=3_000, end_ms=5_000, text="Second subtitle")
+    assert entries[2] == SRTEntry(index=3, start_ms=60_000, end_ms=65_750, text="Third line")
+
+
+def test_round_trip_parse_twice_identical():
+    a = parse_srt_string(THREE_ENTRY_SRT)
+    b = parse_srt_string(THREE_ENTRY_SRT)
+    assert a == b
+
+
+# ---------------------------------------------------------------------------
+# Prosody tag preservation: parser does NOT strip prosody markup
+# ---------------------------------------------------------------------------
+
+def test_prosody_tags_preserved_in_parsed_text():
+    srt = "1\n00:00:01,000 --> 00:00:03,000\n<emotion:happy>Hello world\n"
+    entries = parse_srt_string(srt)
+    assert "<emotion:happy>" in entries[0].text
+
+
+def test_multiple_prosody_tags_preserved_in_parsed_text():
+    srt = "1\n00:00:00,000 --> 00:00:02,000\n<rate:slow><emotion:sad>Goodbye\n"
+    entries = parse_srt_string(srt)
+    assert "<rate:slow>" in entries[0].text
+    assert "<emotion:sad>" in entries[0].text
+
+
+def test_parse_prosody_on_parsed_text_leaves_clean_text():
+    from dubbing.prosody import parse_prosody
+    srt = "1\n00:00:01,000 --> 00:00:03,000\n<emotion:happy>Hello world\n"
+    entries = parse_srt_string(srt)
+    clean, tags = parse_prosody(entries[0].text)
+    assert "<emotion:happy>" not in clean
+    assert "Hello world" in clean
+    assert len(tags) == 1
+    assert tags[0].name == "emotion"
+    assert tags[0].value == "happy"
+
+
+def test_parse_prosody_extracts_all_tags_from_parsed_entry():
+    from dubbing.prosody import parse_prosody
+    srt = "1\n00:00:00,000 --> 00:00:03,000\n<rate:slow><emotion:sad>Goodbye cruel world\n"
+    entries = parse_srt_string(srt)
+    clean, tags = parse_prosody(entries[0].text)
+    assert clean == "Goodbye cruel world"
+    tag_names = {t.name for t in tags}
+    assert tag_names == {"rate", "emotion"}
+
+
+# ---------------------------------------------------------------------------
+# Malformed block handling: blocks with invalid structure are skipped without crash
+# ---------------------------------------------------------------------------
+
+def test_malformed_block_non_integer_index_no_exception():
+    bad = "abc\n00:00:01,000 --> 00:00:02,000\nsome text\n"
+    result = parse_srt_string(bad)
+    # gracefully skipped — no exception, no entry produced
+    assert result == []
+
+
+def test_malformed_block_missing_timecode_no_exception():
+    bad = "1\nNOT_A_TIMECODE\nsome text\n"
+    result = parse_srt_string(bad)
+    assert result == []
+
+
+def test_malformed_block_does_not_corrupt_subsequent_valid_blocks():
+    mixed = (
+        "bad_index\n00:00:01,000 --> 00:00:02,000\nskipped\n\n"
+        "1\n00:00:03,000 --> 00:00:04,000\nkept\n"
+    )
+    entries = parse_srt_string(mixed)
+    assert len(entries) == 1
+    assert entries[0].index == 1
+    assert "kept" in entries[0].text
+
+
+# ---------------------------------------------------------------------------
+# Language default: Segment wrapping a parsed entry defaults to language=""
+# ---------------------------------------------------------------------------
+
+def test_language_default_propagated_via_segment():
+    from dubbing.models import Segment
+    entries = parse_srt_string(SINGLE_ENTRY_SRT)
+    seg = Segment(entry=entries[0], tags=[], language="")
+    assert seg.language == ""
+
+
+def test_language_default_is_empty_string_not_none():
+    from dubbing.models import Segment
+    entries = parse_srt_string(SINGLE_ENTRY_SRT)
+    seg = Segment(entry=entries[0], tags=[], language="")
+    assert seg.language is not None
+    assert seg.language == ""

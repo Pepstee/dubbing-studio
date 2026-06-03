@@ -6,6 +6,7 @@ import pytest
 
 from dubbing.aligner import TimedSegment
 from dubbing.backends.base import TTSBackend
+from dubbing.backends.mock import MockTTSBackend
 from dubbing.models import Segment, TTSResult
 from dubbing.pipeline import DubbingPipeline
 
@@ -239,3 +240,125 @@ class TestPipelineFileInput:
         srt.write_text(_SRT_MULTI, encoding="utf-8")
         result = DubbingPipeline(_FixedDurationBackend()).run(srt)
         assert len(result) == 3
+
+
+# ---------------------------------------------------------------------------
+# MockTTSBackend injected directly — acceptance criteria coverage
+# ---------------------------------------------------------------------------
+
+class TestMockTTSBackendInjected:
+    def test_pipeline_accepts_mock_backend(self):
+        result = DubbingPipeline(MockTTSBackend()).run(_SRT_SINGLE)
+        assert isinstance(result, list)
+
+    def test_single_srt_with_mock_backend_count(self):
+        result = DubbingPipeline(MockTTSBackend()).run(_SRT_SINGLE)
+        assert len(result) == 1
+
+    def test_multi_srt_with_mock_backend_count(self):
+        result = DubbingPipeline(MockTTSBackend()).run(_SRT_MULTI)
+        assert len(result) == 3
+
+    def test_len_results_equals_len_srt_entries(self):
+        backend = _FixedDurationBackend()
+        result = DubbingPipeline(backend).run(_SRT_MULTI)
+        # number of TimedSegments == number of segments passed to backend
+        assert len(result) == len(backend.calls[0])
+
+    def test_len_results_equals_input_segment_count_single(self):
+        backend = _FixedDurationBackend()
+        result = DubbingPipeline(backend).run(_SRT_SINGLE)
+        assert len(result) == len(backend.calls[0])
+
+    def test_mock_backend_items_are_timed_segments(self):
+        result = DubbingPipeline(MockTTSBackend()).run(_SRT_MULTI)
+        assert all(isinstance(ts, TimedSegment) for ts in result)
+
+
+# ---------------------------------------------------------------------------
+# Language field forwarded to backend
+# ---------------------------------------------------------------------------
+
+class TestLanguageFieldForwarded:
+    def test_language_default_is_empty_string(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_SINGLE)
+        seg = backend.calls[0][0]
+        assert seg.language == ""
+
+    def test_language_forwarded_to_all_segments(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_MULTI)
+        for seg in backend.calls[0]:
+            assert seg.language == ""
+
+    def test_language_forwarded_with_prosody_tags(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_PROSODY)
+        seg = backend.calls[0][0]
+        assert seg.language == ""
+
+    def test_language_field_is_str_type(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_SINGLE)
+        seg = backend.calls[0][0]
+        assert isinstance(seg.language, str)
+
+
+# ---------------------------------------------------------------------------
+# ProsodyTag list forwarded to backend.synthesize
+# ---------------------------------------------------------------------------
+
+class TestProsodyTagsForwardedToBackend:
+    def test_single_tag_forwarded_to_backend(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_PROSODY)
+        seg = backend.calls[0][0]
+        assert len(seg.tags) == 1
+        assert seg.tags[0].name == "emotion"
+        assert seg.tags[0].value == "happy"
+
+    def test_multiple_tags_forwarded_to_backend(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_MULTI_TAG)
+        seg = backend.calls[0][0]
+        assert len(seg.tags) == 2
+
+    def test_tag_names_forwarded_correctly(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_MULTI_TAG)
+        seg = backend.calls[0][0]
+        names = {t.name for t in seg.tags}
+        assert "rate" in names
+        assert "emotion" in names
+
+    def test_no_tags_forwarded_when_plain_text(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_SINGLE)
+        seg = backend.calls[0][0]
+        assert seg.tags == []
+
+    def test_tags_stripped_from_segment_text_before_backend(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_PROSODY)
+        seg = backend.calls[0][0]
+        # text passed to backend has NO raw tag markup
+        assert "<emotion:happy>" not in seg.entry.text
+        assert "Hello world" in seg.entry.text
+
+    def test_tags_forwarded_independently_per_segment(self):
+        srt = """\
+1
+00:00:00,000 --> 00:00:02,000
+<emotion:happy>First
+
+2
+00:00:03,000 --> 00:00:05,000
+No tags here
+
+"""
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(srt)
+        segs = backend.calls[0]
+        assert len(segs[0].tags) == 1
+        assert segs[1].tags == []

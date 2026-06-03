@@ -185,3 +185,85 @@ class TestAlignDegenerateCases:
         seg = _make_segment(start_ms=0, end_ms=1000)
         result = TimelineAligner().align([seg], [0])
         assert result[0].segment is seg
+
+
+# ---------------------------------------------------------------------------
+# Stretch ratio: effective ratio == 1.0 when tts_ms matches the SRT window
+# ---------------------------------------------------------------------------
+
+class TestAlignStretchRatio:
+    def test_exact_fit_effective_stretch_ratio_is_one(self):
+        window_ms = 2000
+        seg = _make_segment(start_ms=500, end_ms=2500)  # window = 2000ms
+        result = TimelineAligner().align([seg], [window_ms])
+        actual_window = result[0].end_ms - result[0].start_ms
+        assert actual_window / window_ms == 1.0
+
+    def test_exact_fit_start_unchanged(self):
+        seg = _make_segment(start_ms=1000, end_ms=3000)
+        result = TimelineAligner().align([seg], [2000])
+        assert result[0].start_ms == 1000
+
+    def test_exact_fit_end_unchanged(self):
+        seg = _make_segment(start_ms=1000, end_ms=3000)
+        result = TimelineAligner().align([seg], [2000])
+        assert result[0].end_ms == 3000
+
+    def test_exact_fit_window_preserved(self):
+        seg = _make_segment(start_ms=200, end_ms=1200)  # 1000ms window
+        result = TimelineAligner().align([seg], [1000])
+        assert (result[0].end_ms - result[0].start_ms) == 1000
+
+    def test_short_tts_fills_full_srt_window(self):
+        # effective ratio > 1.0 — audio stretched to fill the window
+        seg = _make_segment(start_ms=0, end_ms=3000)
+        result = TimelineAligner().align([seg], [500])
+        assert result[0].end_ms - result[0].start_ms == 3000
+
+
+# ---------------------------------------------------------------------------
+# Over-budget: tts_ms > srt_window — output stays within SRT bounds
+# ---------------------------------------------------------------------------
+
+class TestAlignOverBudget:
+    def test_tts_over_budget_11_percent_clipped_to_window(self):
+        srt_window = 1000
+        tts_ms = int(srt_window * 1.11)  # 11% over budget
+        seg = _make_segment(start_ms=0, end_ms=srt_window)
+        result = TimelineAligner().align([seg], [tts_ms])
+        assert result[0].end_ms == srt_window
+
+    def test_tts_over_budget_50_percent_clipped_to_window(self):
+        srt_window = 2000
+        tts_ms = int(srt_window * 1.50)
+        seg = _make_segment(start_ms=500, end_ms=2500)
+        result = TimelineAligner().align([seg], [tts_ms])
+        assert result[0].start_ms == 500
+        assert result[0].end_ms == 2500
+
+    def test_tts_over_budget_does_not_bleed_into_next_slot(self):
+        segs = [
+            _make_segment(index=1, start_ms=0, end_ms=1000),
+            _make_segment(index=2, start_ms=2000, end_ms=3000),
+        ]
+        # first segment: tts 3× over-budget
+        result = TimelineAligner().align(segs, [3000, 1000])
+        assert result[0].end_ms <= 1000
+        assert result[1].start_ms == 2000
+
+    def test_tts_exactly_at_window_is_not_over_budget(self):
+        srt_window = 1500
+        seg = _make_segment(start_ms=100, end_ms=1600)
+        result = TimelineAligner().align([seg], [srt_window])
+        assert result[0].end_ms - result[0].start_ms == srt_window
+
+    def test_tts_over_budget_output_window_never_exceeds_srt_window(self):
+        srt_window = 800
+        for over_factor in [1.11, 1.25, 2.0, 5.0]:
+            tts_ms = int(srt_window * over_factor)
+            seg = _make_segment(start_ms=0, end_ms=srt_window)
+            result = TimelineAligner().align([seg], [tts_ms])
+            output_window = result[0].end_ms - result[0].start_ms
+            assert output_window == srt_window, (
+                f"over_factor={over_factor}: expected window={srt_window}, got {output_window}"
+            )

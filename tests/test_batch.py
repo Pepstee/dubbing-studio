@@ -221,3 +221,68 @@ class TestBatchDubEdgeCases:
         results = batch_dub([srt, srt], _MockBackend(), tmp_path / "out")
         # both entries map to same Path key; the second run overwrites the first in the dict
         assert srt in results
+
+
+# ---------------------------------------------------------------------------
+# Two-SRT batch acceptance: explicit coverage of acceptance criteria
+# ---------------------------------------------------------------------------
+
+class TestBatchDubTwoSRTs:
+    def test_batch_two_srt_files_returns_two_results(self, tmp_path):
+        a = tmp_path / "first.srt"
+        b = tmp_path / "second.srt"
+        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        results = batch_dub([a, b], _MockBackend(), tmp_path / "out")
+        assert len(results) == 2
+
+    def test_batch_two_srt_each_key_is_its_input_path(self, tmp_path):
+        a = tmp_path / "first.srt"
+        b = tmp_path / "second.srt"
+        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        results = batch_dub([a, b], _MockBackend(), tmp_path / "out")
+        assert a in results
+        assert b in results
+
+    def test_batch_two_srt_values_are_lists_of_timed_segments(self, tmp_path):
+        a = tmp_path / "first.srt"
+        b = tmp_path / "second.srt"
+        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        results = batch_dub([a, b], _MockBackend(), tmp_path / "out")
+        for segs in results.values():
+            assert isinstance(segs, list)
+            assert all(isinstance(ts, TimedSegment) for ts in segs)
+
+    def test_batch_two_srt_no_audio_files_written(self, tmp_path):
+        a = tmp_path / "first.srt"
+        b = tmp_path / "second.srt"
+        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        batch_dub([a, b], _MockBackend(), out_dir)
+        written_files = [f for f in out_dir.rglob("*") if f.is_file()]
+        assert written_files == [], f"Unexpected files written: {written_files}"
+
+    def test_batch_no_srt_files_written_to_output(self, tmp_path):
+        a = tmp_path / "a.srt"
+        b = tmp_path / "b.srt"
+        a.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        b.write_text(_SRT_THREE_SEGMENTS, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        batch_dub([a, b], _MockBackend(), out_dir)
+        srt_files = list(out_dir.rglob("*.srt"))
+        assert srt_files == []
+
+    def test_batch_only_creates_output_directory_nothing_else(self, tmp_path):
+        a = tmp_path / "a.srt"
+        b = tmp_path / "b.srt"
+        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        out_dir = tmp_path / "only_dir"
+        batch_dub([a, b], _MockBackend(), out_dir)
+        all_items = list(out_dir.rglob("*"))
+        # directory created; no files inside it
+        assert out_dir.is_dir()
+        assert all(not p.is_file() for p in all_items)
