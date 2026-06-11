@@ -28,7 +28,7 @@ python acceptance.py
 
 ---
 
-## Sample SRT and mock-backend output
+## Sample SRT and example output
 
 Given `sample.srt`:
 
@@ -43,7 +43,7 @@ Given `sample.srt`:
 
 3
 00:00:07,000 --> 00:00:09,800
-<emotion:excited><rate:fast>The mock backend calculates durations without any network calls.
+<emotion:excited><rate:fast>The say backend synthesises every line locally without any network calls.
 
 4
 00:00:10,200 --> 00:00:13,500
@@ -59,7 +59,7 @@ Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary
 ```
 [0–2500] Welcome to Dubbing Studio!
 [3000–6200] This pipeline converts subtitles into timed audio segments.
-[7000–9800] The mock backend calculates durations without any network calls.
+[7000–9800] The say backend synthesises every line locally without any network calls.
 [10200–13500] Multilingual support enables dubbing in any target language.
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
@@ -154,7 +154,7 @@ python -m dubbing dub subtitles.srt --lang ja   # Japanese
 python -m dubbing dub subtitles.srt --lang fr   # French
 ```
 
-The language code is stored on every `Segment.language` field and forwarded to `TTSBackend.synthesize`. The mock backend ignores it; real backends use it to select voice and phoneme rules.
+The language code is stored on every `Segment.language` field and forwarded to `TTSBackend.synthesize`. The built-in `say` backend uses the system default voice regardless of the code; cloud backends use it to select voice and phoneme rules.
 
 Per-segment language overrides are not yet supported via SRT tags; use the Python API to construct `Segment` objects directly if per-segment language mixing is required.
 
