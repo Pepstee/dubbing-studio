@@ -10,25 +10,9 @@ from pathlib import Path
 from dubbing.backends.base import TTSBackend
 from dubbing.models import Segment, TTSResult
 
-_MS_PER_CHAR = 60
 _SAMPLE_RATE = 22050
 _CHANNELS = 1
 _SAMPLE_WIDTH = 2  # 16-bit PCM
-
-
-def _make_wav(pcm: bytes) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(_CHANNELS)
-        wf.setsampwidth(_SAMPLE_WIDTH)
-        wf.setframerate(_SAMPLE_RATE)
-        wf.writeframes(pcm)
-    return buf.getvalue()
-
-
-def _silence_wav(duration_ms: int) -> bytes:
-    num_samples = max(1, int(_SAMPLE_RATE * duration_ms / 1000))
-    return _make_wav(b"\x00" * num_samples * _SAMPLE_WIDTH * _CHANNELS)
 
 
 def _wav_duration_ms(wav_bytes: bytes) -> int:
@@ -37,6 +21,10 @@ def _wav_duration_ms(wav_bytes: bytes) -> int:
 
 
 def _synthesize_with_say(text: str) -> bytes:
+    if shutil.which("say") is None:
+        raise RuntimeError("'say' command not found; macOS TTS is unavailable")
+    if shutil.which("afconvert") is None:
+        raise RuntimeError("'afconvert' command not found; macOS TTS is unavailable")
     with tempfile.TemporaryDirectory() as tmpdir:
         aiff_path = Path(tmpdir) / "out.aiff"
         wav_path = Path(tmpdir) / "out.wav"
@@ -52,23 +40,11 @@ def _synthesize_with_say(text: str) -> bytes:
 
 
 class SayTTSBackend(TTSBackend):
-    """TTS backend using macOS `say`; falls back to silence PCM when unavailable."""
+    """TTS backend using macOS `say` and `afconvert`."""
 
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
-        has_say = shutil.which("say") is not None
         results: list[TTSResult] = []
         for seg in segments:
-            text = seg.entry.text
-            fallback_ms = max(len(text) * _MS_PER_CHAR, 500)
-            if has_say:
-                try:
-                    audio = _synthesize_with_say(text)
-                    duration_ms = _wav_duration_ms(audio)
-                except Exception:
-                    audio = _silence_wav(fallback_ms)
-                    duration_ms = fallback_ms
-            else:
-                audio = _silence_wav(fallback_ms)
-                duration_ms = fallback_ms
-            results.append(TTSResult(segment=seg, audio_bytes=audio, duration_ms=duration_ms))
+            audio = _synthesize_with_say(seg.entry.text)
+            results.append(TTSResult(segment=seg, audio_bytes=audio, duration_ms=_wav_duration_ms(audio)))
         return results
