@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import uuid
-import wave
 
 from flask import Flask, jsonify, request, send_file
 
@@ -18,42 +18,11 @@ _UPLOAD_FORM = """\
 <p>Upload an SRT subtitle file to synthesise dubbed audio.</p>
 <form method="post" action="/dub" enctype="multipart/form-data">
   <label>SRT file: <input type="file" name="srt" accept=".srt" required></label><br><br>
+  <label>Language (optional, e.g. en, es, fr): <input type="text" name="lang"></label><br><br>
   <button type="submit">Dub</button>
 </form>
 </body>
 </html>"""
-
-
-def _silence_wav(duration_ms: int) -> bytes:
-    sample_rate = 22050
-    num_samples = max(1, int(sample_rate * duration_ms / 1000))
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        wf.writeframes(b"\x00" * num_samples * 2)
-    return buf.getvalue()
-
-
-def _combine_wav(wav_list: list[bytes]) -> bytes:
-    pcm_chunks: list[bytes] = []
-    params = None
-    for wav_data in wav_list:
-        try:
-            with wave.open(io.BytesIO(wav_data)) as wf:
-                if params is None:
-                    params = wf.getparams()
-                pcm_chunks.append(wf.readframes(wf.getnframes()))
-        except Exception:
-            pass
-    if not pcm_chunks or params is None:
-        return _silence_wav(1000)
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setparams(params)
-        wf.writeframes(b"".join(pcm_chunks))
-    return buf.getvalue()
 
 
 @app.route("/")
@@ -68,16 +37,22 @@ def dub():
         return jsonify({"error": "No SRT file provided"}), 400
 
     srt_text = srt_file.read().decode("utf-8")
+    language = (request.form.get("lang") or "").strip()
 
+    from dubbing.assembler import assemble_timeline
     from dubbing.backends.say import SayTTSBackend
     from dubbing.pipeline import DubbingPipeline
 
     backend = SayTTSBackend()
     pipeline = DubbingPipeline(backend)
-    _, results = pipeline.run_full(srt_text)
-
-    wav_list = [r.audio_bytes for r in results if r.audio_bytes]
-    combined = _combine_wav(wav_list) if wav_list else _silence_wav(1000)
+    try:
+        timed, results = pipeline.run_full(srt_text, language=language)
+        combined = assemble_timeline(timed, results)
+    except (RuntimeError, ValueError) as exc:
+        # Synthesis genuinely failed — report it; never substitute silence.
+        return jsonify({"error": str(exc)}), 502
+    except subprocess.CalledProcessError as exc:
+        return jsonify({"error": f"TTS engine failed: {exc}"}), 502
 
     job_id = str(uuid.uuid4())
     _jobs[job_id] = combined

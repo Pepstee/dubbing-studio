@@ -10,14 +10,33 @@ class TimedSegment:
     start_ms: int
     end_ms: int
     segment: Segment
+    #: Factor applied to the rendered audio's duration so it fits the SRT
+    #: window: < 1.0 compresses overlong audio; 1.0 keeps natural speed
+    #: (short audio is padded with silence by the assembler).
+    stretch_ratio: float = 1.0
+
+
+def segment_plan(timed: list[TimedSegment]) -> list[dict]:
+    """Serialisable plan for a list of aligned segments (CLI/batch JSON output)."""
+    return [
+        {
+            "start_ms": ts.start_ms,
+            "end_ms": ts.end_ms,
+            "stretch_ratio": ts.stretch_ratio,
+            "text": ts.segment.entry.text,
+        }
+        for ts in timed
+    ]
 
 
 class TimelineAligner:
     """Aligns TTS-rendered segments to SRT subtitle timestamps.
 
-    When TTS audio is shorter or longer than the subtitle window, the segment
-    is stretched/compressed within that window rather than overflowing into
-    adjacent slots.
+    Output bounds always equal the SRT window, so no segment overflows into
+    adjacent slots. The aligner also computes a per-segment `stretch_ratio`
+    from the real synthesis duration: audio longer than its window gets a
+    ratio < 1.0 (time-compress to fit); audio that fits gets 1.0 (play at
+    natural speed, pad the remainder with silence).
     """
 
     def align(
@@ -34,7 +53,8 @@ class TimelineAligner:
 
         Returns:
             List of TimedSegment, one per input segment, with start_ms/end_ms
-            clipped to the SRT window and stretched/compressed as needed.
+            clipped to the SRT window and a stretch_ratio derived from the
+            real TTS duration.
         """
         if len(segments) != len(durations):
             raise ValueError(
@@ -57,10 +77,17 @@ class TimelineAligner:
                 result.append(TimedSegment(start_ms=srt_start, end_ms=srt_end, segment=segment))
                 continue
 
-            # Stretch or compress: the rendered audio is mapped linearly onto the
-            # subtitle window regardless of how much longer/shorter it is.
+            # Compress overlong audio to fit the window; audio that already
+            # fits plays at natural speed (ratio 1.0) and the assembler pads
+            # the remainder of the window with silence.
+            ratio = window / tts_ms if tts_ms > window else 1.0
             result.append(
-                TimedSegment(start_ms=srt_start, end_ms=srt_start + window, segment=segment)
+                TimedSegment(
+                    start_ms=srt_start,
+                    end_ms=srt_start + window,
+                    segment=segment,
+                    stretch_ratio=ratio,
+                )
             )
 
         return result

@@ -14,7 +14,9 @@ class DubbingPipeline:
         self._backend = backend
         self._aligner = TimelineAligner()
 
-    def run_full(self, input: str | Path) -> tuple[list[TimedSegment], list[TTSResult]]:
+    def run_full(
+        self, input: str | Path, language: str = ""
+    ) -> tuple[list[TimedSegment], list[TTSResult]]:
         if isinstance(input, Path):
             entries = parse_srt(input)
         else:
@@ -34,7 +36,7 @@ class DubbingPipeline:
                         text=clean_text,
                     ),
                     tags=tags,
-                    language="",
+                    language=language,
                 )
             )
 
@@ -43,6 +45,6 @@ class DubbingPipeline:
         timed = self._aligner.align(segments, durations)
         return timed, results
 
-    def run(self, input: str | Path) -> list[TimedSegment]:
-        timed, _ = self.run_full(input)
+    def run(self, input: str | Path, language: str = "") -> list[TimedSegment]:
+        timed, _ = self.run_full(input, language=language)
         return timed

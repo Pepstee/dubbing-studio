@@ -64,7 +64,7 @@ Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
 
-The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` always maps the TTS duration onto the original SRT window, so output timestamps match the SRT exactly. Prosody tags are stripped before synthesis and forwarded to the backend as `ProsodyTag` objects on each `Segment`.
+The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is placed at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `sample.srt` yields a WAV exactly 17.0 seconds long.
 
 ---
 
@@ -74,29 +74,33 @@ Dub a single SRT file to stdout:
 python -m dubbing dub subtitles.srt
 ```
 
-Write the segment plan as JSON:
+Write the dubbed audio and the segment plan:
 
 ```bash
 python -m dubbing dub subtitles.srt --output out/
-# Writes out/subtitles.json
+# Writes out/subtitles.wav  (timeline-true dubbed audio)
+#    and out/subtitles.json (segment plan: start_ms, end_ms, stretch_ratio, text)
 ```
 
 ---
 
 ## Prosody and emotion tag syntax
 
-Embed tags directly in subtitle text using `<name:value>` notation. Tags are stripped before TTS synthesis and stored on the segment for the backend to consume.
+Embed tags directly in subtitle text using `<name:value>` notation. Tags are stripped before TTS synthesis and stored on the segment for the backend to consume. The built-in `say` backend genuinely delivers them: `rate` and `emotion` tags set the speaking rate (`say -r`, words per minute), and `pitch` tags shift the pitch base via an embedded `[[ pbas N ]]` speech command.
 
 ```
-<emotion:happy>    Joyful delivery
-<emotion:sad>      Mournful, slow pacing
-<emotion:excited>  High-energy reading
-<emotion:calm>     Measured, even tone
-<rate:slow>        Stretched cadence
-<rate:fast>        Rapid-fire delivery
-<pitch:low>        Deeper voice register
-<pitch:high>       Higher voice register
+<emotion:happy>    Joyful delivery        → say -r 195
+<emotion:sad>      Mournful, slow pacing  → say -r 130
+<emotion:excited>  High-energy reading    → say -r 215
+<emotion:calm>     Measured, even tone    → say -r 150
+<rate:slow>        Stretched cadence      → say -r 130
+<rate:fast>        Rapid-fire delivery    → say -r 220
+<rate:185>         Explicit WPM           → say -r 185
+<pitch:low>        Deeper voice register  → [[ pbas 38 ]]
+<pitch:high>       Higher voice register  → [[ pbas 54 ]]
 ```
+
+An explicit `rate` tag overrides any emotion-derived pacing on the same line.
 
 Tags compose freely on a single line:
 
@@ -154,7 +158,7 @@ python -m dubbing dub subtitles.srt --lang ja   # Japanese
 python -m dubbing dub subtitles.srt --lang fr   # French
 ```
 
-The language code is stored on every `Segment.language` field and forwarded to `TTSBackend.synthesize`. The built-in `say` backend uses the system default voice regardless of the code; cloud backends use it to select voice and phoneme rules.
+The language code is stored on every `Segment.language` field and forwarded to `TTSBackend.synthesize`. The built-in `say` backend selects an installed macOS voice for the language — exact locale matches (`es-MX` → an `es_MX` voice) win over base-language matches (`es` → the first `es_*` voice). If no installed voice supports the requested language, synthesis fails with a clear error listing the languages that are available; the backend never silently dubs in the wrong language.
 
 Per-segment language overrides are not yet supported via SRT tags; use the Python API to construct `Segment` objects directly if per-segment language mixing is required.
 
@@ -172,10 +176,9 @@ python -m dubbing batch "content/**/*.srt" --output out/
 The batch command:
 - Expands the glob pattern (recursive by default when `**` is used)
 - Runs the pipeline independently on each file
+- Writes `<stem>.wav` (timeline-true dubbed audio) and `<stem>.json` (the segment plan) to `--output` for every input
 - Prints a summary line per file: `path/to/file.srt: N segment(s)`
 - Exits non-zero if no files match the pattern
-
-Output JSON files are written to `--output` (defaults to current directory), one file per input with the same stem and a `.json` extension.
 
 From Python:
 
@@ -185,9 +188,10 @@ from dubbing.batch import batch_dub
 from dubbing.backends.say import SayTTSBackend
 
 results = batch_dub(
-    paths=list(Path("content").rglob("*.srt")),
+    inputs=list(Path("content").rglob("*.srt")),
     backend=SayTTSBackend(),
     output_dir="out/",
+    language="es",  # optional target language
 )
 for path, segs in results.items():
     print(f"{path}: {len(segs)} segments")
@@ -201,11 +205,11 @@ Dubbing Studio implements the core flow shared by commercial dubbing platforms s
 
 | Capability | Commercial equivalent | Dubbing Studio component |
 |---|---|---|
-| **SRT-in → dubbed-audio-out** | Upload subtitle file, receive lip-synced audio | `dubbing-cli dub file.srt --output out/` writes a combined `.wav`; `POST /dub` via the web UI returns a downloadable audio file |
-| **Per-segment timing alignment** | Each dubbed phrase snaps to the original subtitle window | `dubbing.aligner.TimelineAligner` maps every TTS result onto its SRT start/end timestamps; overlong audio is compressed, short audio is stretched |
-| **Multilingual support** | Target-language selection per project or per segment | `--lang` flag propagates a BCP-47 code to `Segment.language` on every segment; backends use it to choose voice and phoneme rules |
-| **Prosody / emotion tags** | Expressive-speech controls (emotion, pacing, pitch) built into the platform UI | `<emotion:happy>`, `<rate:slow>`, `<pitch:low>` etc. parsed from SRT text by `dubbing.prosody`; stripped before TTS and forwarded as `ProsodyTag` objects to the backend |
-| **Batch mode** | Project-level bulk processing of multiple subtitle tracks | `dubbing-cli batch "content/**/*.srt" --output out/` processes every matched file and writes one output per input |
+| **SRT-in → dubbed-audio-out** | Upload subtitle file, receive lip-synced audio | `dubbing-cli dub file.srt --output out/` writes a timeline-true `.wav` spanning the full subtitle timeline; `POST /dub` via the web UI returns a downloadable audio file |
+| **Per-segment timing alignment** | Each dubbed phrase snaps to the original subtitle window | `dubbing.aligner.TimelineAligner` computes per-segment stretch ratios from real synthesis durations; `dubbing.assembler` places each segment at its SRT start time, fills gaps with silence, and time-compresses overlong audio to fit its window |
+| **Multilingual support** | Target-language selection per project or per segment | `--lang` flag propagates a BCP-47 code to `Segment.language` on every segment; the `say` backend selects an installed voice for the language and errors clearly when none exists |
+| **Prosody / emotion tags** | Expressive-speech controls (emotion, pacing, pitch) built into the platform UI | `<emotion:happy>`, `<rate:slow>`, `<pitch:low>` etc. parsed from SRT text by `dubbing.prosody`; the `say` backend delivers them as speaking rate (`-r`) and pitch base (`[[ pbas N ]]`) |
+| **Batch mode** | Project-level bulk processing of multiple subtitle tracks | `dubbing-cli batch "content/**/*.srt" --output out/` writes one dubbed `.wav` plus one `.json` plan per matched input |
 
 The `SayTTSBackend` uses macOS `say` for local synthesis (no network, no cost). Swap in any cloud TTS backend — ElevenLabs, Google Cloud TTS, Azure Cognitive Services — by subclassing `TTSBackend` and implementing `synthesize`; the pipeline, aligner, and web UI require no changes.
 

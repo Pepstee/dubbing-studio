@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from dubbing.prosody import parse_prosody
 from dubbing.models import ProsodyTag

@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +74,7 @@ class TestCliDub:
         srt = tmp_path / "multi.srt"
         srt.write_text(_SRT_MULTI, encoding="utf-8")
         result = _run("dub", str(srt))
-        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         assert len(lines) == 2
 
     def test_stdout_contains_start_ms(self, tmp_path):
@@ -166,6 +165,56 @@ class TestCliDubOutput:
         _run("dub", str(srt), "--output", str(out_dir))
         assert (out_dir / "mysubs.json").exists()
 
+    def test_wav_file_created(self, tmp_path):
+        srt = tmp_path / "sample.srt"
+        srt.write_text(_SRT_SINGLE, encoding="utf-8")
+        out_dir = tmp_path / "output"
+        _run("dub", str(srt), "--output", str(out_dir))
+        assert (out_dir / "sample.wav").is_file()
+
+    def test_wav_duration_matches_subtitle_timeline(self, tmp_path):
+        import io as _io
+        import wave as _wave
+
+        srt = tmp_path / "sample.srt"
+        srt.write_text(_SRT_SINGLE, encoding="utf-8")
+        out_dir = tmp_path / "output"
+        _run("dub", str(srt), "--output", str(out_dir))
+        data = (out_dir / "sample.wav").read_bytes()
+        with _wave.open(_io.BytesIO(data)) as wf:
+            duration_ms = int(wf.getnframes() * 1000 / wf.getframerate())
+        # _SRT_SINGLE's only subtitle spans 1000–3000ms → timeline ends at 3000ms.
+        assert abs(duration_ms - 3000) <= 50
+
+    def test_json_includes_stretch_ratio(self, tmp_path):
+        srt = tmp_path / "sample.srt"
+        srt.write_text(_SRT_SINGLE, encoding="utf-8")
+        out_dir = tmp_path / "output"
+        _run("dub", str(srt), "--output", str(out_dir))
+        data = json.loads((out_dir / "sample.json").read_text())
+        assert "stretch_ratio" in data[0]
+
+
+# ---------------------------------------------------------------------------
+# dub subcommand — --lang
+# ---------------------------------------------------------------------------
+
+class TestCliLang:
+    def test_lang_flag_accepted_and_produces_wav(self, tmp_path):
+        srt = tmp_path / "sample.srt"
+        srt.write_text(_SRT_SINGLE, encoding="utf-8")
+        out_dir = tmp_path / "output"
+        result = _run("dub", str(srt), "--lang", "en", "--output", str(out_dir))
+        assert result.returncode == 0, result.stderr
+        assert (out_dir / "sample.wav").is_file()
+
+    def test_unsupported_lang_fails_with_clear_error(self, tmp_path):
+        srt = tmp_path / "sample.srt"
+        srt.write_text(_SRT_SINGLE, encoding="utf-8")
+        result = _run("dub", str(srt), "--lang", "zz-ZZ")
+        assert result.returncode != 0
+        assert "no installed 'say' voice" in result.stderr
+
 
 # ---------------------------------------------------------------------------
 # batch subcommand
@@ -175,33 +224,43 @@ class TestCliBatch:
     def test_exit_code_zero(self, tmp_path):
         srt = tmp_path / "a.srt"
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
-        result = _run("batch", str(tmp_path / "*.srt"))
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(tmp_path / "out"))
         assert result.returncode == 0, result.stderr
 
     def test_stdout_is_non_empty(self, tmp_path):
         srt = tmp_path / "a.srt"
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
-        result = _run("batch", str(tmp_path / "*.srt"))
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(tmp_path / "out"))
         assert result.stdout.strip() != ""
 
     def test_stdout_mentions_segment_count(self, tmp_path):
         srt = tmp_path / "a.srt"
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
-        result = _run("batch", str(tmp_path / "*.srt"))
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(tmp_path / "out"))
         assert "segment" in result.stdout.lower()
 
     def test_two_files_shows_two_lines(self, tmp_path):
         (tmp_path / "x.srt").write_text(_SRT_SINGLE, encoding="utf-8")
         (tmp_path / "y.srt").write_text(_SRT_MULTI, encoding="utf-8")
-        result = _run("batch", str(tmp_path / "*.srt"))
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(tmp_path / "out"))
         assert result.returncode == 0, result.stderr
-        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
         assert len(lines) == 2
 
     def test_multi_segment_file_shows_correct_count(self, tmp_path):
         (tmp_path / "m.srt").write_text(_SRT_MULTI, encoding="utf-8")
-        result = _run("batch", str(tmp_path / "*.srt"))
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(tmp_path / "out"))
         assert "2 segment" in result.stdout
+
+    def test_batch_writes_wav_and_json_per_input(self, tmp_path):
+        (tmp_path / "x.srt").write_text(_SRT_SINGLE, encoding="utf-8")
+        (tmp_path / "y.srt").write_text(_SRT_MULTI, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        result = _run("batch", str(tmp_path / "*.srt"), "--output", str(out_dir))
+        assert result.returncode == 0, result.stderr
+        for stem in ("x", "y"):
+            assert (out_dir / f"{stem}.wav").is_file(), f"{stem}.wav missing"
+            assert (out_dir / f"{stem}.json").is_file(), f"{stem}.json missing"
 
     def test_no_matching_glob_exits_nonzero(self, tmp_path):
         result = _run("batch", str(tmp_path / "*.srt"))

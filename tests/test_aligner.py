@@ -192,6 +192,32 @@ class TestAlignDegenerateCases:
 # ---------------------------------------------------------------------------
 
 class TestAlignStretchRatio:
+    def test_exact_fit_stretch_ratio_field_is_one(self):
+        seg = _make_segment(start_ms=500, end_ms=2500)
+        result = TimelineAligner().align([seg], [2000])
+        assert result[0].stretch_ratio == 1.0
+
+    def test_short_tts_stretch_ratio_is_one_natural_speed(self):
+        # Short audio plays at natural speed; the assembler pads the window.
+        seg = _make_segment(start_ms=0, end_ms=3000)
+        result = TimelineAligner().align([seg], [500])
+        assert result[0].stretch_ratio == 1.0
+
+    def test_overlong_tts_stretch_ratio_compresses(self):
+        seg = _make_segment(start_ms=0, end_ms=1000)
+        result = TimelineAligner().align([seg], [2000])
+        assert result[0].stretch_ratio == pytest.approx(0.5)
+
+    def test_overlong_tts_ratio_uses_real_duration(self):
+        seg = _make_segment(start_ms=0, end_ms=3000)
+        result = TimelineAligner().align([seg], [4500])
+        assert result[0].stretch_ratio == pytest.approx(3000 / 4500)
+
+    def test_degenerate_window_stretch_ratio_defaults_to_one(self):
+        seg = _make_segment(start_ms=1000, end_ms=1000)
+        result = TimelineAligner().align([seg], [500])
+        assert result[0].stretch_ratio == 1.0
+
     def test_exact_fit_effective_stretch_ratio_is_one(self):
         window_ms = 2000
         seg = _make_segment(start_ms=500, end_ms=2500)  # window = 2000ms
