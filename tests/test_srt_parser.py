@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from dubbing.srt_parser import parse_srt_string, _ms
 from dubbing.models import SRTEntry

@@ -10,9 +10,9 @@ import pytest
 # Suite skips cleanly when Flask is absent (CI without optional deps).
 flask = pytest.importorskip("flask")
 
-from dubbing.backends.base import TTSBackend
-from dubbing.models import Segment, TTSResult
-from dubbing.web import _jobs, app
+from dubbing.backends.base import TTSBackend  # noqa: E402
+from dubbing.models import Segment, TTSResult  # noqa: E402
+from dubbing.web import _jobs, app  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +135,9 @@ class TestIndexRoute:
         body = client.get("/").data.decode()
         assert "<button" in body or 'type="submit"' in body
 
+    def test_form_has_language_input(self, client):
+        assert 'name="lang"' in client.get("/").data.decode()
+
 
 # ---------------------------------------------------------------------------
 # POST /dub — happy path
@@ -212,6 +215,44 @@ class TestDubRouteErrors:
 
     def test_get_on_dub_returns_405(self, client):
         assert client.get("/dub").status_code == 405
+
+    def test_backend_failure_returns_502_json_error_not_silence(self, client, monkeypatch):
+        """Synthesis failure must surface as an error — never silent audio."""
+
+        class _FailingBackend(TTSBackend):
+            def synthesize(self, segments):
+                raise RuntimeError("'say' command not found; macOS TTS is unavailable")
+
+        monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _FailingBackend)
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 502
+        body = json.loads(resp.data)
+        assert "error" in body and "say" in body["error"]
+        assert _jobs == {}, "no job must be stored when synthesis fails"
+
+    def test_lang_field_forwarded_to_segments(self, client, monkeypatch):
+        seen: list[str] = []
+
+        class _RecordingBackend(_FixedBackend):
+            def synthesize(self, segments):
+                seen.extend(seg.language for seg in segments)
+                return super().synthesize(segments)
+
+        monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _RecordingBackend)
+        resp = client.post(
+            "/dub",
+            data={
+                "srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt"),
+                "lang": "es",
+            },
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200
+        assert seen == ["es"]
 
 
 # ---------------------------------------------------------------------------

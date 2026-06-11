@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import wave
 from pathlib import Path
 
 import pytest
@@ -11,13 +13,23 @@ from dubbing.models import Segment, TTSResult
 
 
 # ---------------------------------------------------------------------------
-# Test double
+# Test double — returns real (tiny) WAV audio, no subprocess calls
 # ---------------------------------------------------------------------------
+
+def _tiny_wav(duration_ms: int = 1000) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(22050)
+        wf.writeframes(b"\x01\x00" * int(22050 * duration_ms / 1000))
+    return buf.getvalue()
+
 
 class _MockBackend(TTSBackend):
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
         return [
-            TTSResult(segment=seg, audio_bytes=b"", duration_ms=1000)
+            TTSResult(segment=seg, audio_bytes=_tiny_wav(), duration_ms=1000)
             for seg in segments
         ]
 
@@ -186,12 +198,28 @@ class TestBatchDubOutputDir:
         results = batch_dub([a, b], _MockBackend(), out_dir)
         assert len(results) == 2
 
-    def test_no_audio_files_written_to_output_dir(self, two_srt_files, tmp_path):
+    def test_one_wav_written_per_input(self, two_srt_files, tmp_path):
         a, b = two_srt_files
         out_dir = tmp_path / "out"
         batch_dub([a, b], _MockBackend(), out_dir)
-        audio = list(out_dir.glob("*.wav")) + list(out_dir.glob("*.mp3"))
-        assert audio == []
+        assert (out_dir / "alpha.wav").is_file()
+        assert (out_dir / "beta.wav").is_file()
+
+    def test_one_json_written_per_input(self, two_srt_files, tmp_path):
+        a, b = two_srt_files
+        out_dir = tmp_path / "out"
+        batch_dub([a, b], _MockBackend(), out_dir)
+        assert (out_dir / "alpha.json").is_file()
+        assert (out_dir / "beta.json").is_file()
+
+    def test_written_wav_is_valid_and_spans_timeline(self, two_srt_files, tmp_path):
+        a, b = two_srt_files
+        out_dir = tmp_path / "out"
+        batch_dub([a, b], _MockBackend(), out_dir)
+        # beta.srt's last subtitle ends at 4000ms — output must span it.
+        with wave.open(str(out_dir / "beta.wav")) as wf:
+            duration_ms = int(wf.getnframes() * 1000 / wf.getframerate())
+        assert abs(duration_ms - 4000) <= 10
 
 
 # ---------------------------------------------------------------------------
@@ -255,15 +283,15 @@ class TestBatchDubTwoSRTs:
             assert isinstance(segs, list)
             assert all(isinstance(ts, TimedSegment) for ts in segs)
 
-    def test_batch_two_srt_no_audio_files_written(self, tmp_path):
+    def test_batch_two_srt_writes_wav_and_json_per_input(self, tmp_path):
         a = tmp_path / "first.srt"
         b = tmp_path / "second.srt"
         a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
         b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
         out_dir = tmp_path / "out"
         batch_dub([a, b], _MockBackend(), out_dir)
-        written_files = [f for f in out_dir.rglob("*") if f.is_file()]
-        assert written_files == [], f"Unexpected files written: {written_files}"
+        written = sorted(f.name for f in out_dir.rglob("*") if f.is_file())
+        assert written == ["first.json", "first.wav", "second.json", "second.wav"]
 
     def test_batch_no_srt_files_written_to_output(self, tmp_path):
         a = tmp_path / "a.srt"
@@ -275,14 +303,13 @@ class TestBatchDubTwoSRTs:
         srt_files = list(out_dir.rglob("*.srt"))
         assert srt_files == []
 
-    def test_batch_only_creates_output_directory_nothing_else(self, tmp_path):
-        a = tmp_path / "a.srt"
-        b = tmp_path / "b.srt"
-        a.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
-        b.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
-        out_dir = tmp_path / "only_dir"
-        batch_dub([a, b], _MockBackend(), out_dir)
-        all_items = list(out_dir.rglob("*"))
-        # directory created; no files inside it
-        assert out_dir.is_dir()
-        assert all(not p.is_file() for p in all_items)
+    def test_batch_json_plan_matches_srt_timings(self, tmp_path):
+        import json
+
+        srt = tmp_path / "plan.srt"
+        srt.write_text(_SRT_TWO_SEGMENTS, encoding="utf-8")
+        out_dir = tmp_path / "out"
+        batch_dub([srt], _MockBackend(), out_dir)
+        plan = json.loads((out_dir / "plan.json").read_text(encoding="utf-8"))
+        assert [p["start_ms"] for p in plan] == [0, 2000]
+        assert [p["end_ms"] for p in plan] == [1000, 4000]

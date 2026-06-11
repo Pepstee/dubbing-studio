@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 
 from dubbing.aligner import TimedSegment
 from dubbing.backends.base import TTSBackend
@@ -301,6 +299,26 @@ class TestLanguageFieldForwarded:
         DubbingPipeline(backend).run(_SRT_SINGLE)
         seg = backend.calls[0][0]
         assert isinstance(seg.language, str)
+
+    def test_explicit_language_propagated_to_segment(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_SINGLE, language="es")
+        assert backend.calls[0][0].language == "es"
+
+    def test_explicit_language_propagated_to_all_segments(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run(_SRT_MULTI, language="fr")
+        assert all(seg.language == "fr" for seg in backend.calls[0])
+
+    def test_run_full_propagates_language(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run_full(_SRT_SINGLE, language="ja")
+        assert backend.calls[0][0].language == "ja"
+
+    def test_language_propagated_for_plain_text_fallback(self):
+        backend = _FixedDurationBackend()
+        DubbingPipeline(backend).run("plain words", language="de")
+        assert backend.calls[0][0].language == "de"
 
 
 # ---------------------------------------------------------------------------

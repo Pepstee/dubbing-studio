@@ -9,7 +9,13 @@ from unittest.mock import patch
 import pytest
 
 from dubbing.backends.base import TTSBackend
-from dubbing.backends.say import SayTTSBackend, _synthesize_with_say
+from dubbing.backends.say import (
+    SayTTSBackend,
+    _pbas_for_tags,
+    _rate_for_tags,
+    _synthesize_with_say,
+    _voice_for_language,
+)
 from dubbing.models import ProsodyTag, Segment, SRTEntry, TTSResult
 
 
@@ -164,6 +170,168 @@ def test_synthesize_propagates_say_subprocess_error():
                    side_effect=subprocess.CalledProcessError(1, ["say"])):
             with pytest.raises(subprocess.CalledProcessError):
                 backend.synthesize([make_segment("hello")])
+
+
+# ---------------------------------------------------------------------------
+# Prosody tag → say parameter mapping (pure functions, no subprocess)
+# ---------------------------------------------------------------------------
+
+class TestRateForTags:
+    def test_no_tags_yields_none(self):
+        assert _rate_for_tags([]) is None
+
+    def test_rate_slow_maps_to_low_wpm(self):
+        rate = _rate_for_tags([ProsodyTag(name="rate", value="slow")])
+        assert rate is not None and rate < 175
+
+    def test_rate_fast_maps_to_high_wpm(self):
+        rate = _rate_for_tags([ProsodyTag(name="rate", value="fast")])
+        assert rate is not None and rate > 175
+
+    def test_numeric_rate_used_verbatim(self):
+        assert _rate_for_tags([ProsodyTag(name="rate", value="190")]) == 190
+
+    def test_emotion_excited_speeds_up(self):
+        rate = _rate_for_tags([ProsodyTag(name="emotion", value="excited")])
+        assert rate is not None and rate > 175
+
+    def test_emotion_sad_slows_down(self):
+        rate = _rate_for_tags([ProsodyTag(name="emotion", value="sad")])
+        assert rate is not None and rate < 175
+
+    def test_explicit_rate_overrides_emotion(self):
+        tags = [ProsodyTag(name="emotion", value="excited"), ProsodyTag(name="rate", value="slow")]
+        assert _rate_for_tags(tags) == _rate_for_tags([ProsodyTag(name="rate", value="slow")])
+
+    def test_unknown_emotion_yields_none(self):
+        assert _rate_for_tags([ProsodyTag(name="emotion", value="bewildered")]) is None
+
+
+class TestPbasForTags:
+    def test_no_tags_yields_none(self):
+        assert _pbas_for_tags([]) is None
+
+    def test_pitch_low_below_default(self):
+        pbas = _pbas_for_tags([ProsodyTag(name="pitch", value="low")])
+        assert pbas is not None and pbas < 46
+
+    def test_pitch_high_above_default(self):
+        pbas = _pbas_for_tags([ProsodyTag(name="pitch", value="high")])
+        assert pbas is not None and pbas > 46
+
+    def test_numeric_pitch_used_verbatim(self):
+        assert _pbas_for_tags([ProsodyTag(name="pitch", value="40")]) == 40
+
+    def test_non_pitch_tags_ignored(self):
+        assert _pbas_for_tags([ProsodyTag(name="emotion", value="happy")]) is None
+
+
+# ---------------------------------------------------------------------------
+# Voice selection by language (voice list seeded, no subprocess)
+# ---------------------------------------------------------------------------
+
+_VOICE_FIXTURE = [
+    ("Albert", "en_US"),
+    ("Daniel", "en_GB"),
+    ("Mónica", "es_ES"),
+    ("Paulina", "es_MX"),
+    ("Thomas", "fr_FR"),
+]
+
+
+@pytest.fixture()
+def seeded_voices(monkeypatch):
+    monkeypatch.setattr("dubbing.backends.say._voices_cache", list(_VOICE_FIXTURE))
+
+
+class TestVoiceForLanguage:
+    def test_empty_language_uses_system_default(self, seeded_voices):
+        assert _voice_for_language("") is None
+
+    def test_base_language_picks_first_matching_voice(self, seeded_voices):
+        assert _voice_for_language("es") == "Mónica"
+
+    def test_exact_locale_match_wins(self, seeded_voices):
+        assert _voice_for_language("es-MX") == "Paulina"
+
+    def test_locale_underscore_form_accepted(self, seeded_voices):
+        assert _voice_for_language("en_GB") == "Daniel"
+
+    def test_case_insensitive(self, seeded_voices):
+        assert _voice_for_language("FR") == "Thomas"
+
+    def test_unsupported_language_raises_with_available_list(self, seeded_voices):
+        with pytest.raises(RuntimeError, match="no installed 'say' voice"):
+            _voice_for_language("xx")
+
+    def test_error_lists_available_languages(self, seeded_voices):
+        with pytest.raises(RuntimeError, match="es"):
+            _voice_for_language("xx")
+
+
+# ---------------------------------------------------------------------------
+# Command construction — subprocess captured, never executed
+# ---------------------------------------------------------------------------
+
+class TestSayCommandConstruction:
+    def _capture_commands(self, monkeypatch, tmp_path):
+        calls: list[list[str]] = []
+
+        def record(cmd, **kwargs):
+            calls.append(list(cmd))
+            if cmd[0] == "afconvert":
+                # produce a real WAV so the backend can read it back
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(22050)
+                    wf.writeframes(b"\x00\x00" * 220)
+                from pathlib import Path
+                Path(cmd[-1]).write_bytes(buf.getvalue())
+            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+        monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+        monkeypatch.setattr("dubbing.backends.say.subprocess.run", record)
+        return calls
+
+    def test_voice_flag_passed_to_say(self, monkeypatch, tmp_path):
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        _synthesize_with_say("hola", voice="Mónica")
+        say_cmd = calls[0]
+        assert "-v" in say_cmd and say_cmd[say_cmd.index("-v") + 1] == "Mónica"
+
+    def test_rate_flag_passed_to_say(self, monkeypatch, tmp_path):
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        _synthesize_with_say("hello", rate_wpm=130)
+        say_cmd = calls[0]
+        assert "-r" in say_cmd and say_cmd[say_cmd.index("-r") + 1] == "130"
+
+    def test_pitch_embedded_as_pbas_command(self, monkeypatch, tmp_path):
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        _synthesize_with_say("hello", pitch_pbas=38)
+        spoken = calls[0][-1]
+        assert "[[ pbas 38 ]]" in spoken and "hello" in spoken
+
+    def test_no_options_means_bare_command(self, monkeypatch, tmp_path):
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        _synthesize_with_say("plain")
+        say_cmd = calls[0]
+        assert "-v" not in say_cmd and "-r" not in say_cmd
+        assert say_cmd[-1] == "plain"
+
+    def test_synthesize_applies_segment_tags(self, monkeypatch, tmp_path, seeded_voices):
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        seg = Segment(
+            entry=make_entry(text="Bonjour"),
+            tags=[ProsodyTag(name="rate", value="slow"), ProsodyTag(name="pitch", value="low")],
+            language="fr",
+        )
+        SayTTSBackend().synthesize([seg])
+        say_cmd = calls[0]
+        assert say_cmd[say_cmd.index("-v") + 1] == "Thomas"
+        assert "-r" in say_cmd
+        assert "[[ pbas" in say_cmd[-1]
 
 
 # ---------------------------------------------------------------------------
