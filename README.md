@@ -14,16 +14,16 @@ pip install -e .
 
 This installs the `dubbing-cli` command and makes `python -m dubbing` available.
 
-No external dependencies are required for the mock backend. Real TTS backends may add their own.
+Flask is required for the web UI (`dubbing-web`). The `say` backend uses macOS built-ins and requires no additional packages.
 
 ---
 
 ## Quick-start
 
-Run the bundled acceptance demo to confirm everything works:
+Run the bundled acceptance test to confirm everything works:
 
 ```bash
-python acceptance.py sample.srt --mock
+python acceptance.py
 ```
 
 ---
@@ -54,7 +54,7 @@ Multilingual support enables dubbing in any target language.
 <emotion:calm><pitch:low>Voice cloning requires explicit written consent from the voice owner.
 ```
 
-Running `python -m dubbing dub sample.srt` prints:
+Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary with real synthesis):
 
 ```
 [0–2500] Welcome to Dubbing Studio!
@@ -64,7 +64,7 @@ Running `python -m dubbing dub sample.srt` prints:
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
 
-The mock backend assigns `duration_ms = len(clean_text) * 60`. The `TimelineAligner` always maps the TTS duration onto the original SRT window, so output timestamps match the SRT exactly. Prosody tags are stripped before synthesis and forwarded to the backend as `ProsodyTag` objects on each `Segment`.
+The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` always maps the TTS duration onto the original SRT window, so output timestamps match the SRT exactly. Prosody tags are stripped before synthesis and forwarded to the backend as `ProsodyTag` objects on each `Segment`.
 
 ---
 
@@ -182,16 +182,32 @@ From Python:
 ```python
 from pathlib import Path
 from dubbing.batch import batch_dub
-from dubbing.backends.mock import MockTTSBackend
+from dubbing.backends.say import SayTTSBackend
 
 results = batch_dub(
     paths=list(Path("content").rglob("*.srt")),
-    backend=MockTTSBackend(),
+    backend=SayTTSBackend(),
     output_dir="out/",
 )
 for path, segs in results.items():
     print(f"{path}: {len(segs)} segments")
 ```
+
+---
+
+## Industry parity
+
+Dubbing Studio implements the core flow shared by commercial dubbing platforms such as ElevenLabs Dubbing and Rask AI. The table below maps each capability to the pipeline component that delivers it.
+
+| Capability | Commercial equivalent | Dubbing Studio component |
+|---|---|---|
+| **SRT-in → dubbed-audio-out** | Upload subtitle file, receive lip-synced audio | `dubbing-cli dub file.srt --output out/` writes a combined `.wav`; `POST /dub` via the web UI returns a downloadable audio file |
+| **Per-segment timing alignment** | Each dubbed phrase snaps to the original subtitle window | `dubbing.aligner.TimelineAligner` maps every TTS result onto its SRT start/end timestamps; overlong audio is compressed, short audio is stretched |
+| **Multilingual support** | Target-language selection per project or per segment | `--lang` flag propagates a BCP-47 code to `Segment.language` on every segment; backends use it to choose voice and phoneme rules |
+| **Prosody / emotion tags** | Expressive-speech controls (emotion, pacing, pitch) built into the platform UI | `<emotion:happy>`, `<rate:slow>`, `<pitch:low>` etc. parsed from SRT text by `dubbing.prosody`; stripped before TTS and forwarded as `ProsodyTag` objects to the backend |
+| **Batch mode** | Project-level bulk processing of multiple subtitle tracks | `dubbing-cli batch "content/**/*.srt" --output out/` processes every matched file and writes one output per input |
+
+The `SayTTSBackend` uses macOS `say` for local synthesis (no network, no cost). Swap in any cloud TTS backend — ElevenLabs, Google Cloud TTS, Azure Cognitive Services — by subclassing `TTSBackend` and implementing `synthesize`; the pipeline, aligner, and web UI require no changes.
 
 ---
 
@@ -207,6 +223,6 @@ Before synthesising audio that uses a cloned voice you **must**:
 4. Provide a mechanism for the voice owner to revoke consent; cease synthesis immediately upon revocation.
 5. Never use a cloned voice to produce content the owner has not approved (misleading, defamatory, or harmful material).
 
-The built-in `MockTTSBackend` generates no real speech and is exempt from this requirement. Third-party backends that interface with voice-cloning APIs are responsible for surfacing consent controls to callers.
+The built-in `SayTTSBackend` uses the local system voice and does not clone any person's voice; it is exempt from this requirement. Third-party backends that interface with voice-cloning APIs are responsible for surfacing consent controls to callers.
 
 Failure to comply with these requirements may violate applicable laws (e.g. right-of-publicity statutes, GDPR, the EU AI Act) and platform terms of service.

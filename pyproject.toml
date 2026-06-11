@@ -2,10 +2,13 @@
 name = "dubbing-studio"
 version = "0.1.0"
 requires-python = ">=3.10"
+dependencies = [
+    "flask",
+]
 
 [project.scripts]
 dubbing-cli = "dubbing.__main__:main"
-tts-studio = "tts_studio.__main__:main"
+dubbing-web = "dubbing.web:main"
 
 [project.optional-dependencies]
 dev = [

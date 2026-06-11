@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dubbing.aligner import TimedSegment, TimelineAligner
 from dubbing.backends.base import TTSBackend
-from dubbing.models import Segment, SRTEntry
+from dubbing.models import Segment, SRTEntry, TTSResult
 from dubbing.prosody import parse_prosody
 from dubbing.srt_parser import parse_srt, parse_srt_string
 
@@ -14,7 +14,7 @@ class DubbingPipeline:
         self._backend = backend
         self._aligner = TimelineAligner()
 
-    def run(self, input: str | Path) -> list[TimedSegment]:
+    def run_full(self, input: str | Path) -> tuple[list[TimedSegment], list[TTSResult]]:
         if isinstance(input, Path):
             entries = parse_srt(input)
         else:
@@ -40,4 +40,9 @@ class DubbingPipeline:
 
         results = self._backend.synthesize(segments)
         durations = [r.duration_ms for r in results]
-        return self._aligner.align(segments, durations)
+        timed = self._aligner.align(segments, durations)
+        return timed, results
+
+    def run(self, input: str | Path) -> list[TimedSegment]:
+        timed, _ = self.run_full(input)
+        return timed
