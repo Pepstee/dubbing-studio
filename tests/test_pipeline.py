@@ -6,7 +6,6 @@ import pytest
 
 from dubbing.aligner import TimedSegment
 from dubbing.backends.base import TTSBackend
-from dubbing.backends.mock import MockTTSBackend
 from dubbing.models import Segment, TTSResult
 from dubbing.pipeline import DubbingPipeline
 
@@ -243,26 +242,25 @@ class TestPipelineFileInput:
 
 
 # ---------------------------------------------------------------------------
-# MockTTSBackend injected directly — acceptance criteria coverage
+# Backend injected directly — acceptance criteria coverage
 # ---------------------------------------------------------------------------
 
-class TestMockTTSBackendInjected:
-    def test_pipeline_accepts_mock_backend(self):
-        result = DubbingPipeline(MockTTSBackend()).run(_SRT_SINGLE)
+class TestBackendInjected:
+    def test_pipeline_accepts_backend(self):
+        result = DubbingPipeline(_FixedDurationBackend()).run(_SRT_SINGLE)
         assert isinstance(result, list)
 
-    def test_single_srt_with_mock_backend_count(self):
-        result = DubbingPipeline(MockTTSBackend()).run(_SRT_SINGLE)
+    def test_single_srt_count(self):
+        result = DubbingPipeline(_FixedDurationBackend()).run(_SRT_SINGLE)
         assert len(result) == 1
 
-    def test_multi_srt_with_mock_backend_count(self):
-        result = DubbingPipeline(MockTTSBackend()).run(_SRT_MULTI)
+    def test_multi_srt_count(self):
+        result = DubbingPipeline(_FixedDurationBackend()).run(_SRT_MULTI)
         assert len(result) == 3
 
     def test_len_results_equals_len_srt_entries(self):
         backend = _FixedDurationBackend()
         result = DubbingPipeline(backend).run(_SRT_MULTI)
-        # number of TimedSegments == number of segments passed to backend
         assert len(result) == len(backend.calls[0])
 
     def test_len_results_equals_input_segment_count_single(self):
@@ -270,8 +268,8 @@ class TestMockTTSBackendInjected:
         result = DubbingPipeline(backend).run(_SRT_SINGLE)
         assert len(result) == len(backend.calls[0])
 
-    def test_mock_backend_items_are_timed_segments(self):
-        result = DubbingPipeline(MockTTSBackend()).run(_SRT_MULTI)
+    def test_backend_items_are_timed_segments(self):
+        result = DubbingPipeline(_FixedDurationBackend()).run(_SRT_MULTI)
         assert all(isinstance(ts, TimedSegment) for ts in result)
 
 

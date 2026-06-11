@@ -85,10 +85,10 @@ class TestCliDub:
         # start_ms for the single entry is 1000
         assert "1000" in result.stdout
 
-    def test_mock_backend_flag_accepted(self, tmp_path):
+    def test_say_backend_flag_accepted(self, tmp_path):
         srt = tmp_path / "sample.srt"
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
-        result = _run("dub", str(srt), "--backend", "mock")
+        result = _run("dub", str(srt), "--backend", "say")
         assert result.returncode == 0, result.stderr
 
 

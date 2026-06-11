@@ -1,3 +1,3 @@
-from dubbing.backends.mock import MockTTSBackend
+from dubbing.backends.say import SayTTSBackend
 
-__all__ = ["MockTTSBackend"]
+__all__ = ["SayTTSBackend"]
