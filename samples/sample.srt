@@ -1,6 +1,6 @@
 1
 00:00:00,000 --> 00:00:02,500
-<emotion:happy>Welcome to TTS Studio!
+<emotion:happy>Welcome to Dubbing Studio!
 
 2
 00:00:03,000 --> 00:00:06,200
@@ -8,7 +8,7 @@
 
 3
 00:00:07,000 --> 00:00:09,800
-<emotion:excited><rate:fast>The mock backend calculates durations without any network calls.
+<emotion:excited><rate:fast>The say backend synthesises every line locally without any network calls.
 
 4
 00:00:10,200 --> 00:00:13,500
@@ -16,4 +16,4 @@ Multilingual support enables dubbing in any target language.
 
 5
 00:00:14,000 --> 00:00:17,000
-<pitch:low>Voice cloning requires explicit written consent from the voice owner.
+<emotion:calm><pitch:low>Voice cloning requires explicit written consent from the voice owner.

@@ -8,7 +8,7 @@
 
 3
 00:00:07,000 --> 00:00:09,800
-<emotion:excited><rate:fast>The mock backend calculates durations without any network calls.
+<emotion:excited><rate:fast>The say backend synthesises every line locally without any network calls.
 
 4
 00:00:10,200 --> 00:00:13,500
