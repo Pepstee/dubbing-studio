@@ -216,6 +216,18 @@ class TestDubRouteErrors:
     def test_get_on_dub_returns_405(self, client):
         assert client.get("/dub").status_code == 405
 
+    def test_non_utf8_upload_returns_400_not_500(self, client):
+        """A binary (non-UTF-8) upload is a client error, never a crash."""
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(b"\xff\xfe\x00\x01RIFF junk"), "movie.srt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 400
+        body = json.loads(resp.data)
+        assert "error" in body and "UTF-8" in body["error"]
+        assert _jobs == {}, "no job must be stored for a rejected upload"
+
     def test_backend_failure_returns_502_json_error_not_silence(self, client, monkeypatch):
         """Synthesis failure must surface as an error — never silent audio."""
 

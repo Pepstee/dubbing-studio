@@ -90,7 +90,7 @@ def main() -> None:
             _cmd_dub(args)
         elif args.command == "batch":
             _cmd_batch(args)
-    except RuntimeError as exc:
+    except (RuntimeError, FileNotFoundError) as exc:
         raise SystemExit(f"error: {exc}") from exc
 
 

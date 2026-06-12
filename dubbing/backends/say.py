@@ -160,8 +160,14 @@ def _synthesize_with_say(
             cmd += ["-v", voice]
         if rate_wpm is not None:
             cmd += ["-r", str(rate_wpm)]
-        cmd.append(spoken)
-        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        # The text is delivered on stdin, never as an argv item: subtitle
+        # lines routinely start with "-" (dialogue dashes), which `say`
+        # would parse as options — silently selecting a wrong voice/rate or
+        # even redirecting -o output to an attacker-chosen path.
+        subprocess.run(
+            cmd, check=True, capture_output=True, timeout=30,
+            input=spoken.encode("utf-8"),
+        )
         subprocess.run(
             ["afconvert", "-f", "WAVE", "-d", "LEI16@22050", str(aiff_path), str(wav_path)],
             check=True, capture_output=True, timeout=30,

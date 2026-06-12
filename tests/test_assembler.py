@@ -178,3 +178,25 @@ class TestAssemblerErrors:
         results = [TTSResult(segment=seg, audio_bytes=b"not a wav", duration_ms=1000)]
         with pytest.raises(ValueError, match="not valid WAV"):
             assemble_timeline(timed, results)
+
+
+# ---------------------------------------------------------------------------
+# Out-of-order SRT entries — rendered in timeline order, not file order
+# ---------------------------------------------------------------------------
+
+class TestOutOfOrderEntries:
+    def test_unsorted_entries_render_at_their_own_start_times(self):
+        """A file listing the 5s entry before the 0s entry must still place
+        each segment at its own timestamp, not append the early one late."""
+        timed, results = _timed_and_results([(5000, 6000, 800), (0, 1000, 800)])
+        samples, rate = _decode(assemble_timeline(timed, results))
+        early = samples[int(rate * 0.1): int(rate * 0.7)]
+        gap = samples[int(rate * 2.0): int(rate * 4.0)]
+        late = samples[int(rate * 5.1): int(rate * 5.7)]
+        assert any(s != 0 for s in early), "0–1s segment must play at 0s"
+        assert all(s == 0 for s in gap), "the 1–5s gap must be silence"
+        assert any(s != 0 for s in late), "5–6s segment must play at 5s"
+
+    def test_unsorted_entries_total_span_matches_last_end(self):
+        timed, results = _timed_and_results([(5000, 6000, 800), (0, 1000, 800)])
+        assert abs(_duration_ms(assemble_timeline(timed, results)) - 6000) <= 2

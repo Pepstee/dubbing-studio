@@ -36,7 +36,11 @@ def dub():
     if srt_file is None:
         return jsonify({"error": "No SRT file provided"}), 400
 
-    srt_text = srt_file.read().decode("utf-8")
+    try:
+        srt_text = srt_file.read().decode("utf-8")
+    except UnicodeDecodeError:
+        # Binary or wrongly-encoded upload: a client error, not a server crash.
+        return jsonify({"error": "SRT file is not valid UTF-8 text"}), 400
     language = (request.form.get("lang") or "").strip()
 
     from dubbing.assembler import assemble_timeline
