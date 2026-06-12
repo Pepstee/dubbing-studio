@@ -90,10 +90,10 @@ def dub():
     language = (request.form.get("lang") or "").strip()
 
     from dubbing.assembler import assemble_timeline
-    from dubbing.backends.say import SayTTSBackend
+    from dubbing.backends import select_backend
     from dubbing.pipeline import DubbingPipeline
 
-    backend = SayTTSBackend()
+    backend = select_backend()
     pipeline = DubbingPipeline(backend)
     try:
         timed, results = pipeline.run_full(srt_text, language=language)
