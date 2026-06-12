@@ -200,3 +200,64 @@ class TestOutOfOrderEntries:
     def test_unsorted_entries_total_span_matches_last_end(self):
         timed, results = _timed_and_results([(5000, 6000, 800), (0, 1000, 800)])
         assert abs(_duration_ms(assemble_timeline(timed, results)) - 6000) <= 2
+
+
+# ---------------------------------------------------------------------------
+# Overlapping subtitle windows — anchored at SRT start and mixed, never
+# shifted later (the timeline-true guarantee must hold under overlap)
+# ---------------------------------------------------------------------------
+
+class TestOverlappingEntries:
+    def test_overlap_does_not_stretch_timeline(self):
+        """0–4s and 3–6s windows must yield exactly 6s of audio, not 7s
+        (the second segment must not be appended at the 4s write head)."""
+        timed, results = _timed_and_results([(0, 4000, 4000), (3000, 6000, 3000)])
+        assert abs(_duration_ms(assemble_timeline(timed, results)) - 6000) <= 2
+
+    def test_overlapping_segment_anchored_at_its_own_start(self):
+        """The second speaker must be audible from 3s, not from 4s."""
+        timed, results = _timed_and_results([(0, 4000, 4000), (3000, 6000, 3000)])
+        samples, rate = _decode(assemble_timeline(timed, results))
+        overlap = samples[int(rate * 3.1): int(rate * 3.9)]
+        tail = samples[int(rate * 4.1): int(rate * 5.9)]
+        assert any(s != 0 for s in overlap), "second segment must start at 3s"
+        assert any(s != 0 for s in tail), "second segment must continue past 4s"
+
+    def test_overlap_region_mixes_both_signals(self):
+        """Where both windows carry audio the samples are summed (1000+1000),
+        outside the overlap each plays alone (1000)."""
+        timed, results = _timed_and_results([(0, 4000, 4000), (3000, 6000, 3000)])
+        samples, rate = _decode(assemble_timeline(timed, results))
+        solo_a = samples[int(rate * 1.0): int(rate * 2.0)]
+        mixed = samples[int(rate * 3.2): int(rate * 3.8)]
+        solo_b = samples[int(rate * 4.5): int(rate * 5.5)]
+        assert all(s == 1000 for s in solo_a), "first segment alone before 3s"
+        assert all(s == 2000 for s in mixed), "3–4s overlap must sum both signals"
+        assert all(s == 1000 for s in solo_b), "second segment alone after 4s"
+
+    def test_mixed_overlap_clamps_to_pcm_range(self):
+        """Summing two near-full-scale signals must clamp, not wrap around."""
+        segments = [_segment(1, 0, 1000), _segment(2, 0, 1000)]
+        timed = TimelineAligner().align(segments, [1000, 1000])
+        results = [
+            TTSResult(segment=seg, audio_bytes=_wav(1000, value=30000), duration_ms=1000)
+            for seg in segments
+        ]
+        samples, _ = _decode(assemble_timeline(timed, results))
+        assert max(samples) == 32767, "overflow must clamp at PCM max"
+        assert all(s >= 0 for s in samples), "clamped sum must never wrap negative"
+
+    def test_fully_contained_overlap_keeps_outer_window_span(self):
+        """A window nested inside another (1–2s inside 0–4s) must not extend
+        the output beyond the outer window's end."""
+        timed, results = _timed_and_results([(0, 4000, 4000), (1000, 2000, 1000)])
+        assert abs(_duration_ms(assemble_timeline(timed, results)) - 4000) <= 2
+
+    def test_identical_windows_mix_in_place(self):
+        """Two segments sharing one window must occupy that window only."""
+        timed, results = _timed_and_results([(0, 2000, 2000), (0, 2000, 2000)])
+        out = assemble_timeline(timed, results)
+        assert abs(_duration_ms(out) - 2000) <= 2
+        samples, rate = _decode(out)
+        body = samples[int(rate * 0.2): int(rate * 1.8)]
+        assert all(s == 2000 for s in body), "shared window must carry the mixed sum"

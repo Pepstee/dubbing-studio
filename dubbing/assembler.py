@@ -1,11 +1,14 @@
 """Assemble synthesised segments into one timeline-true WAV.
 
-Each segment's audio is placed at its SRT start time. Gaps between
+Each segment's audio is anchored at its SRT start time. Gaps between
 subtitles become silence. Audio longer than its subtitle window is
 time-compressed (linear resampling) to fit the window exactly; audio
 shorter than the window plays at natural speed and the remainder of
-the window is filled with silence. The output therefore stays in sync
-with the source timeline from the first millisecond to the last.
+the window is filled with silence. Where subtitle windows overlap
+(two speakers at once), the overlapping audio is mixed — summed and
+clamped to the 16-bit range — never shifted later, so the output
+stays in sync with the source timeline from the first millisecond to
+the last and never outlasts the final subtitle.
 """
 
 from __future__ import annotations
@@ -98,6 +101,28 @@ def _silence(frames: int) -> array:
     return array("h", bytes(_SAMPLE_WIDTH * max(0, frames)))
 
 
+_PCM_MAX = 32767
+_PCM_MIN = -32768
+
+
+def _mix_into(out: array, start_frame: int, samples: array) -> None:
+    """Write `samples` into `out` at the absolute `start_frame`, extending
+    `out` with silence as needed. Frames that already carry audio (an
+    overlapping subtitle window) are mixed by summation, clamped to the
+    16-bit range — the timeline position of every segment is preserved."""
+    end_frame = start_frame + len(samples)
+    if end_frame > len(out):
+        out.extend(_silence(end_frame - len(out)))
+    for i, sample in enumerate(samples):
+        j = start_frame + i
+        mixed = out[j] + sample
+        if mixed > _PCM_MAX:
+            mixed = _PCM_MAX
+        elif mixed < _PCM_MIN:
+            mixed = _PCM_MIN
+        out[j] = mixed
+
+
 def assemble_timeline(
     timed: list[TimedSegment],
     results: list[TTSResult],
@@ -133,9 +158,10 @@ def assemble_timeline(
         samples, src_rate = _decode_wav(res.audio_bytes)
         samples = _resample(samples, src_rate, sample_rate)
 
+        # Anchor at the absolute SRT start, NEVER the current write head:
+        # overlapping subtitle windows (two speakers at once) mix in place
+        # rather than shifting later and stretching the timeline.
         start_frame = _ms_to_frames(ts.start_ms, sample_rate)
-        if start_frame > len(out):
-            out.extend(_silence(start_frame - len(out)))
 
         window_ms = ts.end_ms - ts.start_ms
         if window_ms > 0:
@@ -143,13 +169,13 @@ def assemble_timeline(
             if len(samples) > window_frames:
                 # Overlong render: compress to fit the subtitle window.
                 samples = _fit(samples, window_frames)
-            out.extend(samples)
+            _mix_into(out, start_frame, samples)
             # Short render: pad with silence to the window's absolute end.
             end_frame = start_frame + window_frames
             if end_frame > len(out):
                 out.extend(_silence(end_frame - len(out)))
         else:
             # Degenerate window (plain-text fallback): natural duration.
-            out.extend(samples)
+            _mix_into(out, start_frame, samples)
 
     return _encode_wav(out, sample_rate)
