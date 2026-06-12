@@ -40,6 +40,21 @@ _UPLOAD_FORM = """\
 </body>
 </html>"""
 
+_RESULT_HTML = """\
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dubbing Studio — Result</title></head>
+<body>
+<h1>Dubbing Studio</h1>
+<p>Your dubbed audio is ready.</p>
+<audio controls src="/stream/{job_id}">
+  Your browser does not support the audio element.
+</audio>
+<p><a href="/download/{job_id}">Download WAV</a></p>
+<p><a href="/">Dub another file</a></p>
+</body>
+</html>"""
+
 
 def _store_job(audio: bytes) -> str:
     """Register finished audio under a fresh job id, evicting oldest first.
@@ -108,7 +123,19 @@ def dub():
         return jsonify({"error": f"TTS engine failed: {exc}"}), 502
 
     job_id = _store_job(combined)
-    return jsonify({"id": job_id, "download": f"/download/{job_id}"})
+    return _RESULT_HTML.format(job_id=job_id), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/stream/<job_id>")
+def stream(job_id: str):
+    if job_id not in _jobs:
+        return "Not found", 404
+    return send_file(
+        io.BytesIO(_jobs[job_id]),
+        mimetype="audio/wav",
+        download_name="dubbed.wav",
+        as_attachment=False,
+    )
 
 
 @app.route("/download/<job_id>")
