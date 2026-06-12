@@ -64,7 +64,9 @@ Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
 
-The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is placed at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `sample.srt` yields a WAV exactly 17.0 seconds long.
+The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is anchored at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `sample.srt` yields a WAV exactly 17.0 seconds long.
+
+**Overlap policy.** Subtitle windows that overlap (two speakers talking at once) are *mixed*, never shifted: each segment stays anchored at its own SRT start time and the overlapping region carries the sum of both signals, clamped to the 16-bit PCM range. The total output duration is always the end of the last subtitle window — overlapping entries can never stretch the timeline.
 
 ---
 
