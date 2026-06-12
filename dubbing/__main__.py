@@ -15,10 +15,16 @@ from dubbing.pipeline import DubbingPipeline
 
 
 def _make_backend(name: str) -> TTSBackend:
+    if name in ("auto", ""):
+        from dubbing.backends import select_backend
+        return select_backend()
     if name == "say":
         from dubbing.backends.say import SayTTSBackend
         return SayTTSBackend()
-    raise SystemExit(f"Unknown backend: {name!r}. Available: say")
+    if name == "piper":
+        from dubbing.backends.piper import PiperTTSBackend
+        return PiperTTSBackend()
+    raise SystemExit(f"Unknown backend: {name!r}. Available: auto, say, piper")
 
 
 def _cmd_dub(args: argparse.Namespace) -> None:
@@ -62,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m dubbing",
         description="Dubbing Studio — synthesise dubbed audio from SRT files.",
     )
-    parser.add_argument("--backend", default="say", help="TTS backend to use (default: say)")
+    parser.add_argument("--backend", default="auto", help="TTS backend to use: auto, say, piper (default: auto)")
     parser.add_argument("--lang", default=None, help="Target language code")
     parser.add_argument("--output", default=None, help="Output directory")
 
@@ -70,13 +76,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     dub_p = sub.add_parser("dub", help="Dub a single SRT file")
     dub_p.add_argument("srt", help="Path to the .srt file")
-    dub_p.add_argument("--backend", default="say", help="TTS backend to use (default: say)")
+    dub_p.add_argument("--backend", default="auto", help="TTS backend to use: auto, say, piper (default: auto)")
     dub_p.add_argument("--lang", default=None, help="Target language code")
     dub_p.add_argument("--output", default=None, help="Output directory")
 
     batch_p = sub.add_parser("batch", help="Dub multiple SRT files matching a glob")
     batch_p.add_argument("glob", help="Glob pattern matching .srt files")
-    batch_p.add_argument("--backend", default="say", help="TTS backend to use (default: say)")
+    batch_p.add_argument("--backend", default="auto", help="TTS backend to use: auto, say, piper (default: auto)")
     batch_p.add_argument("--lang", default=None, help="Target language code")
     batch_p.add_argument("--output", default=None, help="Output directory")
 
