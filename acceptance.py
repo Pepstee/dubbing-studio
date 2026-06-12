@@ -30,6 +30,31 @@ def _wav_duration_ms(data: bytes) -> int:
         return int(wf.getnframes() * 1000 / wf.getframerate())
 
 
+def verify_wav_header(
+    data: bytes,
+    expected_end_ms: int,
+    tolerance_ms: int = _TOLERANCE_MS,
+) -> int:
+    """Return WAV duration in ms; raise ValueError if data is empty or not timeline-true."""
+    if not data:
+        raise ValueError("WAV data is empty")
+    duration = _wav_duration_ms(data)
+    if abs(duration - expected_end_ms) > tolerance_ms:
+        raise ValueError(
+            f"WAV is {duration}ms long but timeline ends at {expected_end_ms}ms "
+            f"— output is not timeline-true"
+        )
+    return duration
+
+
+def verify_segments(plan: list, expected_count: int) -> None:
+    """Raise ValueError if plan does not contain exactly expected_count segments."""
+    if len(plan) != expected_count:
+        raise ValueError(
+            f"expected {expected_count} segments in plan, got {len(plan)}"
+        )
+
+
 def check_cli() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         result = subprocess.run(
@@ -53,22 +78,19 @@ def check_cli() -> None:
 
         wav = wav_files[0]
         data = wav.read_bytes()
-        if not data:
-            sys.exit(f"FAIL: {wav.name} is empty")
-
-        duration = _wav_duration_ms(data)
-        if abs(duration - _SAMPLE_TIMELINE_END_MS) > _TOLERANCE_MS:
-            sys.exit(
-                f"FAIL: {wav.name} is {duration}ms long but the subtitle timeline "
-                f"ends at {_SAMPLE_TIMELINE_END_MS}ms — output is not timeline-true"
-            )
+        try:
+            duration = verify_wav_header(data, _SAMPLE_TIMELINE_END_MS)
+        except ValueError as exc:
+            sys.exit(f"FAIL: {wav.name}: {exc}")
 
         json_files = list(Path(tmpdir).glob("*.json"))
         if not json_files:
             sys.exit("FAIL: CLI produced no JSON segment plan")
         plan = json.loads(json_files[0].read_text(encoding="utf-8"))
-        if len(plan) != 5:
-            sys.exit(f"FAIL: expected 5 segments in plan, got {len(plan)}")
+        try:
+            verify_segments(plan, 5)
+        except ValueError as exc:
+            sys.exit(f"FAIL: {exc}")
 
         print(f"CLI OK: {wav.name} ({len(data)} bytes, {duration}ms ≈ timeline end)")
 
@@ -121,9 +143,10 @@ def check_web() -> None:
 
     with urllib.request.urlopen(f"http://127.0.0.1:7432{download}", timeout=30) as resp:
         audio = resp.read()
-    duration = _wav_duration_ms(audio)
-    if abs(duration - 2000) > _TOLERANCE_MS:
-        sys.exit(f"FAIL: web dub is {duration}ms long; subtitle timeline ends at 2000ms")
+    try:
+        duration = verify_wav_header(audio, 2000)
+    except ValueError as exc:
+        sys.exit(f"FAIL: web dub: {exc}")
 
     print(f"Web OK: POST /dub → {download} ({len(audio)} bytes, {duration}ms ≈ timeline end)")
 
