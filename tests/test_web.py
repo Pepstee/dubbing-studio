@@ -12,7 +12,14 @@ flask = pytest.importorskip("flask")
 
 from dubbing.backends.base import TTSBackend  # noqa: E402
 from dubbing.models import Segment, TTSResult  # noqa: E402
-from dubbing.web import MAX_UPLOAD_BYTES, _jobs, app  # noqa: E402
+from dubbing.web import (  # noqa: E402
+    MAX_JOBS,
+    MAX_JOBS_BYTES,
+    MAX_UPLOAD_BYTES,
+    _jobs,
+    _store_job,
+    app,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -386,3 +393,113 @@ class TestDubUploadSizeLimit:
             content_type="multipart/form-data",
         )
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# POST /dub — whole-request-body cap (MAX_CONTENT_LENGTH)
+# ---------------------------------------------------------------------------
+
+class TestRequestBodyCap:
+    """The per-file cap alone is bypassable: request.files parses the whole
+    multipart body first, so an oversized payload smuggled in any OTHER form
+    field must be rejected by MAX_CONTENT_LENGTH before parsing."""
+
+    def _post_huge_non_srt_field(self, client):
+        return client.post(
+            "/dub",
+            data={
+                "srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt"),
+                "lang": "x" * (2 * MAX_UPLOAD_BYTES),
+            },
+            content_type="multipart/form-data",
+        )
+
+    def test_max_content_length_is_configured(self):
+        assert app.config["MAX_CONTENT_LENGTH"] is not None
+        assert app.config["MAX_CONTENT_LENGTH"] >= MAX_UPLOAD_BYTES
+
+    def test_huge_payload_in_non_srt_field_returns_413(self, client):
+        assert self._post_huge_non_srt_field(client).status_code == 413
+
+    def test_huge_payload_in_non_srt_field_returns_json_error(self, client):
+        resp = self._post_huge_non_srt_field(client)
+        body = json.loads(resp.data)
+        assert "error" in body
+
+    def test_huge_payload_in_non_srt_field_stores_no_job(self, client):
+        self._post_huge_non_srt_field(client)
+        assert _jobs == {}
+
+
+# ---------------------------------------------------------------------------
+# Job registry bounds — eviction by count and total bytes
+# ---------------------------------------------------------------------------
+
+class TestJobRegistryBounds:
+    """Finished jobs must not accumulate without bound: a single legal
+    4-hour timeline renders to ~600 MB, so unbounded retention is a
+    memory-exhaustion DoS regardless of the upload-size cap."""
+
+    def _post(self, client):
+        return client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
+            content_type="multipart/form-data",
+        )
+
+    def test_job_count_never_exceeds_max_jobs(self, client):
+        for _ in range(MAX_JOBS + 5):
+            assert self._post(client).status_code == 200
+        assert len(_jobs) <= MAX_JOBS
+
+    def test_oldest_job_evicted_first(self, client):
+        first_id = json.loads(self._post(client).data)["id"]
+        for _ in range(MAX_JOBS):
+            self._post(client)
+        assert first_id not in _jobs
+
+    def test_newest_job_survives_eviction(self, client):
+        for _ in range(MAX_JOBS + 5):
+            newest = json.loads(self._post(client).data)["id"]
+        assert newest in _jobs
+
+    def test_evicted_job_download_returns_404(self, client):
+        first_id = json.loads(self._post(client).data)["id"]
+        for _ in range(MAX_JOBS):
+            self._post(client)
+        assert client.get(f"/download/{first_id}").status_code == 404
+
+    def test_newest_job_still_downloadable_after_eviction(self, client):
+        for _ in range(MAX_JOBS + 5):
+            url = json.loads(self._post(client).data)["download"]
+        assert client.get(url).status_code == 200
+
+    def test_store_job_evicts_on_total_bytes(self):
+        _jobs.clear()
+        try:
+            half = MAX_JOBS_BYTES // 2 + 1
+            first = _store_job(b"\x00" * half)
+            second = _store_job(b"\x00" * half)
+            assert first not in _jobs, "oldest job must be evicted at the byte cap"
+            assert second in _jobs
+        finally:
+            _jobs.clear()
+
+    def test_store_job_keeps_single_job_above_byte_cap(self):
+        """One job larger than the cap is kept — the just-stored job is
+        never evicted (the render is done; dropping it frees nothing sooner)."""
+        _jobs.clear()
+        try:
+            job_id = _store_job(b"\x00" * (MAX_JOBS_BYTES + 1))
+            assert job_id in _jobs
+            assert len(_jobs) == 1
+        finally:
+            _jobs.clear()
+
+    def test_store_job_under_caps_keeps_everything(self):
+        _jobs.clear()
+        try:
+            ids = [_store_job(b"\x00" * 10) for _ in range(MAX_JOBS)]
+            assert all(i in _jobs for i in ids)
+        finally:
+            _jobs.clear()

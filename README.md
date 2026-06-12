@@ -70,6 +70,8 @@ The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAli
 
 **Timeline cap.** The renderer rejects any subtitle whose timestamps reach beyond 4 hours (`dubbing.assembler.MAX_TIMELINE_MS`) with a clear error instead of allocating audio for it — a hostile few-hundred-byte SRT carrying a `99:59:59,999` timestamp would otherwise demand ~16 GB of silence. Four hours comfortably covers any feature film; pass `max_timeline_ms` to `assemble_timeline` to raise it deliberately.
 
+**Web service limits.** The web UI caps the *entire* request body via Flask's `MAX_CONTENT_LENGTH` (the 1 MB SRT limit plus a small multipart envelope allowance), so an oversized payload smuggled in any form field is rejected with a JSON 413 before it is ever parsed. Finished jobs are held in a bounded registry — at most `MAX_JOBS` (16) renders and `MAX_JOBS_BYTES` (256 MB) in total, oldest evicted first — so repeated dub requests can never exhaust server memory; download your audio promptly after rendering.
+
 ---
 
 Dub a single SRT file to stdout:
