@@ -62,7 +62,10 @@ def dub():
     except (RuntimeError, ValueError) as exc:
         # Synthesis genuinely failed — report it; never substitute silence.
         return jsonify({"error": str(exc)}), 502
-    except subprocess.CalledProcessError as exc:
+    except subprocess.SubprocessError as exc:
+        # Covers CalledProcessError AND TimeoutExpired (which is NOT a
+        # CalledProcessError): a synthesis that hangs past its timeout must
+        # surface as a 502, never an unhandled 500.
         return jsonify({"error": f"TTS engine failed: {exc}"}), 502
 
     job_id = str(uuid.uuid4())

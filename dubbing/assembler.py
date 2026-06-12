@@ -25,6 +25,13 @@ DEFAULT_SAMPLE_RATE = 22050
 _SAMPLE_WIDTH = 2  # 16-bit PCM
 _CHANNELS = 1
 
+#: Hard ceiling on the rendered timeline. A hostile SRT a few hundred bytes
+#: long can carry a 99-hour timestamp; without this cap the renderer would
+#: try to allocate ~16 GB of silence for it (memory-exhaustion DoS through
+#: the web upload, which limits *file size*, not *timestamp values*).
+#: Four hours comfortably covers any real film or episode.
+MAX_TIMELINE_MS = 4 * 60 * 60 * 1000
+
 
 def _ms_to_frames(ms: int, sample_rate: int) -> int:
     return int(round(ms * sample_rate / 1000))
@@ -127,6 +134,7 @@ def assemble_timeline(
     timed: list[TimedSegment],
     results: list[TTSResult],
     sample_rate: int = DEFAULT_SAMPLE_RATE,
+    max_timeline_ms: int = MAX_TIMELINE_MS,
 ) -> bytes:
     """Render aligned segments onto a single timeline-true WAV.
 
@@ -134,18 +142,35 @@ def assemble_timeline(
         timed:   Aligned segments (same order as `results`).
         results: TTS render per segment, carrying the audio bytes.
         sample_rate: Output frame rate.
+        max_timeline_ms: Reject timelines beyond this duration BEFORE any
+            audio buffer is allocated (hostile-timestamp DoS guard).
 
     Returns:
         WAV bytes (mono, 16-bit) spanning the full subtitle timeline.
 
     Raises:
         ValueError: on timed/results length mismatch, a segment with no
-            audio, or audio that is not decodable 16-bit WAV.
+            audio, audio that is not decodable 16-bit WAV, a negative
+            start time, or a timeline exceeding `max_timeline_ms`.
     """
     if len(timed) != len(results):
         raise ValueError(
             f"timed and results must have the same length ({len(timed)} vs {len(results)})"
         )
+
+    # Validate the timeline bounds up front, before decoding or allocating
+    # anything: timestamps come straight from the (untrusted) SRT file.
+    for ts in timed:
+        if ts.start_ms < 0:
+            raise ValueError(
+                f"segment {ts.segment.entry.index} has a negative start time ({ts.start_ms} ms)"
+            )
+        if max(ts.start_ms, ts.end_ms) > max_timeline_ms:
+            raise ValueError(
+                f"segment {ts.segment.entry.index} ends at "
+                f"{max(ts.start_ms, ts.end_ms)} ms, beyond the maximum supported "
+                f"timeline of {max_timeline_ms} ms"
+            )
 
     # Render in timeline order: SRT files are not guaranteed sorted, and an
     # out-of-order entry would otherwise be appended at the current write

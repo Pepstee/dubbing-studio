@@ -109,6 +109,19 @@ def _voice_for_language(language: str) -> str | None:
     )
 
 
+def _parse_int(value: str) -> int | None:
+    """Parse a tag value as a base-10 integer; None when it isn't one.
+
+    `str.isdigit()` is NOT a safe guard here: characters like "²"
+    (superscript two) pass isdigit() yet crash int(). Hostile prosody
+    tags must degrade to "ignored", never to an exception.
+    """
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 def _rate_for_tags(tags: list[ProsodyTag]) -> int | None:
     """Resolve <rate:...> / <emotion:...> tags to a speaking rate in WPM.
 
@@ -124,8 +137,10 @@ def _rate_for_tags(tags: list[ProsodyTag]) -> int | None:
             value = tag.value.lower()
             if value in _RATE_WPM:
                 rate = _RATE_WPM[value]
-            elif value.isdigit():
-                rate = int(value)
+            else:
+                parsed = _parse_int(value)
+                if parsed is not None:
+                    rate = parsed
     return rate
 
 
@@ -137,8 +152,10 @@ def _pbas_for_tags(tags: list[ProsodyTag]) -> int | None:
             value = tag.value.lower()
             if value in _PITCH_PBAS:
                 pbas = _PITCH_PBAS[value]
-            elif value.lstrip("-").isdigit():
-                pbas = int(value)
+            else:
+                parsed = _parse_int(value)
+                if parsed is not None:
+                    pbas = parsed
     return pbas
 
 
