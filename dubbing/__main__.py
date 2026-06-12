@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import glob as _glob
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -90,7 +91,10 @@ def main() -> None:
             _cmd_dub(args)
         elif args.command == "batch":
             _cmd_batch(args)
-    except (RuntimeError, FileNotFoundError) as exc:
+    except (RuntimeError, ValueError, FileNotFoundError, subprocess.SubprocessError) as exc:
+        # ValueError: hostile SRT rejected by the renderer (e.g. a timestamp
+        # beyond the timeline cap); SubprocessError: `say`/`afconvert`
+        # failing or timing out. All are clean errors, never tracebacks.
         raise SystemExit(f"error: {exc}") from exc
 
 

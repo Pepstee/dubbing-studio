@@ -68,6 +68,8 @@ The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAli
 
 **Overlap policy.** Subtitle windows that overlap (two speakers talking at once) are *mixed*, never shifted: each segment stays anchored at its own SRT start time and the overlapping region carries the sum of both signals, clamped to the 16-bit PCM range. The total output duration is always the end of the last subtitle window — overlapping entries can never stretch the timeline.
 
+**Timeline cap.** The renderer rejects any subtitle whose timestamps reach beyond 4 hours (`dubbing.assembler.MAX_TIMELINE_MS`) with a clear error instead of allocating audio for it — a hostile few-hundred-byte SRT carrying a `99:59:59,999` timestamp would otherwise demand ~16 GB of silence. Four hours comfortably covers any feature film; pass `max_timeline_ms` to `assemble_timeline` to raise it deliberately.
+
 ---
 
 Dub a single SRT file to stdout:
