@@ -11,6 +11,20 @@ _jobs: dict[str, bytes] = {}
 
 MAX_UPLOAD_BYTES = 1_048_576  # 1 MiB
 
+# Cap the WHOLE request body, not just the srt field: request.files forces
+# Werkzeug to parse the entire multipart payload first, so without this a
+# multi-gigabyte body smuggled in any other form field (e.g. "lang") is
+# fully spooled before the per-file size check ever runs. The slack covers
+# the multipart envelope and small extra fields.
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES + 16_384
+
+# The finished-job registry is bounded by count AND total bytes. Without
+# eviction every successful /dub pins its full WAV in memory forever — and
+# a single legal 4-hour timeline renders to ~600 MB, so a handful of
+# requests would exhaust the server (memory DoS the upload cap can't stop).
+MAX_JOBS = 16
+MAX_JOBS_BYTES = 256 * 1024 * 1024  # 256 MiB
+
 _UPLOAD_FORM = """\
 <!doctype html>
 <html lang="en">
@@ -25,6 +39,31 @@ _UPLOAD_FORM = """\
 </form>
 </body>
 </html>"""
+
+
+def _store_job(audio: bytes) -> str:
+    """Register finished audio under a fresh job id, evicting oldest first.
+
+    Plain dicts preserve insertion order, so the front of `_jobs` is always
+    the oldest job — evict from there until both the count and total-bytes
+    caps hold again. The job just stored is never evicted, even if it alone
+    exceeds the byte cap (it was already rendered; refusing to serve it
+    would waste the work without freeing anything sooner).
+    """
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = audio
+    while len(_jobs) > 1 and (
+        len(_jobs) > MAX_JOBS or sum(len(a) for a in _jobs.values()) > MAX_JOBS_BYTES
+    ):
+        _jobs.pop(next(iter(_jobs)))
+    return job_id
+
+
+@app.errorhandler(413)
+def _request_too_large(_exc):
+    # Raised by Werkzeug when the body exceeds MAX_CONTENT_LENGTH; keep the
+    # JSON-error contract instead of Werkzeug's default HTML page.
+    return jsonify({"error": "Upload exceeds maximum allowed size of 1 MB"}), 413
 
 
 @app.route("/")
@@ -68,8 +107,7 @@ def dub():
         # surface as a 502, never an unhandled 500.
         return jsonify({"error": f"TTS engine failed: {exc}"}), 502
 
-    job_id = str(uuid.uuid4())
-    _jobs[job_id] = combined
+    job_id = _store_job(combined)
     return jsonify({"id": job_id, "download": f"/download/{job_id}"})
 
 
