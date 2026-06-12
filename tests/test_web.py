@@ -12,7 +12,7 @@ flask = pytest.importorskip("flask")
 
 from dubbing.backends.base import TTSBackend  # noqa: E402
 from dubbing.models import Segment, TTSResult  # noqa: E402
-from dubbing.web import _jobs, app  # noqa: E402
+from dubbing.web import MAX_UPLOAD_BYTES, _jobs, app  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +332,57 @@ class TestDownloadRouteErrors:
     def test_previously_cleared_job_returns_404(self, client, job_id):
         _jobs.clear()
         assert client.get(f"/download/{job_id}").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /dub — upload size limit
+# ---------------------------------------------------------------------------
+
+class TestDubUploadSizeLimit:
+    def _oversized_payload(self) -> bytes:
+        """One byte beyond MAX_UPLOAD_BYTES of valid ASCII text."""
+        return b"x" * (MAX_UPLOAD_BYTES + 1)
+
+    def test_oversized_upload_returns_413(self, client):
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(self._oversized_payload()), "big.srt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 413
+
+    def test_oversized_upload_returns_json_error(self, client):
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(self._oversized_payload()), "big.srt")},
+            content_type="multipart/form-data",
+        )
+        body = json.loads(resp.data)
+        assert "error" in body
+
+    def test_oversized_upload_no_job_stored(self, client):
+        client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(self._oversized_payload()), "big.srt")},
+            content_type="multipart/form-data",
+        )
+        assert _jobs == {}
+
+    def test_exactly_max_bytes_is_accepted(self, client):
+        # MAX_UPLOAD_BYTES of whitespace is valid UTF-8 but not valid SRT;
+        # the pipeline will reject it — that's a 502, not a 413.
+        # We only verify the size gate itself does NOT trigger.
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(b" " * MAX_UPLOAD_BYTES), "limit.srt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code != 413
+
+    def test_valid_srt_within_limit_returns_200(self, client):
+        resp = client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 200

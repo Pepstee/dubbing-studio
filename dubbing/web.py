@@ -9,6 +9,8 @@ from flask import Flask, jsonify, request, send_file
 app = Flask(__name__)
 _jobs: dict[str, bytes] = {}
 
+MAX_UPLOAD_BYTES = 1_048_576  # 1 MiB
+
 _UPLOAD_FORM = """\
 <!doctype html>
 <html lang="en">
@@ -36,8 +38,13 @@ def dub():
     if srt_file is None:
         return jsonify({"error": "No SRT file provided"}), 400
 
+    # Cap the read to MAX_UPLOAD_BYTES + 1; if we get more, reject before decode.
+    chunk = srt_file.read(MAX_UPLOAD_BYTES + 1)
+    if len(chunk) > MAX_UPLOAD_BYTES:
+        return jsonify({"error": "Upload exceeds maximum allowed size of 1 MB"}), 413
+
     try:
-        srt_text = srt_file.read().decode("utf-8")
+        srt_text = chunk.decode("utf-8")
     except UnicodeDecodeError:
         # Binary or wrongly-encoded upload: a client error, not a server crash.
         return jsonify({"error": "SRT file is not valid UTF-8 text"}), 400
