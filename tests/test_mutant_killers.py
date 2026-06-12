@@ -25,14 +25,13 @@ from dubbing.assembler import (
     _silence,
     assemble_timeline,
 )
-from dubbing.models import ProsodyTag, TTSResult
+from dubbing.models import TTSResult
 from dubbing.prosody import parse_prosody
 from dubbing.srt_parser import parse_srt_string
 
 from tests.support.assertions import (
     assert_audio_region,
     assert_silence_region,
-    assert_timed_segment,
     assert_wav_duration,
 )
 from tests.support.builders import make_segment, make_tts_result, make_wav
