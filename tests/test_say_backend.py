@@ -275,10 +275,10 @@ class TestVoiceForLanguage:
 
 class TestSayCommandConstruction:
     def _capture_commands(self, monkeypatch, tmp_path):
-        calls: list[list[str]] = []
+        calls: list[tuple[list[str], dict]] = []
 
         def record(cmd, **kwargs):
-            calls.append(list(cmd))
+            calls.append((list(cmd), kwargs))
             if cmd[0] == "afconvert":
                 # produce a real WAV so the backend can read it back
                 buf = io.BytesIO()
@@ -298,27 +298,49 @@ class TestSayCommandConstruction:
     def test_voice_flag_passed_to_say(self, monkeypatch, tmp_path):
         calls = self._capture_commands(monkeypatch, tmp_path)
         _synthesize_with_say("hola", voice="Mónica")
-        say_cmd = calls[0]
+        say_cmd, _ = calls[0]
         assert "-v" in say_cmd and say_cmd[say_cmd.index("-v") + 1] == "Mónica"
 
     def test_rate_flag_passed_to_say(self, monkeypatch, tmp_path):
         calls = self._capture_commands(monkeypatch, tmp_path)
         _synthesize_with_say("hello", rate_wpm=130)
-        say_cmd = calls[0]
+        say_cmd, _ = calls[0]
         assert "-r" in say_cmd and say_cmd[say_cmd.index("-r") + 1] == "130"
 
     def test_pitch_embedded_as_pbas_command(self, monkeypatch, tmp_path):
         calls = self._capture_commands(monkeypatch, tmp_path)
         _synthesize_with_say("hello", pitch_pbas=38)
-        spoken = calls[0][-1]
+        spoken = calls[0][1]["input"].decode("utf-8")
         assert "[[ pbas 38 ]]" in spoken and "hello" in spoken
 
     def test_no_options_means_bare_command(self, monkeypatch, tmp_path):
         calls = self._capture_commands(monkeypatch, tmp_path)
         _synthesize_with_say("plain")
-        say_cmd = calls[0]
+        say_cmd, kwargs = calls[0]
         assert "-v" not in say_cmd and "-r" not in say_cmd
-        assert say_cmd[-1] == "plain"
+        assert kwargs["input"] == b"plain"
+
+    def test_text_delivered_on_stdin_never_argv(self, monkeypatch, tmp_path):
+        """The spoken text must never be an argv item — `say` would parse it."""
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        _synthesize_with_say("Hello world")
+        say_cmd, kwargs = calls[0]
+        assert "Hello world" not in say_cmd
+        assert kwargs["input"] == b"Hello world"
+
+    def test_dash_leading_text_not_parsed_as_say_option(self, monkeypatch, tmp_path):
+        """Dialogue dashes ('- Hi!') and hostile flag-like text ('-v X',
+        '-o /tmp/evil.aiff') must reach `say` as speech, not as options."""
+        calls = self._capture_commands(monkeypatch, tmp_path)
+        for hostile in ("- Hello there!", "-v Whisper", "-o /tmp/evil.aiff pwned"):
+            calls.clear()
+            _synthesize_with_say(hostile)
+            say_cmd, kwargs = calls[0]
+            assert hostile not in say_cmd
+            assert kwargs["input"] == hostile.encode("utf-8")
+            # exactly one -o: the backend's own temp aiff, never the text's
+            assert say_cmd.count("-o") == 1
+            assert say_cmd[say_cmd.index("-o") + 1].endswith("out.aiff")
 
     def test_synthesize_applies_segment_tags(self, monkeypatch, tmp_path, seeded_voices):
         calls = self._capture_commands(monkeypatch, tmp_path)
@@ -328,10 +350,10 @@ class TestSayCommandConstruction:
             language="fr",
         )
         SayTTSBackend().synthesize([seg])
-        say_cmd = calls[0]
+        say_cmd, kwargs = calls[0]
         assert say_cmd[say_cmd.index("-v") + 1] == "Thomas"
         assert "-r" in say_cmd
-        assert "[[ pbas" in say_cmd[-1]
+        assert "[[ pbas" in kwargs["input"].decode("utf-8")
 
 
 # ---------------------------------------------------------------------------

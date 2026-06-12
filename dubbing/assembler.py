@@ -122,8 +122,11 @@ def assemble_timeline(
             f"timed and results must have the same length ({len(timed)} vs {len(results)})"
         )
 
+    # Render in timeline order: SRT files are not guaranteed sorted, and an
+    # out-of-order entry would otherwise be appended at the current write
+    # head instead of its own start time, desynchronising everything after it.
     out = array("h")
-    for ts, res in zip(timed, results):
+    for ts, res in sorted(zip(timed, results), key=lambda pair: pair[0].start_ms):
         if not res.audio_bytes:
             raise ValueError(f"segment {ts.segment.entry.index} produced no audio data")
 

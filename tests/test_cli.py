@@ -289,3 +289,10 @@ class TestCliErrors:
     def test_nonexistent_srt_file_exits_nonzero(self, tmp_path):
         result = _run("dub", str(tmp_path / "does_not_exist.srt"))
         assert result.returncode != 0
+
+    def test_nonexistent_srt_file_reports_cleanly_no_traceback(self, tmp_path):
+        """A missing input is a user error: clean message, never a stack trace."""
+        result = _run("dub", str(tmp_path / "does_not_exist.srt"))
+        assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+        assert "error:" in result.stderr
