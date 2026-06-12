@@ -50,6 +50,12 @@ _PITCH_PBAS = {
 # `Name              lc_RG    # greeting` lines from `say -v ?`.
 _VOICE_LINE_RE = re.compile(r"^(.*?)\s{2,}([a-zA-Z]{2,3}[-_][a-zA-Z]{2,})\s+#")
 
+# Safe numeric bounds for `say` arguments.
+_RATE_MIN = 20    # words per minute — say's documented minimum
+_RATE_MAX = 500   # words per minute — say's documented maximum
+_PITCH_MIN = -100
+_PITCH_MAX = 100
+
 _voices_cache: list[tuple[str, str]] | None = None
 
 
@@ -131,7 +137,7 @@ def _pbas_for_tags(tags: list[ProsodyTag]) -> int | None:
             value = tag.value.lower()
             if value in _PITCH_PBAS:
                 pbas = _PITCH_PBAS[value]
-            elif value.isdigit():
+            elif value.lstrip("-").isdigit():
                 pbas = int(value)
     return pbas
 
@@ -146,6 +152,11 @@ def _synthesize_with_say(
         raise RuntimeError("'say' command not found; macOS TTS is unavailable")
     if shutil.which("afconvert") is None:
         raise RuntimeError("'afconvert' command not found; macOS TTS is unavailable")
+
+    if rate_wpm is not None:
+        rate_wpm = max(_RATE_MIN, min(_RATE_MAX, rate_wpm))
+    if pitch_pbas is not None:
+        pitch_pbas = max(_PITCH_MIN, min(_PITCH_MAX, pitch_pbas))
 
     spoken = text
     if pitch_pbas is not None:
