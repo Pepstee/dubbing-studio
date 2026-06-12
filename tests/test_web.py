@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import uuid
 import wave
 
@@ -35,6 +36,14 @@ def _minimal_wav() -> bytes:
         wf.setframerate(22050)
         wf.writeframes(b"\x00" * 2)
     return buf.getvalue()
+
+
+def _parse_job_id(resp) -> str:
+    """Extract job_id from the HTML result page's /stream/<job_id> src."""
+    html = resp.data.decode()
+    m = re.search(r'/stream/([^"]+)', html)
+    assert m, "Expected /stream/<job_id> in response HTML"
+    return m.group(1)
 
 
 def _is_valid_wav(data: bytes) -> bool:
@@ -108,7 +117,7 @@ def job_id(client) -> str:
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    return json.loads(resp.data)["id"]
+    return _parse_job_id(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -161,49 +170,52 @@ class TestDubRouteSuccess:
     def test_returns_200(self, client):
         assert self._post(client).status_code == 200
 
-    def test_response_is_json(self, client):
+    def test_response_is_html(self, client):
         resp = self._post(client)
-        assert resp.content_type.startswith("application/json")
+        assert resp.content_type.startswith("text/html")
 
-    def test_json_has_id_key(self, client):
-        body = json.loads(self._post(client).data)
-        assert "id" in body
+    def test_html_has_audio_element(self, client):
+        html = self._post(client).data.decode()
+        assert "<audio" in html
 
-    def test_json_has_download_key(self, client):
-        body = json.loads(self._post(client).data)
-        assert "download" in body
+    def test_html_has_download_link(self, client):
+        html = self._post(client).data.decode()
+        assert "Download WAV" in html
 
-    def test_id_is_nonempty_string(self, client):
-        body = json.loads(self._post(client).data)
-        assert isinstance(body["id"], str) and body["id"]
+    def test_job_id_is_nonempty_string(self, client):
+        job_id = _parse_job_id(self._post(client))
+        assert isinstance(job_id, str) and job_id
 
-    def test_download_contains_id(self, client):
-        body = json.loads(self._post(client).data)
-        assert body["id"] in body["download"]
+    def test_stream_and_download_share_job_id(self, client):
+        html = self._post(client).data.decode()
+        stream_m = re.search(r'/stream/([^"]+)', html)
+        download_m = re.search(r'/download/([^"]+)', html)
+        assert stream_m and download_m
+        assert stream_m.group(1) == download_m.group(1)
 
-    def test_download_path_starts_with_slash_download(self, client):
-        body = json.loads(self._post(client).data)
-        assert body["download"].startswith("/download/")
+    def test_download_link_uses_download_path(self, client):
+        html = self._post(client).data.decode()
+        assert '/download/' in html
 
     def test_sequential_requests_produce_distinct_ids(self, client):
-        id1 = json.loads(self._post(client).data)["id"]
-        id2 = json.loads(self._post(client).data)["id"]
+        id1 = _parse_job_id(self._post(client))
+        id2 = _parse_job_id(self._post(client))
         assert id1 != id2
 
     def test_job_stored_in_jobs_registry(self, client):
-        job_id = json.loads(self._post(client).data)["id"]
+        job_id = _parse_job_id(self._post(client))
         assert job_id in _jobs
 
     def test_job_audio_is_valid_wav(self, client):
-        job_id = json.loads(self._post(client).data)["id"]
+        job_id = _parse_job_id(self._post(client))
         assert _is_valid_wav(_jobs[job_id])
 
     def test_multi_entry_srt_returns_200(self, client):
         assert self._post(client, _SRT_MULTI).status_code == 200
 
-    def test_multi_entry_srt_has_download_key(self, client):
-        body = json.loads(self._post(client, _SRT_MULTI).data)
-        assert "download" in body
+    def test_multi_entry_srt_has_download_link(self, client):
+        html = self._post(client, _SRT_MULTI).data.decode()
+        assert "Download WAV" in html
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +318,8 @@ class TestDownloadRouteSuccess:
             data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
             content_type="multipart/form-data",
         )
-        url = json.loads(resp.data)["download"]
-        assert client.get(url).status_code == 200
+        job_id = _parse_job_id(resp)
+        assert client.get(f"/download/{job_id}").status_code == 200
 
     def test_download_url_content_type_is_audio_wav(self, client):
         resp = client.post(
@@ -315,8 +327,8 @@ class TestDownloadRouteSuccess:
             data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
             content_type="multipart/form-data",
         )
-        url = json.loads(resp.data)["download"]
-        dl_resp = client.get(url)
+        job_id = _parse_job_id(resp)
+        dl_resp = client.get(f"/download/{job_id}")
         assert dl_resp.content_type.startswith("audio/wav")
 
 
@@ -453,26 +465,28 @@ class TestJobRegistryBounds:
         assert len(_jobs) <= MAX_JOBS
 
     def test_oldest_job_evicted_first(self, client):
-        first_id = json.loads(self._post(client).data)["id"]
+        first_id = _parse_job_id(self._post(client))
         for _ in range(MAX_JOBS):
             self._post(client)
         assert first_id not in _jobs
 
     def test_newest_job_survives_eviction(self, client):
+        newest = None
         for _ in range(MAX_JOBS + 5):
-            newest = json.loads(self._post(client).data)["id"]
+            newest = _parse_job_id(self._post(client))
         assert newest in _jobs
 
     def test_evicted_job_download_returns_404(self, client):
-        first_id = json.loads(self._post(client).data)["id"]
+        first_id = _parse_job_id(self._post(client))
         for _ in range(MAX_JOBS):
             self._post(client)
         assert client.get(f"/download/{first_id}").status_code == 404
 
     def test_newest_job_still_downloadable_after_eviction(self, client):
+        newest_id = None
         for _ in range(MAX_JOBS + 5):
-            url = json.loads(self._post(client).data)["download"]
-        assert client.get(url).status_code == 200
+            newest_id = _parse_job_id(self._post(client))
+        assert client.get(f"/download/{newest_id}").status_code == 200
 
     def test_store_job_evicts_on_total_bytes(self):
         _jobs.clear()

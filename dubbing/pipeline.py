@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import concurrent.futures
+import os
 from pathlib import Path
 
 from dubbing.aligner import TimedSegment, TimelineAligner
@@ -40,10 +42,39 @@ class DubbingPipeline:
                 )
             )
 
-        results = self._backend.synthesize(segments)
+        results = self._synthesize_parallel(segments)
         durations = [r.duration_ms for r in results]
         timed = self._aligner.align(segments, durations)
         return timed, results
+
+    def _synthesize_parallel(self, segments: list[Segment]) -> list[TTSResult]:
+        if not segments:
+            return []
+
+        max_workers = min(len(segments), os.cpu_count() or 4)
+        ordered: list[TTSResult | None] = [None] * len(segments)
+        first_error: BaseException | None = None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {
+                executor.submit(self._backend.synthesize, [seg]): i
+                for i, seg in enumerate(segments)
+            }
+            for fut in concurrent.futures.as_completed(future_to_idx):
+                exc = fut.exception()
+                if exc is not None:
+                    if first_error is None:
+                        first_error = exc
+                    for f in future_to_idx:
+                        f.cancel()
+                elif first_error is None:
+                    idx = future_to_idx[fut]
+                    ordered[idx] = fut.result()[0]
+
+        if first_error is not None:
+            raise RuntimeError(f"Segment synthesis failed: {first_error}") from first_error
+
+        return ordered  # type: ignore[return-value]
 
     def run(self, input: str | Path, language: str = "") -> list[TimedSegment]:
         timed, _ = self.run_full(input, language=language)

@@ -165,21 +165,22 @@ class TestPipelineProsody:
 # ---------------------------------------------------------------------------
 
 class TestPipelineBackendInteraction:
-    def test_backend_called_exactly_once(self):
+    def test_backend_called_once_per_segment(self):
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(_SRT_MULTI)
-        assert len(backend.calls) == 1
+        assert len(backend.calls) == 3
 
     def test_backend_receives_all_segments(self):
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(_SRT_MULTI)
-        assert len(backend.calls[0]) == 3
+        total = sum(len(c) for c in backend.calls)
+        assert total == 3
 
     def test_backend_receives_cleaned_text(self):
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(_SRT_PROSODY)
-        seg = backend.calls[0][0]
-        assert "<emotion:happy>" not in seg.entry.text
+        all_segs = [s for c in backend.calls for s in c]
+        assert all("<emotion:happy>" not in seg.entry.text for seg in all_segs)
 
     def test_no_audio_files_written(self, tmp_path):
         before = set(tmp_path.rglob("*"))
@@ -259,7 +260,8 @@ class TestBackendInjected:
     def test_len_results_equals_len_srt_entries(self):
         backend = _FixedDurationBackend()
         result = DubbingPipeline(backend).run(_SRT_MULTI)
-        assert len(result) == len(backend.calls[0])
+        total_segs = sum(len(c) for c in backend.calls)
+        assert len(result) == total_segs
 
     def test_len_results_equals_input_segment_count_single(self):
         backend = _FixedDurationBackend()
@@ -285,7 +287,8 @@ class TestLanguageFieldForwarded:
     def test_language_forwarded_to_all_segments(self):
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(_SRT_MULTI)
-        for seg in backend.calls[0]:
+        all_segs = [s for c in backend.calls for s in c]
+        for seg in all_segs:
             assert seg.language == ""
 
     def test_language_forwarded_with_prosody_tags(self):
@@ -308,7 +311,8 @@ class TestLanguageFieldForwarded:
     def test_explicit_language_propagated_to_all_segments(self):
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(_SRT_MULTI, language="fr")
-        assert all(seg.language == "fr" for seg in backend.calls[0])
+        all_segs = [s for c in backend.calls for s in c]
+        assert all(seg.language == "fr" for seg in all_segs)
 
     def test_run_full_propagates_language(self):
         backend = _FixedDurationBackend()
@@ -375,6 +379,9 @@ No tags here
 """
         backend = _FixedDurationBackend()
         DubbingPipeline(backend).run(srt)
-        segs = backend.calls[0]
-        assert len(segs[0].tags) == 1
-        assert segs[1].tags == []
+        all_segs = sorted(
+            [s for c in backend.calls for s in c],
+            key=lambda s: s.entry.index,
+        )
+        assert len(all_segs[0].tags) == 1
+        assert all_segs[1].tags == []
