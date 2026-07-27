@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -88,7 +89,11 @@ class TestCliDub:
         srt = tmp_path / "sample.srt"
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
         result = _run("dub", str(srt), "--backend", "say")
-        assert result.returncode == 0, result.stderr
+        if shutil.which("say") and shutil.which("afconvert"):
+            assert result.returncode == 0, result.stderr
+        else:
+            assert result.returncode != 0
+            assert "macOS TTS is unavailable" in result.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +218,7 @@ class TestCliLang:
         srt.write_text(_SRT_SINGLE, encoding="utf-8")
         result = _run("dub", str(srt), "--lang", "zz-ZZ")
         assert result.returncode != 0
-        assert "no installed 'say' voice" in result.stderr
+        assert "no installed" in result.stderr and "voice" in result.stderr
 
 
 # ---------------------------------------------------------------------------

@@ -172,7 +172,10 @@ def _post_srt(client, srt: str):
 
 class TestWebHardening:
     def test_tts_timeout_returns_502_not_500(self, client, monkeypatch):
-        monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _TimingOutBackend)
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _TimingOutBackend(),
+        )
         resp = _post_srt(client, "1\n00:00:00,000 --> 00:00:01,000\nhi\n")
         assert resp.status_code == 502
         body = json.loads(resp.data)

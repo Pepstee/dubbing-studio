@@ -9,7 +9,6 @@ Acceptance criteria:
 """
 from __future__ import annotations
 
-import concurrent.futures
 import io
 import time
 import wave
@@ -266,16 +265,9 @@ class TestParallelErrorHandling:
             pipeline.run_full(_SRT_ONE)
 
     def test_failing_backend_on_six_segments_propagates_exception(self):
-        """A single failure in any segment must not be silently swallowed.
-
-        When concurrent futures are cancelled after the first error, Python's
-        ThreadPoolExecutor can raise CancelledError from fut.exception() before
-        the pipeline reaches its final RuntimeError re-raise.  Either exception
-        type is an acceptable propagation — the invariant is that the call
-        does NOT succeed silently.
-        """
+        """Cancellation never leaks implementation-level CancelledError."""
         pipeline = DubbingPipeline(_FailingBackend())
-        with pytest.raises((RuntimeError, concurrent.futures.CancelledError)):
+        with pytest.raises(RuntimeError, match="Segment synthesis failed"):
             pipeline.run_full(_SRT_SIX)
 
     def test_error_message_wraps_original_cause(self):

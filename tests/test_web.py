@@ -254,7 +254,10 @@ class TestDubRouteErrors:
             def synthesize(self, segments):
                 raise RuntimeError("'say' command not found; macOS TTS is unavailable")
 
-        monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _FailingBackend)
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _FailingBackend(),
+        )
         resp = client.post(
             "/dub",
             data={"srt": (io.BytesIO(_SRT_SINGLE.encode()), "test.srt")},
@@ -273,7 +276,10 @@ class TestDubRouteErrors:
                 seen.extend(seg.language for seg in segments)
                 return super().synthesize(segments)
 
-        monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _RecordingBackend)
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _RecordingBackend(),
+        )
         resp = client.post(
             "/dub",
             data={

@@ -12,9 +12,13 @@ A composable pipeline that converts SRT subtitle files into timed audio segments
 pip install -e .
 ```
 
-This installs the `dubbing-cli` command and makes `python -m dubbing` available.
+This installs the `dubbing-cli` command and makes `python -m dubbing` available. On
+Linux, install `espeak-ng` for the built-in local TTS path. On macOS, the existing
+`say`/`afconvert` backend remains available. Piper is selected automatically only
+when both the `piper` binary and `PIPER_MODEL` are configured.
 
-Flask is required for the web UI (`dubbing-web`). The `say` backend uses macOS built-ins and requires no additional packages.
+Flask is required for the web UI (`dubbing-web`). The `say` backend uses macOS
+built-ins and requires no additional Python packages.
 
 ---
 
@@ -202,6 +206,184 @@ results = batch_dub(
 for path, segs in results.items():
     print(f"{path}: {len(segs)} segments")
 ```
+
+---
+
+## Local speaker diarisation
+
+Dubbing Studio can answer “who spoke when?” in source audio and map those turns
+onto the existing subtitle/dubbing segment plan without moving or splitting any
+subtitle timestamp. The production backend is
+[Sherpa-ONNX](https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/index.html)
+with its public ONNX conversion of pyannote segmentation 3.0 and a public NeMo
+TitaNet speaker-embedding model. Model inference is local; no audio is uploaded.
+
+### Install
+
+CPU inference, suitable for ordinary laptops:
+
+```bash
+pip install -e '.[diarization]'
+```
+
+Python 3.12 is the exercised/recommended interpreter for the current Sherpa
+wheels.
+
+The standard PyPI wheel is CPU-only. For an NVIDIA GPU, replace it with the
+official Sherpa CUDA wheel matching the installed CUDA/CUDNN runtime. The path
+exercised on an RTX 4060 Laptop GPU was:
+
+```bash
+pip uninstall -y sherpa-onnx
+pip install 'sherpa-onnx==1.13.4+cuda12.cudnn9' \
+  -f https://k2-fsa.github.io/sherpa/onnx/cuda.html
+pip install nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 \
+  nvidia-cufft-cu12 nvidia-curand-cu12
+```
+
+CUDA runtime libraries must be visible to the dynamic linker before Python
+starts. With NVIDIA's pip runtime packages:
+
+```bash
+DIAR_SITE_PACKAGES="$(python -c 'import site; print(site.getsitepackages()[0])')"
+export LD_LIBRARY_PATH="$DIAR_SITE_PACKAGES/nvidia/cublas/lib:$DIAR_SITE_PACKAGES/nvidia/cuda_runtime/lib:$DIAR_SITE_PACKAGES/nvidia/cuda_nvrtc/lib:$DIAR_SITE_PACKAGES/nvidia/cudnn/lib:$DIAR_SITE_PACKAGES/nvidia/cufft/lib:$DIAR_SITE_PACKAGES/nvidia/curand/lib:$DIAR_SITE_PACKAGES/nvidia/nvjitlink/lib:${LD_LIBRARY_PATH:-}"
+```
+
+`--diarization-device` is always explicit: `cpu` or `cuda`. A CPU-only wheel
+with `cuda` requested is rejected before inference. CUDA initialization/runtime
+errors are surfaced; the application never silently falls back to CPU.
+
+### Acquire the public models
+
+Keep weights outside the checkout, for example under
+`$XDG_CACHE_HOME/dubbing-studio/models`:
+
+```bash
+DIAR_MODELS="${XDG_CACHE_HOME:-$HOME/.cache}/dubbing-studio/models"
+mkdir -p "$DIAR_MODELS"
+curl -L -o "$DIAR_MODELS/segmentation.tar.bz2" \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
+tar -xjf "$DIAR_MODELS/segmentation.tar.bz2" -C "$DIAR_MODELS"
+curl -L -o "$DIAR_MODELS/nemo_en_titanet_small.onnx" \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx
+
+export DUBBING_DIARIZATION_SEGMENTATION_MODEL="$DIAR_MODELS/sherpa-onnx-pyannote-segmentation-3-0/model.onnx"
+export DUBBING_DIARIZATION_EMBEDDING_MODEL="$DIAR_MODELS/nemo_en_titanet_small.onnx"
+```
+
+These release downloads are not gated and require no account or access token.
+Review the licence files shipped with each model before commercial deployment.
+Do not commit weights or caches.
+
+### CLI
+
+Machine-readable diarisation, with optional subtitle attribution:
+
+```bash
+python -m dubbing diarize source.wav \
+  --srt source.srt \
+  --diarization-device cuda \
+  --num-speakers 2 \
+  --output out/source.diarization.json
+```
+
+Run source-audio diarisation, subtitle attribution, the existing TTS core, and
+timeline assembly in one operation:
+
+```bash
+python -m dubbing dub source.srt \
+  --source-audio source.wav \
+  --backend espeak \
+  --diarization-device cuda \
+  --num-speakers 2 \
+  --output out/
+```
+
+The integrated command writes:
+
+- `source.wav`: the timeline-true dubbed output;
+- `source.json`: the existing segment plan plus `speaker`, `speakers`,
+  `speaker_status`, per-speaker overlap durations, and speech coverage;
+- `source.diarization.json`: raw typed turns and backend/model/device metadata.
+
+Pass model paths explicitly with `--segmentation-model` and
+`--embedding-model` when the environment variables above are not set.
+`--num-speakers` supplies a known exact count. Sherpa also supports automatic
+threshold clustering (`--cluster-threshold`, default `0.5`). Its API does not
+guarantee min/max-only counts, so `--min-speakers`/`--max-speakers` without an
+exact count fail clearly instead of pretending the constraint was honoured.
+
+### Python API
+
+```python
+from dubbing.backends.espeak import EspeakTTSBackend
+from dubbing.diarization import (
+    SherpaOnnxDiarizationBackend,
+    SpeakerConstraints,
+)
+from dubbing.pipeline import DubbingPipeline
+
+diarizer = SherpaOnnxDiarizationBackend(
+    segmentation_model="/models/segmentation/model.onnx",
+    embedding_model="/models/nemo_en_titanet_small.onnx",
+    device="cuda",
+)
+timed, tts, diarization, attribution = DubbingPipeline(
+    EspeakTTSBackend()
+).run_full_with_diarization(
+    "source.srt",
+    "source.wav",
+    diarizer,
+    constraints=SpeakerConstraints(num_speakers=2),
+)
+```
+
+`SpeakerTurn` uses integer milliseconds and stable first-appearance labels
+(`SPEAKER_00`, `SPEAKER_01`, ...). Intervals are half-open, so a turn beginning
+at a subtitle's end cannot leak into it. Segment status is explicit:
+
+| Status | Meaning |
+|---|---|
+| `attributed` | Exactly one speaker overlaps the window. |
+| `no_speech` | No diarised speech overlaps; `speaker` is `null`. |
+| `speaker_boundary` | The subtitle crosses sequential speakers; `speaker` is `null`. |
+| `overlap` | Speakers talk simultaneously; `speaker` is `null` and all labels/durations are retained. |
+
+Sherpa's current offline result object does not expose calibrated per-turn
+confidence, so `confidence` is `null` and `confidence_available` is `false`.
+No confidence value is fabricated.
+
+### Media, privacy, and limitations
+
+Native 16 kHz mono 16-bit PCM WAV is read directly. Other audio/video formats
+and WAV formats needing resampling require `ffmpeg`; missing/invalid media
+produces an actionable error. Inputs longer than four hours are rejected before
+model inference.
+
+Speaker embeddings encode voice characteristics and should be treated as
+sensitive biometric-like data. This backend keeps embeddings inside the
+inference process and persists only anonymous labels/timestamps, but operators
+must still protect source recordings, derived JSON, caches, logs, and any future
+backend that chooses to persist embeddings. Delete source media and outputs
+according to the project's retention policy.
+
+Diarisation accuracy is data-dependent. Clean conversational speech with
+distinct voices and known speaker count performs best. Crosstalk, very short
+turns, noise, reverberation, music, synthetic voices, and domain/language shift
+can cause missed speech or speaker confusion. Anonymous labels identify a
+consistent cluster within one file, not a real-world identity and not the same
+person across files. Inspect consequential output; this module does not claim a
+universal error rate.
+
+### Architecture
+
+`DiarizationBackend` is injectable and returns a typed `DiarizationResult`.
+`SherpaOnnxDiarizationBackend` owns media decoding and model inference.
+`attribute_timed_segments` joins speaker turns to the studio's existing
+`TimedSegment` windows, and `DubbingPipeline.run_full_with_diarization` composes
+that join with the existing parse → prosody → TTS → align flow. This keeps
+diarisation replaceable and prevents speaker analysis from becoming a second,
+divergent dubbing pipeline.
 
 ---
 

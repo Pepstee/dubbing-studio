@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,7 +62,7 @@ def check_cli() -> None:
             [
                 sys.executable, "-m", "dubbing", "dub",
                 str(ROOT / "samples" / "sample.srt"),
-                "--backend", "say",
+                "--backend", "auto",
                 "--output", tmpdir,
             ],
             capture_output=True,
@@ -133,13 +134,14 @@ def check_web() -> None:
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            body = json.loads(resp.read())
+            body = resp.read().decode("utf-8")
     except urllib.error.URLError as exc:
         sys.exit(f"FAIL: POST /dub failed: {exc}")
 
-    download = body.get("download")
-    if not download:
-        sys.exit(f"FAIL: POST /dub returned no download link: {body}")
+    match = re.search(r'href="(/download/[^"]+)"', body)
+    if match is None:
+        sys.exit("FAIL: POST /dub returned no download link")
+    download = match.group(1)
 
     with urllib.request.urlopen(f"http://127.0.0.1:7432{download}", timeout=30) as resp:
         audio = resp.read()

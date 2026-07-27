@@ -1,6 +1,6 @@
 """Tests for acceptance.check_cli — subprocess fully mocked, no real synthesis.
 
-check_cli() shells out to `python -m dubbing dub … --backend say` and then
+check_cli() shells out to `python -m dubbing dub … --backend auto` and then
 verifies the produced WAV and JSON plan. These tests replace subprocess.run
 with a fake that records the exact command and keyword arguments and writes
 the expected artefacts into the --output directory, so every detail of the
@@ -82,7 +82,7 @@ class TestCheckCliSuccess:
         assert fake.cmd[1:4] == ["-m", "dubbing", "dub"]
         assert sample in fake.cmd
         assert "--backend" in fake.cmd
-        assert fake.cmd[fake.cmd.index("--backend") + 1] == "say"
+        assert fake.cmd[fake.cmd.index("--backend") + 1] == "auto"
 
     def test_captures_output_as_text(self, monkeypatch):
         # stderr must be captured as str so the failure message is readable.

@@ -8,11 +8,11 @@ import io
 import json
 import subprocess
 import wave
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dubbing.backends import PiperTTSBackend, SayTTSBackend, select_backend
+from dubbing.backends import EspeakTTSBackend, PiperTTSBackend, SayTTSBackend, select_backend
 from dubbing.backends.base import TTSBackend
 from dubbing.backends.piper import _raw_to_wav, _wav_duration_ms
 from dubbing.models import ProsodyTag, Segment, SRTEntry, TTSResult
@@ -575,41 +575,56 @@ class TestWavDurationMs:
 
 class TestSelectBackend:
     def test_returns_piper_backend_when_piper_on_path(self):
-        with patch("dubbing.backends.shutil.which", return_value="/usr/local/bin/piper"):
+        with (
+            patch("dubbing.backends.shutil.which", return_value="/usr/local/bin/piper"),
+            patch.dict("os.environ", {"PIPER_MODEL": _MODEL_PATH}),
+        ):
             backend = select_backend()
         assert isinstance(backend, PiperTTSBackend)
 
-    def test_returns_say_backend_when_piper_not_on_path(self):
-        with patch("dubbing.backends.shutil.which", return_value=None):
+    def test_returns_say_backend_when_complete_say_toolchain_exists(self):
+        def which(name):
+            return f"/usr/bin/{name}" if name in {"say", "afconvert"} else None
+
+        with patch("dubbing.backends.shutil.which", side_effect=which):
             backend = select_backend()
         assert isinstance(backend, SayTTSBackend)
 
     def test_piper_backend_is_tts_backend(self):
-        with patch("dubbing.backends.shutil.which", return_value="/usr/local/bin/piper"):
+        with (
+            patch("dubbing.backends.shutil.which", return_value="/usr/local/bin/piper"),
+            patch.dict("os.environ", {"PIPER_MODEL": _MODEL_PATH}),
+        ):
             backend = select_backend()
         assert isinstance(backend, TTSBackend)
 
-    def test_say_backend_is_tts_backend(self):
-        with patch("dubbing.backends.shutil.which", return_value=None):
+    def test_espeak_backend_is_tts_backend(self):
+        def which(name):
+            return "/usr/bin/espeak-ng" if name == "espeak-ng" else None
+
+        with patch("dubbing.backends.shutil.which", side_effect=which):
             backend = select_backend()
-        assert isinstance(backend, TTSBackend)
+        assert isinstance(backend, EspeakTTSBackend)
 
     def test_which_called_with_piper_argument(self):
         mock_which = MagicMock(return_value="/usr/local/bin/piper")
-        with patch("dubbing.backends.shutil.which", mock_which):
+        with (
+            patch("dubbing.backends.shutil.which", mock_which),
+            patch.dict("os.environ", {"PIPER_MODEL": _MODEL_PATH}),
+        ):
             select_backend()
         mock_which.assert_called_once_with("piper")
 
-    def test_say_backend_returned_when_which_returns_empty_string(self):
-        """Empty string is falsy — treated as not found."""
-        with patch("dubbing.backends.shutil.which", return_value=""):
-            # The implementation checks `is not None`, so "" is truthy → PiperTTSBackend.
-            # This test documents the actual boundary: only None triggers SayTTSBackend.
-            backend = select_backend()
-        assert isinstance(backend, PiperTTSBackend)
+    def test_no_available_backend_raises_actionable_error(self):
+        with patch("dubbing.backends.shutil.which", return_value=None):
+            with pytest.raises(RuntimeError, match="no usable local TTS backend"):
+                select_backend()
 
-    def test_piper_backend_returned_for_any_non_none_path(self):
+    def test_piper_backend_returned_for_configured_paths(self):
         for path in ("/usr/local/bin/piper", "/opt/piper/piper", "./piper"):
-            with patch("dubbing.backends.shutil.which", return_value=path):
+            with (
+                patch("dubbing.backends.shutil.which", return_value=path),
+                patch.dict("os.environ", {"PIPER_MODEL": _MODEL_PATH}),
+            ):
                 backend = select_backend()
             assert isinstance(backend, PiperTTSBackend), f"Failed for path={path!r}"

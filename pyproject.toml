@@ -11,6 +11,10 @@ dubbing-cli = "dubbing.__main__:main"
 dubbing-web = "dubbing.web:main"
 
 [project.optional-dependencies]
+diarization = [
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
 dev = [
     "pytest",
     "ruff",
@@ -18,3 +22,6 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.setuptools.packages.find]
+include = ["dubbing*"]
