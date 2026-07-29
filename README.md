@@ -1,5 +1,25 @@
 # Dubbing Studio
 
+## Personal Capture
+
+The private Personal Capture deployment continuously watches a stable-file inbox, transcribes
+and diarises recordings locally, detects English, Russian, Romanian and Korean, translates
+segments into English, and presents every result for explicit review. Originals are neither
+copied nor deleted. Approval emits a hash-verified transactional GIGA outbox event; it does
+not automatically promote an interpretation into memory.
+
+On the Gigabyte the persistent user services are:
+
+```bash
+systemctl --user status dubbing-capture-watch dubbing-capture-review
+cat ~/.local/share/dubbing-studio/personal-capture/health.json
+```
+
+The review service requires its bearer token and is intended only for Tailscale Serve. Uploads
+are size/extension constrained and land as hidden `.partial` files before atomic rename.
+Deployment details and recovery procedures are in
+[`deploy/gigabyte/PERSONAL_CAPTURE.md`](deploy/gigabyte/PERSONAL_CAPTURE.md).
+
 A composable, local-first audio pipeline with replaceable speech-to-text,
 speaker-diarisation, and text-to-speech backends. It can transcribe source audio,
 identify who spoke when, and turn edited SRT subtitles back into timestamp-aligned

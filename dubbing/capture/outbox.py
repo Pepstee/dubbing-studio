@@ -16,7 +16,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def export_approved(workspace: str | Path, outbox: str | Path) -> int:
+def export_approved(
+    workspace: str | Path, outbox: str | Path, *, inbox: str | Path | None = None
+) -> int:
     workspace = Path(workspace).resolve()
     destination = Path(outbox).resolve()
     destination.mkdir(parents=True, exist_ok=True)
@@ -37,6 +39,16 @@ def export_approved(workspace: str | Path, outbox: str | Path) -> int:
             continue
         if package.name != source.get("capture_id") or package.name != source.get("audio_sha256"):
             continue
+        if inbox is not None:
+            root = Path(inbox).resolve()
+            audio = (root / source.get("audio_name", "")).resolve()
+            if (
+                audio.parent != root
+                or audio.is_symlink()
+                or not audio.is_file()
+                or _sha256(audio) != source.get("audio_sha256")
+            ):
+                continue
         event_id = event["event_id"]
         event_hash = hashlib.sha256(event_path.read_bytes()).hexdigest()
         try:
