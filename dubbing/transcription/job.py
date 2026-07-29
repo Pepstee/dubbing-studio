@@ -9,6 +9,7 @@ import tempfile
 from dataclasses import replace
 from pathlib import Path
 
+from dubbing.media import ffmpeg_executable
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.models import (
     TranscriptSegment,
@@ -132,7 +133,7 @@ class ResumableTranscriptionJob:
 
     @staticmethod
     def _extract_chunk(source: Path, start_ms: int, end_ms: int, output: Path) -> None:
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
             raise TranscriptionError("ffmpeg is required for chunked transcription")
         try:

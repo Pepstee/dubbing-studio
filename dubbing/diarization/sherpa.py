@@ -15,6 +15,7 @@ from dubbing.diarization.models import (
     SpeakerTurn,
     UnsupportedSpeakerConstraintError,
 )
+from dubbing.media import ffmpeg_executable
 
 _MODEL_NAME = "pyannote-segmentation-3.0+nemo-titanet-small"
 _TARGET_SAMPLE_RATE = 16_000
@@ -127,7 +128,7 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
 
     @staticmethod
     def _decode_media(path: Path, output: Path) -> None:
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
             raise DiarizationError(
                 "ffmpeg is required to ingest audio/video for diarization; "

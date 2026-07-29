@@ -13,6 +13,7 @@ dubbing-web = "dubbing.web:main"
 
 [project.optional-dependencies]
 diarization = [
+    "imageio-ffmpeg>=0.6",
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
 ]
@@ -25,12 +26,14 @@ transcription-faster = [
     "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
 ]
 understanding-mac = [
+    "imageio-ffmpeg>=0.6",
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
 ]
 understanding-nvidia = [
     "faster-whisper>=1.2.1",
+    "imageio-ffmpeg>=0.6",
     "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
     "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
     "numpy>=1.23",
