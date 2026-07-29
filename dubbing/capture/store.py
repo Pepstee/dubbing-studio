@@ -17,6 +17,8 @@ class CaptureRecord:
     attempt_count: int
     package_path: str | None
     error: str | None
+    created_at: str = ""
+    updated_at: str = ""
 
 
 class CaptureStore:
@@ -45,7 +47,7 @@ class CaptureStore:
                     source_size INTEGER NOT NULL CHECK(source_size >= 0),
                     source_mtime_ns INTEGER NOT NULL CHECK(source_mtime_ns >= 0),
                     state TEXT NOT NULL CHECK(
-                        state IN ('processing', 'review', 'approved', 'failed')
+                        state IN ('processing', 'review', 'approved', 'failed', 'rejected')
                     ),
                     attempt_count INTEGER NOT NULL CHECK(attempt_count >= 1),
                     package_path TEXT,
@@ -55,6 +57,32 @@ class CaptureStore:
                 )
                 """
             )
+            sql = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='captures'"
+            ).fetchone()[0]
+            if "'rejected'" not in sql:
+                connection.executescript(
+                    """
+                    ALTER TABLE captures RENAME TO captures_legacy;
+                    CREATE TABLE captures (
+                        capture_id TEXT PRIMARY KEY,
+                        source_name TEXT NOT NULL,
+                        source_sha256 TEXT NOT NULL UNIQUE,
+                        source_size INTEGER NOT NULL CHECK(source_size >= 0),
+                        source_mtime_ns INTEGER NOT NULL CHECK(source_mtime_ns >= 0),
+                        state TEXT NOT NULL CHECK(
+                            state IN ('processing','review','approved','failed','rejected')
+                        ),
+                        attempt_count INTEGER NOT NULL CHECK(attempt_count >= 1),
+                        package_path TEXT,
+                        error TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    INSERT INTO captures SELECT * FROM captures_legacy;
+                    DROP TABLE captures_legacy;
+                    """
+                )
 
     @staticmethod
     def _record(row: sqlite3.Row | None) -> CaptureRecord | None:
@@ -70,6 +98,8 @@ class CaptureStore:
             attempt_count=row["attempt_count"],
             package_path=row["package_path"],
             error=row["error"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
 
     def get(self, capture_id: str) -> CaptureRecord | None:
@@ -146,7 +176,7 @@ class CaptureStore:
         package_path: str | None = None,
         error: str | None = None,
     ) -> CaptureRecord:
-        if state not in {"review", "approved", "failed"}:
+        if state not in {"review", "approved", "failed", "rejected"}:
             raise ValueError(f"invalid capture state: {state}")
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as connection:
@@ -168,3 +198,20 @@ class CaptureStore:
         record = self._record(row)
         assert record is not None
         return record
+
+    def retry(self, capture_id: str) -> CaptureRecord:
+        record = self.get(capture_id)
+        if record is None:
+            raise KeyError(f"unknown capture: {capture_id}")
+        if record.state not in {"failed", "rejected"}:
+            raise ValueError(f"capture cannot be retried from state {record.state}")
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE captures SET state = 'failed', error = NULL, updated_at = ? "
+                "WHERE capture_id = ?",
+                (now, capture_id),
+            )
+        result = self.get(capture_id)
+        assert result is not None
+        return result

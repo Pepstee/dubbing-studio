@@ -1,0 +1,17 @@
+[Unit]
+Description=Dubbing Studio personal capture watcher
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gutua/software-factory/projects/dubbing-studio
+ExecStart=/home/gutua/software-factory/projects/dubbing-studio/.venv/bin/python -m dubbing.capture.watcher --config /home/gutua/.config/dubbing-studio/personal-capture.json
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/gutua/.local/share/dubbing-studio/personal-capture /mnt/c/Users/gutua/Documents/DubbingCapture/inbox
+
+[Install]
+WantedBy=default.target

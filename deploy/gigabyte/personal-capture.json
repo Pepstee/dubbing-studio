@@ -21,12 +21,29 @@
     "translation_model": "facebook/nllb-200-distilled-600M",
     "translation_device": "cuda",
     "diarization_device": "cpu",
+    "segmentation_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx",
+    "embedding_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/nemo_en_titanet_small.onnx",
     "review_required": true
   },
+  "service": {
+    "poll_seconds": 15,
+    "restart_policy": "on-failure"
+  },
+  "network": {
+    "bind_host": "0.0.0.0",
+    "port": 7433,
+    "max_upload_bytes": 2147483648,
+    "token_file": "/home/gutua/.config/dubbing-studio/capture.token",
+    "exposure": "tailscale-serve-only"
+  },
+  "giga_outbox": {
+    "path": "/home/gutua/.local/share/dubbing-studio/personal-capture/giga-outbox",
+    "automatic_interpreted_memory_promotion": false
+  },
   "boundaries": {
-    "watcher_enabled": false,
+    "watcher_enabled": true,
     "automatic_giga_promotion": false,
-    "network_upload_by_dubbing_studio": false,
+    "network_upload_by_dubbing_studio": true,
     "source_deletion_by_dubbing_studio": false
   }
 }

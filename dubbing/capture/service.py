@@ -323,6 +323,72 @@ class CaptureService:
         self.store.transition(capture_id, "approved")
         return package / "giga-event.json"
 
+    def reject(self, capture_id: str, *, notes: str = "") -> CaptureRecord:
+        record = self.store.get(capture_id)
+        if record is None or record.package_path is None:
+            raise KeyError(f"capture is not reviewable: {capture_id}")
+        if record.state not in {"review", "rejected"}:
+            raise ValueError(f"capture cannot be rejected from state {record.state}")
+        package = Path(record.package_path)
+        _atomic_text(
+            package / "rejection.json",
+            _json(
+                {
+                    "schema_version": "dubbing.personal-capture-rejection.v1",
+                    "capture_id": capture_id,
+                    "rejected_at": datetime.now(timezone.utc).isoformat(),
+                    "notes": notes[:20_000],
+                }
+            ),
+        )
+        return self.store.transition(capture_id, "rejected")
+
+    def update_review(
+        self,
+        capture_id: str,
+        *,
+        transcript_segments: list[dict],
+        translation_segments: list[dict] | None,
+        speaker_aliases: Mapping[str, str],
+        notes: str,
+    ) -> Path:
+        record = self.store.get(capture_id)
+        if record is None or record.package_path is None or record.state != "review":
+            current = record.state if record else "missing"
+            raise ValueError(f"capture is not editable from state {current}")
+        package = Path(record.package_path)
+        transcript_path = package / "transcript.json"
+        transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+        if len(transcript_segments) != len(transcript.get("segments", [])):
+            raise ValueError("transcript segment count cannot change in review")
+        for existing, edit in zip(transcript["segments"], transcript_segments, strict=True):
+            text = str(edit.get("text", "")).strip()
+            if len(text) > 20_000:
+                raise ValueError("transcript segment is too long")
+            existing["text"] = text
+        transcript["text"] = " ".join(item["text"] for item in transcript["segments"]).strip()
+        _atomic_text(transcript_path, _json(transcript))
+        translation_path = package / "translation.json"
+        if translation_segments is not None and translation_path.is_file():
+            translation = json.loads(translation_path.read_text(encoding="utf-8"))
+            if len(translation_segments) != len(translation.get("segments", [])):
+                raise ValueError("translation segment count cannot change in review")
+            for existing, edit in zip(
+                translation["segments"], translation_segments, strict=True
+            ):
+                target = str(edit.get("target_text", "")).strip()
+                if len(target) > 20_000:
+                    raise ValueError("translation segment is too long")
+                existing["target_text"] = target
+                existing["status"] = "reviewed"
+            _atomic_text(translation_path, _json(translation))
+        manifest_path = package / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["review"]["speaker_aliases"] = dict(sorted(speaker_aliases.items()))
+        manifest["review"]["notes"] = notes[:20_000]
+        _atomic_text(manifest_path, _json(manifest))
+        return manifest_path
+
     def records(self) -> Iterable[CaptureRecord]:
         with self.store._connect() as connection:
             rows = connection.execute(

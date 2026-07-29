@@ -10,6 +10,8 @@ dependencies = [
 dubbing-cli = "dubbing.__main__:main"
 dubbing-gpu = "dubbing.gpu_launcher:main"
 dubbing-web = "dubbing.web:main"
+dubbing-capture-watch = "dubbing.capture.watcher:main"
+dubbing-capture-review = "dubbing.capture.review:main"
 
 [project.optional-dependencies]
 diarization = [
