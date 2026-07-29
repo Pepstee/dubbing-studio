@@ -72,11 +72,14 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
                 }
             )
             service.approve(outcome.capture_id, notes="synthetic benchmark fixture")
+            row["approval_pass"] = True
         rows.append(row)
     delivered = export_approved(
         config["workspace"]["wsl_path"],
         config["giga_outbox"]["path"],
-        inbox=config["landing_inbox"]["wsl_path"],
+        # Benchmark fixtures deliberately live outside the permanent inbox, but the
+        # exporter still verifies their source bytes against this explicit root.
+        inbox=audio_dir,
     )
     document = {
         "schema_version": "dubbing.personal-capture-benchmark.v1",
@@ -85,6 +88,7 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
         "generator": "espeak-ng",
         "results": rows,
         "outbox_events_delivered_this_run": delivered,
+        "handoff_pass": delivered == len(rows),
     }
     (output / "benchmark.json").write_text(
         json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
