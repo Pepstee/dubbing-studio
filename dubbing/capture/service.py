@@ -1,0 +1,331 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterable, Mapping
+
+from dubbing.capture.store import CaptureRecord, CaptureStore
+from dubbing.diarization.base import DiarizationBackend
+from dubbing.diarization.models import SpeakerConstraints
+from dubbing.transcription import (
+    AudioUnderstandingPipeline,
+    TranscriptionBackend,
+    TranscriptionOptions,
+    transcript_to_srt,
+    transcript_to_text,
+)
+from dubbing.translation import LanguageDetector, TranslationBackend, translate_transcript
+
+_PACKAGE_SCHEMA = "dubbing.personal-capture.v1"
+_GIGA_EVENT_SCHEMA = "giga.personal-capture-event.v1"
+_MEDIA_SUFFIXES = {
+    ".aac", ".aiff", ".avi", ".flac", ".m4a", ".m4v", ".mkv", ".mov",
+    ".mp3", ".mp4", ".mpeg", ".mpg", ".oga", ".ogg", ".opus", ".wav",
+    ".weba", ".webm", ".wmv",
+}
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _atomic_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _json(document: Mapping) -> str:
+    return json.dumps(document, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+@dataclass(frozen=True)
+class CaptureOutcome:
+    capture_id: str
+    source_name: str
+    state: str
+    package_path: Path | None
+    replayed: bool = False
+    error: str | None = None
+
+
+class CaptureService:
+    """Turn stable inbox media into reviewable, provenance-bearing packages."""
+
+    def __init__(
+        self,
+        workspace: str | Path,
+        transcription_backend: TranscriptionBackend | None = None,
+        *,
+        diarizer: DiarizationBackend | None = None,
+        speaker_constraints: SpeakerConstraints | None = None,
+        transcription_options: TranscriptionOptions | None = None,
+        language_detector: LanguageDetector | None = None,
+        translation_backend: TranslationBackend | None = None,
+        translation_target: str = "en",
+    ) -> None:
+        self.workspace = Path(workspace).resolve()
+        self.packages = self.workspace / "packages"
+        self.store = CaptureStore(self.workspace / "capture.sqlite3")
+        self.pipeline = (
+            AudioUnderstandingPipeline(transcription_backend)
+            if transcription_backend is not None
+            else None
+        )
+        self.diarizer = diarizer
+        self.speaker_constraints = speaker_constraints
+        self.transcription_options = transcription_options or TranscriptionOptions()
+        if (language_detector is None) != (translation_backend is None):
+            raise ValueError(
+                "language_detector and translation_backend must be configured together"
+            )
+        self.language_detector = language_detector
+        self.translation_backend = translation_backend
+        self.translation_target = translation_target
+
+    @staticmethod
+    def discover(
+        inbox: str | Path,
+        *,
+        min_age_seconds: float = 30,
+        now: float | None = None,
+    ) -> tuple[Path, ...]:
+        root = Path(inbox).resolve()
+        if not root.is_dir():
+            raise ValueError(f"capture inbox is not a directory: {root}")
+        cutoff = (time.time() if now is None else now) - min_age_seconds
+        discovered = []
+        for candidate in sorted(root.iterdir()):
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            if candidate.suffix.lower() not in _MEDIA_SUFFIXES:
+                continue
+            if candidate.stat().st_mtime > cutoff:
+                continue
+            discovered.append(candidate)
+        return tuple(discovered)
+
+    def _write_package(
+        self,
+        source: Path,
+        record: CaptureRecord,
+        transcript,
+    ) -> Path:
+        destination = self.packages / record.capture_id
+        staging = self.packages / f".{record.capture_id}.staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True, exist_ok=False)
+        try:
+            manifest = {
+                "schema_version": _PACKAGE_SCHEMA,
+                "capture_id": record.capture_id,
+                "state": "review",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "source": {
+                    "name": source.name,
+                    "sha256": record.source_sha256,
+                    "size": record.source_size,
+                    "mtime_ns": record.source_mtime_ns,
+                    "copied": False,
+                },
+                "transcript": {
+                    "json": "transcript.json",
+                    "text": "transcript.txt",
+                    "srt": "transcript.srt",
+                },
+                "translation": None,
+                "review": {
+                    "required": True,
+                    "speaker_aliases": {},
+                    "notes": "",
+                },
+            }
+            (staging / "transcript.json").write_text(
+                _json(transcript.to_dict()),
+                encoding="utf-8",
+            )
+            (staging / "transcript.txt").write_text(
+                transcript_to_text(transcript),
+                encoding="utf-8",
+            )
+            (staging / "transcript.srt").write_text(
+                transcript_to_srt(transcript),
+                encoding="utf-8",
+            )
+            (staging / "manifest.json").write_text(_json(manifest), encoding="utf-8")
+            if self.translation_backend is not None and self.language_detector is not None:
+                translation = translate_transcript(
+                    transcript,
+                    detector=self.language_detector,
+                    backend=self.translation_backend,
+                    target_language=self.translation_target,
+                )
+                (staging / "translation.json").write_text(
+                    _json(translation.to_dict()),
+                    encoding="utf-8",
+                )
+                translated_lines = [
+                    segment.target_text or f"[{segment.status}] {segment.source_text}"
+                    for segment in translation.segments
+                ]
+                (staging / "translation.txt").write_text(
+                    "\n".join(translated_lines).rstrip() + "\n",
+                    encoding="utf-8",
+                )
+                manifest["translation"] = {
+                    "json": "translation.json",
+                    "text": "translation.txt",
+                    "target_language": self.translation_target,
+                    "backend": self.translation_backend.identity,
+                }
+                (staging / "manifest.json").write_text(
+                    _json(manifest),
+                    encoding="utf-8",
+                )
+            if destination.exists():
+                shutil.rmtree(destination)
+            os.replace(staging, destination)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging)
+        return destination
+
+    def process(self, source: str | Path) -> CaptureOutcome:
+        if self.pipeline is None:
+            raise RuntimeError("a transcription backend is required to process captures")
+        path = Path(source).resolve()
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"capture source is not a regular file: {path}")
+        digest = _sha256(path)
+        stat = path.stat()
+        record, claimed = self.store.claim(
+            capture_id=digest,
+            source_name=path.name,
+            source_sha256=digest,
+            source_size=stat.st_size,
+            source_mtime_ns=stat.st_mtime_ns,
+        )
+        package = Path(record.package_path) if record.package_path else None
+        if not claimed:
+            return CaptureOutcome(
+                record.capture_id,
+                record.source_name,
+                record.state,
+                package,
+                replayed=True,
+            )
+        try:
+            transcript = self.pipeline.run(
+                path,
+                options=self.transcription_options,
+                diarizer=self.diarizer,
+                speaker_constraints=self.speaker_constraints,
+            )
+            package = self._write_package(path, record, transcript)
+            self.store.transition(record.capture_id, "review", package_path=str(package))
+            return CaptureOutcome(record.capture_id, path.name, "review", package)
+        except Exception as exc:
+            self.store.transition(
+                record.capture_id,
+                "failed",
+                error=f"{type(exc).__name__}: {exc}"[:2000],
+            )
+            return CaptureOutcome(
+                record.capture_id,
+                path.name,
+                "failed",
+                None,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+
+    def scan(
+        self,
+        inbox: str | Path,
+        *,
+        min_age_seconds: float = 30,
+    ) -> tuple[CaptureOutcome, ...]:
+        return tuple(
+            self.process(path)
+            for path in self.discover(inbox, min_age_seconds=min_age_seconds)
+        )
+
+    def approve(
+        self,
+        capture_id: str,
+        *,
+        speaker_aliases: Mapping[str, str] | None = None,
+        notes: str = "",
+    ) -> Path:
+        record = self.store.get(capture_id)
+        if record is None or record.package_path is None:
+            raise KeyError(f"capture is not reviewable: {capture_id}")
+        if record.state not in {"review", "approved"}:
+            raise ValueError(f"capture cannot be approved from state {record.state}")
+        package = Path(record.package_path)
+        existing_event = package / "giga-event.json"
+        if record.state == "approved" and existing_event.is_file():
+            return existing_event
+        transcript_path = package / "transcript.json"
+        transcript_sha256 = _sha256(transcript_path)
+        approval = {
+            "schema_version": "dubbing.personal-capture-approval.v1",
+            "capture_id": capture_id,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "speaker_aliases": dict(sorted((speaker_aliases or {}).items())),
+            "notes": notes,
+        }
+        event = {
+            "schema_version": _GIGA_EVENT_SCHEMA,
+            "event_id": f"personal-capture:{capture_id}",
+            "idempotency_key": f"personal-capture:v1:{capture_id}:{transcript_sha256}",
+            "kind": "personal.audio.transcript",
+            "trust_class": "operator-reviewed-derived-evidence",
+            "source": {
+                "capture_id": capture_id,
+                "audio_name": record.source_name,
+                "audio_sha256": record.source_sha256,
+                "transcript_sha256": transcript_sha256,
+            },
+            "payload": {
+                "transcript_file": "transcript.json",
+                "translation_file": (
+                    "translation.json" if (package / "translation.json").is_file() else None
+                ),
+                "speaker_aliases": approval["speaker_aliases"],
+                "review_notes": notes,
+            },
+        }
+        _atomic_text(package / "approval.json", _json(approval))
+        _atomic_text(package / "giga-event.json", _json(event))
+        manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+        manifest["state"] = "approved"
+        manifest["review"] = {
+            "required": False,
+            "speaker_aliases": approval["speaker_aliases"],
+            "notes": notes,
+        }
+        _atomic_text(package / "manifest.json", _json(manifest))
+        self.store.transition(capture_id, "approved")
+        return package / "giga-event.json"
+
+    def records(self) -> Iterable[CaptureRecord]:
+        with self.store._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM captures ORDER BY created_at, capture_id"
+            ).fetchall()
+        return tuple(record for row in rows if (record := self.store._record(row)) is not None)

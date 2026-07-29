@@ -12,6 +12,7 @@ from dubbing.aligner import segment_plan
 from dubbing.assembler import assemble_timeline
 from dubbing.backends.base import TTSBackend
 from dubbing.batch import batch_dub
+from dubbing.capture import CaptureService
 from dubbing.diarization import (
     SherpaOnnxDiarizationBackend,
     SpeakerConstraints,
@@ -32,6 +33,7 @@ from dubbing.transcription import (
     transcript_to_srt,
     transcript_to_text,
 )
+from dubbing.translation import LinguaLanguageDetector, NLLBTranslationBackend
 
 
 def _make_backend(name: str) -> TTSBackend:
@@ -241,6 +243,64 @@ def _cmd_transcribe(args: argparse.Namespace) -> None:
         print(payload, end="")
 
 
+def _speaker_aliases(values: list[str]) -> dict[str, str]:
+    aliases = {}
+    for value in values:
+        key, separator, name = value.partition("=")
+        if not separator or not key.strip() or not name.strip():
+            raise ValueError("--speaker must use LABEL=Name")
+        aliases[key.strip()] = name.strip()
+    return aliases
+
+
+def _cmd_capture(args: argparse.Namespace) -> None:
+    if args.capture_command == "approve":
+        event = CaptureService(args.workspace).approve(
+            args.capture_id,
+            speaker_aliases=_speaker_aliases(args.speaker),
+            notes=args.notes,
+        )
+        print(f"Approved {args.capture_id}; wrote {event}")
+        return
+    if args.capture_command == "list":
+        for record in CaptureService(args.workspace).records():
+            print(
+                f"{record.capture_id} {record.state} attempts={record.attempt_count} "
+                f"{record.source_name}"
+            )
+        return
+
+    backend = _make_transcriber(args)
+    diarizer = _make_diarizer(args) if args.diarize else None
+    detector = LinguaLanguageDetector() if args.translate_to else None
+    translator = (
+        NLLBTranslationBackend(
+            model=args.translation_model,
+            device=args.translation_device,
+        )
+        if args.translate_to
+        else None
+    )
+    service = CaptureService(
+        args.workspace,
+        backend,
+        diarizer=diarizer,
+        speaker_constraints=_speaker_constraints(args) if diarizer else None,
+        transcription_options=TranscriptionOptions(language=args.language),
+        language_detector=detector,
+        translation_backend=translator,
+        translation_target=args.translate_to or "en",
+    )
+    outcomes = service.scan(args.inbox, min_age_seconds=args.min_age_seconds)
+    for outcome in outcomes:
+        suffix = f" error={outcome.error}" if outcome.error else ""
+        replayed = " replayed" if outcome.replayed else ""
+        print(
+            f"{outcome.capture_id} {outcome.state}{replayed} "
+            f"{outcome.source_name}{suffix}"
+        )
+
+
 def _add_diarization_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--segmentation-model", help="Path to Sherpa segmentation ONNX model")
     parser.add_argument("--embedding-model", help="Path to Sherpa speaker embedding ONNX model")
@@ -377,6 +437,56 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_diarization_options(transcribe_p)
 
+    capture_p = sub.add_parser(
+        "capture",
+        help="Process a personal audio inbox into reviewable evidence packages",
+    )
+    capture_sub = capture_p.add_subparsers(dest="capture_command", required=True)
+    capture_scan = capture_sub.add_parser("scan", help="Process stable media in an inbox")
+    capture_scan.add_argument("inbox")
+    capture_scan.add_argument("--workspace", required=True)
+    capture_scan.add_argument("--min-age-seconds", type=float, default=30)
+    capture_scan.add_argument(
+        "--asr-backend",
+        default="faster-whisper",
+        choices=("mlx-whisper", "faster-whisper"),
+    )
+    capture_scan.add_argument("--asr-model")
+    capture_scan.add_argument("--asr-device", choices=("auto", "cpu", "cuda"), default="auto")
+    capture_scan.add_argument("--asr-compute-type", default="default")
+    capture_scan.add_argument("--asr-cpu-threads", type=int, default=0)
+    capture_scan.add_argument("--asr-workers", type=int, default=1)
+    capture_scan.add_argument("--asr-temperature", type=float, default=0.0)
+    capture_scan.add_argument("--language")
+    capture_scan.add_argument("--diarize", action="store_true")
+    capture_scan.add_argument(
+        "--translate-to",
+        choices=("en", "ko", "ro", "ru"),
+        default="en",
+    )
+    capture_scan.add_argument(
+        "--translation-model",
+        default="facebook/nllb-200-distilled-600M",
+    )
+    capture_scan.add_argument(
+        "--translation-device",
+        choices=("auto", "cpu", "cuda"),
+        default="auto",
+    )
+    _add_diarization_options(capture_scan)
+
+    capture_approve = capture_sub.add_parser(
+        "approve",
+        help="Approve one reviewed capture and emit its GIGA event",
+    )
+    capture_approve.add_argument("capture_id")
+    capture_approve.add_argument("--workspace", required=True)
+    capture_approve.add_argument("--speaker", action="append", default=[])
+    capture_approve.add_argument("--notes", default="")
+
+    capture_list = capture_sub.add_parser("list", help="List capture-ledger state")
+    capture_list.add_argument("--workspace", required=True)
+
     return parser
 
 
@@ -392,6 +502,8 @@ def main() -> None:
             _cmd_diarize(args)
         elif args.command == "transcribe":
             _cmd_transcribe(args)
+        elif args.command == "capture":
+            _cmd_capture(args)
     except (RuntimeError, ValueError, FileNotFoundError, subprocess.SubprocessError) as exc:
         # ValueError: hostile SRT rejected by the renderer (e.g. a timestamp
         # beyond the timeline cap); SubprocessError: `say`/`afconvert`

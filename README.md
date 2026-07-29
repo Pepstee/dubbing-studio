@@ -284,6 +284,53 @@ and transcripts remain local unless the caller deliberately moves them.
 
 ---
 
+## Personal Capture Inbox
+
+The dogfood capture layer turns stable local recordings into reviewable evidence
+packages. It hashes and deduplicates source files, records retryable processing
+state in SQLite, preserves the verbatim transcript, and can add speaker
+diarisation plus segment-level English translations for English, Korean,
+Romanian, and Russian.
+
+Install the personal translation dependencies separately from the audio stack:
+
+```bash
+pip install -e '.[understanding-nvidia,translation-local]'
+```
+
+Scan an inbox on the Gigabyte:
+
+```bash
+dubbing-gpu capture scan /srv/dubbing/inbox \
+  --workspace /srv/dubbing/personal-capture \
+  --asr-backend faster-whisper \
+  --asr-model large-v3-turbo \
+  --asr-device cuda \
+  --asr-compute-type float16 \
+  --translate-to en \
+  --diarize \
+  --segmentation-model models/segmentation.onnx \
+  --embedding-model models/embedding.onnx
+```
+
+Every package initially stops in `review`. After reviewing the transcript and
+supplying any known speaker aliases, approve it explicitly:
+
+```bash
+dubbing-gpu capture approve CAPTURE_SHA256 \
+  --workspace /srv/dubbing/personal-capture \
+  --speaker SPEAKER_00=Artiom
+```
+
+Approval emits `giga-event.json` beside the transcript; it does not directly
+modify GIGA memory. The event retains source and transcript hashes so a later
+ingestion adapter can verify provenance and remain idempotent.
+
+The initial NLLB backend is for private dogfooding. Its checkpoint is
+CC-BY-NC-4.0 and is not the eventual commercial translation backend.
+
+---
+
 ## Local speaker diarisation
 
 Dubbing Studio can answer “who spoke when?” in source audio and map those turns

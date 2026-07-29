@@ -25,6 +25,12 @@ transcription-faster = [
     "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
     "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
 ]
+translation-local = [
+    "lingua-language-detector>=2.1",
+    "sentencepiece>=0.2",
+    "torch>=2.4",
+    "transformers>=4.50,<5",
+]
 understanding-mac = [
     "imageio-ffmpeg>=0.6",
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
