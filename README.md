@@ -221,7 +221,7 @@ For Linux/Windows with an NVIDIA GPU:
 
 ```bash
 pip install -e '.[transcription-faster]'
-python -m dubbing transcribe recording.m4a \
+dubbing-gpu transcribe recording.m4a \
   --asr-backend faster-whisper \
   --asr-model large-v3-turbo \
   --asr-device cuda \
@@ -230,6 +230,8 @@ python -m dubbing transcribe recording.m4a \
 ```
 
 `int8_float16` uses less VRAM if another GPU workload must run concurrently.
+The `dubbing-gpu` launcher exposes the CUDA runtime libraries installed inside
+the active virtual environment; it does not require a system-wide CUDA toolkit.
 
 For Apple silicon:
 

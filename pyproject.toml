@@ -8,6 +8,7 @@ dependencies = [
 
 [project.scripts]
 dubbing-cli = "dubbing.__main__:main"
+dubbing-gpu = "dubbing.gpu_launcher:main"
 dubbing-web = "dubbing.web:main"
 
 [project.optional-dependencies]
@@ -20,6 +21,8 @@ transcription-mlx = [
 ]
 transcription-faster = [
     "faster-whisper>=1.2.1",
+    "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
+    "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
 ]
 understanding-mac = [
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
@@ -28,6 +31,8 @@ understanding-mac = [
 ]
 understanding-nvidia = [
     "faster-whisper>=1.2.1",
+    "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
+    "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
 ]
