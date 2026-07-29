@@ -21,8 +21,10 @@ from dubbing.diarization import (
 from dubbing.pipeline import DubbingPipeline
 from dubbing.srt_parser import parse_srt
 from dubbing.transcription import (
+    DEFAULT_FASTER_WHISPER_MODEL,
     DEFAULT_MLX_MODEL,
     AudioUnderstandingPipeline,
+    FasterWhisperTranscriptionBackend,
     MLXWhisperTranscriptionBackend,
     ResumableTranscriptionJob,
     TranscriptionOptions,
@@ -80,14 +82,24 @@ def _speaker_constraints(args: argparse.Namespace) -> SpeakerConstraints:
     )
 
 
-def _make_transcriber(args: argparse.Namespace) -> MLXWhisperTranscriptionBackend:
-    if args.asr_backend != "mlx-whisper":
-        raise ValueError(
-            f"Unknown ASR backend: {args.asr_backend!r}. Available: mlx-whisper"
+def _make_transcriber(args: argparse.Namespace):
+    if args.asr_backend == "mlx-whisper":
+        return MLXWhisperTranscriptionBackend(
+            model=args.asr_model or DEFAULT_MLX_MODEL,
+            temperature=args.asr_temperature,
         )
-    return MLXWhisperTranscriptionBackend(
-        model=args.asr_model,
-        temperature=args.asr_temperature,
+    if args.asr_backend == "faster-whisper":
+        return FasterWhisperTranscriptionBackend(
+            model=args.asr_model or DEFAULT_FASTER_WHISPER_MODEL,
+            device=args.asr_device,
+            compute_type=args.asr_compute_type,
+            temperature=args.asr_temperature,
+            cpu_threads=args.asr_cpu_threads,
+            num_workers=args.asr_workers,
+        )
+    raise ValueError(
+        f"Unknown ASR backend: {args.asr_backend!r}. "
+        "Available: mlx-whisper, faster-whisper"
     )
 
 
@@ -314,9 +326,25 @@ def _build_parser() -> argparse.ArgumentParser:
     transcribe_p.add_argument(
         "--asr-backend",
         default="mlx-whisper",
-        choices=("mlx-whisper",),
+        choices=("mlx-whisper", "faster-whisper"),
     )
-    transcribe_p.add_argument("--asr-model", default=DEFAULT_MLX_MODEL)
+    transcribe_p.add_argument(
+        "--asr-model",
+        help="Model name/path (backend default when omitted)",
+    )
+    transcribe_p.add_argument(
+        "--asr-device",
+        choices=("auto", "cpu", "cuda"),
+        default="auto",
+        help="Faster-Whisper device (default: auto)",
+    )
+    transcribe_p.add_argument(
+        "--asr-compute-type",
+        default="default",
+        help="CTranslate2 compute type, e.g. float16 or int8_float16",
+    )
+    transcribe_p.add_argument("--asr-cpu-threads", type=int, default=0)
+    transcribe_p.add_argument("--asr-workers", type=int, default=1)
     transcribe_p.add_argument("--asr-temperature", type=float, default=0.0)
     transcribe_p.add_argument("--language", help="Optional source language code")
     transcribe_p.add_argument(

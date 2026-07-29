@@ -212,7 +212,26 @@ for path, segs in results.items():
 
 ---
 
-## Local transcription on Apple silicon
+## Local transcription
+
+The transcription boundary has independent MLX and Faster-Whisper backends.
+Install the backend appropriate for the host.
+
+For Linux/Windows with an NVIDIA GPU:
+
+```bash
+pip install -e '.[transcription-faster]'
+python -m dubbing transcribe recording.m4a \
+  --asr-backend faster-whisper \
+  --asr-model large-v3-turbo \
+  --asr-device cuda \
+  --asr-compute-type float16 \
+  --output transcript.json
+```
+
+`int8_float16` uses less VRAM if another GPU workload must run concurrently.
+
+For Apple silicon:
 
 Install the MLX Whisper backend:
 

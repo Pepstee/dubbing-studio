@@ -18,8 +18,16 @@ diarization = [
 transcription-mlx = [
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
 ]
+transcription-faster = [
+    "faster-whisper>=1.2.1",
+]
 understanding-mac = [
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
+understanding-nvidia = [
+    "faster-whisper>=1.2.1",
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
 ]
