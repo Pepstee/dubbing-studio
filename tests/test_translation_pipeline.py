@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dubbing.transcription import TranscriptSegment, TranscriptionResult
 from dubbing.translation.base import LanguageDetector, TranslationBackend
+from dubbing.translation.lingua_detector import LinguaLanguageDetector
 from dubbing.translation.pipeline import translate_transcript
 
 
@@ -66,3 +67,24 @@ def test_uncertain_language_is_not_guessed_or_translated():
     )
     assert result.segments[0].status == "language_uncertain"
     assert result.segments[0].target_text is None
+
+
+def test_lingua_adapter_uses_iso_code_instead_of_enum_display_name():
+    class Iso:
+        name = "RU"
+
+    class Language:
+        iso_code_639_1 = Iso()
+
+    class FakeLingua:
+        def detect_language_of(self, text):
+            return Language()
+
+        def compute_language_confidence(self, text, language):
+            return 0.9
+
+    detector = object.__new__(LinguaLanguageDetector)
+    detector._detector = FakeLingua()
+    detector.minimum_confidence = 0.55
+
+    assert detector.detect("Привет") == ("ru", 0.9)

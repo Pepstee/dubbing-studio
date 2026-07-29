@@ -6,13 +6,6 @@ from dubbing.translation.base import LanguageDetector
 class LinguaLanguageDetector(LanguageDetector):
     """Short-text detector constrained to Artiom's four daily languages."""
 
-    _ISO = {
-        "ENGLISH": "en",
-        "KOREAN": "ko",
-        "ROMANIAN": "ro",
-        "RUSSIAN": "ru",
-    }
-
     def __init__(self, *, minimum_confidence: float = 0.55) -> None:
         if not 0 <= minimum_confidence <= 1:
             raise ValueError("minimum_confidence must be between 0 and 1")
@@ -41,4 +34,4 @@ class LinguaLanguageDetector(LanguageDetector):
         confidence = float(self._detector.compute_language_confidence(value, language))
         if confidence < self.minimum_confidence:
             return None, confidence
-        return self._ISO.get(str(language)), confidence
+        return str(language.iso_code_639_1.name).lower(), confidence
