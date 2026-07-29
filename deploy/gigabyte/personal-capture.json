@@ -1,0 +1,32 @@
+{
+  "schema_version": "dubbing.personal-capture-deployment.v1",
+  "machine": "gutua",
+  "landing_inbox": {
+    "windows_path": "C:\\Users\\gutua\\Documents\\DubbingCapture\\inbox",
+    "wsl_path": "/mnt/c/Users/gutua/Documents/DubbingCapture/inbox",
+    "purpose": "Windows-visible landing zone for phone, Tailscale, and manual uploads",
+    "minimum_file_age_seconds": 60,
+    "raw_audio_retention": "operator-controlled; scanner does not copy or delete source audio"
+  },
+  "workspace": {
+    "wsl_path": "/home/gutua/.local/share/dubbing-studio/personal-capture",
+    "purpose": "Private SQLite ledger, review packages, transcripts, translations, and GIGA events"
+  },
+  "defaults": {
+    "asr_backend": "faster-whisper",
+    "asr_model": "large-v3-turbo",
+    "asr_device": "cuda",
+    "asr_compute_type": "float16",
+    "translation_target": "en",
+    "translation_model": "facebook/nllb-200-distilled-600M",
+    "translation_device": "cuda",
+    "diarization_device": "cpu",
+    "review_required": true
+  },
+  "boundaries": {
+    "watcher_enabled": false,
+    "automatic_giga_promotion": false,
+    "network_upload_by_dubbing_studio": false,
+    "source_deletion_by_dubbing_studio": false
+  }
+}

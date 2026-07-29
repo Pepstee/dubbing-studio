@@ -329,6 +329,10 @@ ingestion adapter can verify provenance and remain idempotent.
 The initial NLLB backend is for private dogfooding. Its checkpoint is
 CC-BY-NC-4.0 and is not the eventual commercial translation backend.
 
+The permanent Gigabyte paths and safety boundaries are versioned in
+`deploy/gigabyte/personal-capture.json`. The landing inbox is Windows-visible,
+while the ledger and derived evidence remain on the WSL filesystem.
+
 ---
 
 ## Local speaker diarisation
