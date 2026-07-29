@@ -20,6 +20,16 @@ from dubbing.diarization import (
 )
 from dubbing.pipeline import DubbingPipeline
 from dubbing.srt_parser import parse_srt
+from dubbing.transcription import (
+    DEFAULT_MLX_MODEL,
+    AudioUnderstandingPipeline,
+    MLXWhisperTranscriptionBackend,
+    ResumableTranscriptionJob,
+    TranscriptionOptions,
+    attribute_transcript,
+    transcript_to_srt,
+    transcript_to_text,
+)
 
 
 def _make_backend(name: str) -> TTSBackend:
@@ -67,6 +77,17 @@ def _speaker_constraints(args: argparse.Namespace) -> SpeakerConstraints:
         num_speakers=args.num_speakers,
         min_speakers=args.min_speakers,
         max_speakers=args.max_speakers,
+    )
+
+
+def _make_transcriber(args: argparse.Namespace) -> MLXWhisperTranscriptionBackend:
+    if args.asr_backend != "mlx-whisper":
+        raise ValueError(
+            f"Unknown ASR backend: {args.asr_backend!r}. Available: mlx-whisper"
+        )
+    return MLXWhisperTranscriptionBackend(
+        model=args.asr_model,
+        temperature=args.asr_temperature,
     )
 
 
@@ -161,6 +182,53 @@ def _cmd_diarize(args: argparse.Namespace) -> None:
         print(payload)
 
 
+def _cmd_transcribe(args: argparse.Namespace) -> None:
+    backend = _make_transcriber(args)
+    options = TranscriptionOptions(
+        language=args.language,
+        task=args.task,
+        initial_prompt=args.initial_prompt,
+        word_timestamps=not args.no_word_timestamps,
+    )
+    if args.checkpoint_dir:
+        result = ResumableTranscriptionJob(
+            backend,
+            args.checkpoint_dir,
+            chunk_seconds=args.chunk_seconds,
+        ).run(args.audio, options)
+        if args.diarize:
+            diarizer = _make_diarizer(args)
+            result = attribute_transcript(
+                result,
+                diarizer.diarize(
+                    Path(args.audio),
+                    constraints=_speaker_constraints(args),
+                ),
+            )
+    else:
+        diarizer = _make_diarizer(args) if args.diarize else None
+        result = AudioUnderstandingPipeline(backend).run(
+            args.audio,
+            options=options,
+            diarizer=diarizer,
+            speaker_constraints=_speaker_constraints(args) if diarizer else None,
+        )
+
+    if args.format == "json":
+        payload = json.dumps(result.to_dict(), indent=2, ensure_ascii=False) + "\n"
+    elif args.format == "srt":
+        payload = transcript_to_srt(result)
+    else:
+        payload = transcript_to_text(result)
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload, encoding="utf-8")
+        print(f"Wrote {output}")
+    else:
+        print(payload, end="")
+
+
 def _add_diarization_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--segmentation-model", help="Path to Sherpa segmentation ONNX model")
     parser.add_argument("--embedding-model", help="Path to Sherpa speaker embedding ONNX model")
@@ -238,6 +306,49 @@ def _build_parser() -> argparse.ArgumentParser:
     diarize_p.add_argument("--output", help="Output JSON path (default: stdout)")
     _add_diarization_options(diarize_p)
 
+    transcribe_p = sub.add_parser(
+        "transcribe",
+        help="Transcribe local audio/video with an injectable ASR backend",
+    )
+    transcribe_p.add_argument("audio", help="Path to source audio or video")
+    transcribe_p.add_argument(
+        "--asr-backend",
+        default="mlx-whisper",
+        choices=("mlx-whisper",),
+    )
+    transcribe_p.add_argument("--asr-model", default=DEFAULT_MLX_MODEL)
+    transcribe_p.add_argument("--asr-temperature", type=float, default=0.0)
+    transcribe_p.add_argument("--language", help="Optional source language code")
+    transcribe_p.add_argument(
+        "--task",
+        choices=("transcribe", "translate"),
+        default="transcribe",
+    )
+    transcribe_p.add_argument("--initial-prompt")
+    transcribe_p.add_argument("--no-word-timestamps", action="store_true")
+    transcribe_p.add_argument(
+        "--format",
+        choices=("json", "srt", "text"),
+        default="json",
+    )
+    transcribe_p.add_argument("--output", help="Output path (default: stdout)")
+    transcribe_p.add_argument(
+        "--checkpoint-dir",
+        help="Resume-safe checkpoint directory for long recordings",
+    )
+    transcribe_p.add_argument(
+        "--chunk-seconds",
+        type=int,
+        default=1800,
+        help="Checkpoint chunk length, 30-3600 seconds (default: 1800)",
+    )
+    transcribe_p.add_argument(
+        "--diarize",
+        action="store_true",
+        help="Also run speaker diarisation and attach labels",
+    )
+    _add_diarization_options(transcribe_p)
+
     return parser
 
 
@@ -251,6 +362,8 @@ def main() -> None:
             _cmd_batch(args)
         elif args.command == "diarize":
             _cmd_diarize(args)
+        elif args.command == "transcribe":
+            _cmd_transcribe(args)
     except (RuntimeError, ValueError, FileNotFoundError, subprocess.SubprocessError) as exc:
         # ValueError: hostile SRT rejected by the renderer (e.g. a timestamp
         # beyond the timeline cap); SubprocessError: `say`/`afconvert`

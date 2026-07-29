@@ -15,6 +15,14 @@ diarization = [
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
 ]
+transcription-mlx = [
+    "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+understanding-mac = [
+    "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
 dev = [
     "pytest",
     "ruff",

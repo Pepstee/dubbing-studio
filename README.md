@@ -1,6 +1,9 @@
 # Dubbing Studio
 
-A composable pipeline that converts SRT subtitle files into timed audio segments using a pluggable TTS backend. The pipeline parses subtitles, strips and records prosody/emotion tags, calls a TTS backend, and aligns the rendered audio to the original SRT timestamps.
+A composable, local-first audio pipeline with replaceable speech-to-text,
+speaker-diarisation, and text-to-speech backends. It can transcribe source audio,
+identify who spoke when, and turn edited SRT subtitles back into timestamp-aligned
+audio.
 
 ---
 
@@ -206,6 +209,57 @@ results = batch_dub(
 for path, segs in results.items():
     print(f"{path}: {len(segs)} segments")
 ```
+
+---
+
+## Local transcription on Apple silicon
+
+Install the MLX Whisper backend:
+
+```bash
+pip install -e '.[transcription-mlx]'
+```
+
+Transcribe an audio or video file to versioned JSON:
+
+```bash
+python -m dubbing transcribe recording.m4a \
+  --output transcript.json \
+  --format json
+```
+
+SRT and plain-text renderers use the same transcript model:
+
+```bash
+python -m dubbing transcribe recording.m4a --format srt --output transcript.srt
+python -m dubbing transcribe recording.m4a --format text --output transcript.txt
+```
+
+For long recordings, use resumable chunks. The checkpoint is written atomically
+and is accepted only when the source hash, backend identity, and chunk settings
+still match:
+
+```bash
+python -m dubbing transcribe day.m4a \
+  --checkpoint-dir checkpoints/day \
+  --chunk-seconds 1800 \
+  --output day.json
+```
+
+Transcription and diarisation remain independent plugins. They can be composed
+when local Sherpa-ONNX models are configured:
+
+```bash
+python -m dubbing transcribe conversation.wav \
+  --diarize \
+  --segmentation-model models/segmentation.onnx \
+  --embedding-model models/embedding.onnx \
+  --output attributed.json
+```
+
+Word and segment timestamps are preserved. Speaker attribution explicitly marks
+silence, overlap, and ambiguity instead of inventing a dominant speaker. Audio
+and transcripts remain local unless the caller deliberately moves them.
 
 ---
 
