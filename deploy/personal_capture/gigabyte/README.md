@@ -82,11 +82,16 @@ outbox bundles. Run it only against the dedicated certification workspace:
 python -m dubbing.apps.personal_capture.benchmark \
   --config /home/gutua/.config/dubbing-studio/personal-capture.json \
   --audio-dir /path/to/synthetic-four-language-fixtures \
-  --output-dir /path/to/release-receipt/benchmark
+  --output-dir /path/to/release-receipt/benchmark \
+  --generator edge-tts
 ```
 
 Reruns are idempotent: success is based on verification of all four resulting
 outbox bundles, not on the count newly delivered during that invocation.
+Certification also requires every fixture to meet the configured transcript
+similarity threshold, match its expected source language and produce a
+non-empty translation result. The command exits nonzero if either semantic
+quality or the evidence handoff fails.
 
 ## Private network
 

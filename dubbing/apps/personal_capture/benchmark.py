@@ -18,6 +18,7 @@ EXPECTED = {
     "ro": "Astăzi testez sistemul meu privat de memorie multilingvă.",
     "ko": "오늘 저는 개인 다국어 기억 시스템을 테스트하고 있습니다.",
 }
+DEFAULT_MINIMUM_SIMILARITY = 0.9
 
 
 def _normalize(text: str) -> str:
@@ -25,7 +26,16 @@ def _normalize(text: str) -> str:
     return " ".join(re.findall(r"\w+", value, flags=re.UNICODE))
 
 
-def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: str | Path) -> dict:
+def run_benchmark(
+    config_path: str | Path,
+    audio_dir: str | Path,
+    output_dir: str | Path,
+    *,
+    generator: str = "external-synthetic-fixtures",
+    minimum_similarity: float = DEFAULT_MINIMUM_SIMILARITY,
+) -> dict:
+    if not 0 <= minimum_similarity <= 1:
+        raise ValueError("minimum_similarity must be between 0 and 1")
     config = load_config(config_path)
     service = build_service(config)
     output = Path(output_dir)
@@ -51,22 +61,32 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
                 else {"segments": []}
             )
             actual = transcript["text"]
-            detections = [item.get("source_language") for item in translation["segments"]]
+            translation_segments = translation["segments"]
+            detections = [
+                item.get("source_language")
+                for item in translation_segments
+            ]
+            similarity = round(
+                SequenceMatcher(
+                    None,
+                    _normalize(expected),
+                    _normalize(actual),
+                ).ratio(),
+                4,
+            )
             row.update(
                 {
                     "expected": expected,
                     "transcript": actual,
-                    "normalized_similarity": round(
-                        SequenceMatcher(None, _normalize(expected), _normalize(actual)).ratio(),
-                        4,
-                    ),
+                    "normalized_similarity": similarity,
+                    "transcription_pass": similarity >= minimum_similarity,
                     "detected_languages": detections,
                     "language_detection_pass": language in detections,
                     "translation_statuses": [
-                        item.get("status") for item in translation["segments"]
+                        item.get("status") for item in translation_segments
                     ],
-                    "translation_output_pass": all(
-                        item.get("target_text") for item in translation["segments"]
+                    "translation_output_pass": bool(translation_segments) and all(
+                        item.get("target_text") for item in translation_segments
                     ),
                     "speakers": sorted(
                         {
@@ -76,6 +96,14 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
                         }
                     ),
                 }
+            )
+            row["semantic_pass"] = all(
+                row[key]
+                for key in (
+                    "transcription_pass",
+                    "language_detection_pass",
+                    "translation_output_pass",
+                )
             )
             service.approve(outcome.capture_id, notes="synthetic benchmark fixture")
             row["approval_pass"] = True
@@ -91,14 +119,18 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
     handoff_pass = all(row.get("approval_pass") for row in rows) and all(
         verify_outbox_bundle(outbox / row["capture_id"]) for row in rows
     )
+    semantic_pass = all(row.get("semantic_pass") for row in rows)
     document = {
         "schema_version": "dubbing.personal-capture-benchmark.v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "synthetic_only": True,
-        "generator": "espeak-ng",
+        "generator": generator,
+        "minimum_similarity": minimum_similarity,
         "results": rows,
         "outbox_events_delivered_this_run": delivered,
         "handoff_pass": handoff_pass,
+        "semantic_pass": semantic_pass,
+        "pass": semantic_pass and handoff_pass,
     }
     (output / "benchmark.json").write_text(
         json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -107,10 +139,10 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
     lines = [
         "# Four-language Personal Capture benchmark",
         "",
-        "Synthetic espeak-ng audio only; no private recordings were used.",
+        f"Synthetic {generator} audio only; no private recordings were used.",
         "",
-        "| Language | State | Similarity | Detection | Translation | Speakers |",
-        "|---|---:|---:|---:|---:|---|",
+        "| Language | State | Similarity | Detection | Translation | Semantic | Speakers |",
+        "|---|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         lines.append(
@@ -118,6 +150,7 @@ def run_benchmark(config_path: str | Path, audio_dir: str | Path, output_dir: st
             f"{row.get('normalized_similarity', 0):.4f} | "
             f"{'pass' if row.get('language_detection_pass') else 'fail'} | "
             f"{'pass' if row.get('translation_output_pass') else 'fail'} | "
+            f"{'pass' if row.get('semantic_pass') else 'fail'} | "
             f"{', '.join(row.get('speakers', [])) or 'none'} |"
         )
     (output / "BENCHMARK.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -129,8 +162,26 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--audio-dir", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--generator",
+        default="external-synthetic-fixtures",
+        help="human-readable fixture generator recorded in the benchmark receipt",
+    )
+    parser.add_argument(
+        "--minimum-similarity",
+        type=float,
+        default=DEFAULT_MINIMUM_SIMILARITY,
+    )
     args = parser.parse_args()
-    run_benchmark(args.config, args.audio_dir, args.output_dir)
+    document = run_benchmark(
+        args.config,
+        args.audio_dir,
+        args.output_dir,
+        generator=args.generator,
+        minimum_similarity=args.minimum_similarity,
+    )
+    if not document["pass"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
