@@ -4,6 +4,11 @@ from abc import ABC, abstractmethod
 
 
 class LanguageDetector(ABC):
+    @property
+    def identity(self) -> str:
+        """Stable detector identity used by resumable checkpoint manifests."""
+        return f"{type(self).__module__}.{type(self).__qualname__}"
+
     @abstractmethod
     def detect(self, text: str) -> tuple[str | None, float | None]:
         """Return an ISO-639-1 language and confidence when sufficiently certain."""

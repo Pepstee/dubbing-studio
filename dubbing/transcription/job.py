@@ -16,6 +16,7 @@ from dubbing.transcription.models import (
     TranscriptionError,
     TranscriptionOptions,
     TranscriptionResult,
+    transcription_result_from_dict,
 )
 
 _CHECKPOINT_SCHEMA = "dubbing.transcription-checkpoint.v1"
@@ -74,47 +75,6 @@ def _atomic_json(path: Path, document: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _result_from_dict(document: dict) -> TranscriptionResult:
-    from dubbing.transcription.models import TranscriptWord
-
-    segments = []
-    for item in document.get("segments", []):
-        words = tuple(
-            TranscriptWord(
-                start_ms=word["start_ms"],
-                end_ms=word["end_ms"],
-                text=word["text"],
-                confidence=word.get("confidence"),
-                speaker=word.get("speaker"),
-            )
-            for word in item.get("words", [])
-        )
-        segments.append(
-            TranscriptSegment(
-                start_ms=item["start_ms"],
-                end_ms=item["end_ms"],
-                text=item["text"],
-                words=words,
-                confidence=item.get("confidence"),
-                speaker=item.get("speaker"),
-                speakers=tuple(item.get("speakers", [])),
-                speaker_status=item.get("speaker_status", "not_requested"),
-            )
-        )
-    return TranscriptionResult(
-        segments=tuple(segments),
-        text=document.get("text", ""),
-        backend=document["backend"],
-        model=document["model"],
-        device=document["device"],
-        language=document.get("language"),
-        duration_ms=document.get("duration_ms"),
-        confidence_available=document.get("confidence_available", False),
-        source_sha256=document.get("source_sha256"),
-        diarization=document.get("diarization"),
-    )
-
-
 class ResumableTranscriptionJob:
     """Source-bound chunk runner for recordings too valuable to restart."""
 
@@ -124,12 +84,16 @@ class ResumableTranscriptionJob:
         checkpoint_dir: str | Path,
         *,
         chunk_seconds: int = 30 * 60,
+        overlap_seconds: int = 5,
     ) -> None:
         if not 30 <= chunk_seconds <= 60 * 60:
             raise ValueError("chunk_seconds must be between 30 and 3600")
         self.backend = backend
         self.checkpoint_dir = Path(checkpoint_dir)
         self.chunk_seconds = chunk_seconds
+        if not 0 <= overlap_seconds < chunk_seconds // 2:
+            raise ValueError("overlap_seconds must be non-negative and below half a chunk")
+        self.overlap_seconds = overlap_seconds
 
     @staticmethod
     def _extract_chunk(source: Path, start_ms: int, end_ms: int, output: Path) -> None:
@@ -169,7 +133,13 @@ class ResumableTranscriptionJob:
             detail = exc.stderr.strip() or "unknown ffmpeg error"
             raise TranscriptionError(f"could not extract audio chunk: {detail}") from exc
 
-    def _manifest(self, source: Path, duration_ms: int, digest: str) -> dict:
+    def _manifest(
+        self,
+        source: Path,
+        duration_ms: int,
+        digest: str,
+        options: TranscriptionOptions,
+    ) -> dict:
         return {
             "schema_version": _CHECKPOINT_SCHEMA,
             "source_name": source.name,
@@ -177,6 +147,13 @@ class ResumableTranscriptionJob:
             "duration_ms": duration_ms,
             "backend_identity": self.backend.identity,
             "chunk_seconds": self.chunk_seconds,
+            "overlap_seconds": self.overlap_seconds,
+            "options": {
+                "language": options.language,
+                "task": options.task,
+                "initial_prompt": options.initial_prompt,
+                "word_timestamps": options.word_timestamps,
+            },
         }
 
     def _admit_manifest(self, expected: dict) -> None:
@@ -197,27 +174,31 @@ class ResumableTranscriptionJob:
         self,
         audio: str | Path,
         options: TranscriptionOptions | None = None,
+        *,
+        source_digest: str | None = None,
+        duration_ms: int | None = None,
     ) -> TranscriptionResult:
         source = Path(audio)
         if not source.is_file():
             raise TranscriptionError(f"audio input not found: {source}")
         options = options or TranscriptionOptions()
-        duration_ms = media_duration_ms(source)
-        digest = source_sha256(source)
+        duration_ms = media_duration_ms(source) if duration_ms is None else duration_ms
+        digest = source_sha256(source) if source_digest is None else source_digest
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self._admit_manifest(self._manifest(source, duration_ms, digest))
+        self._admit_manifest(self._manifest(source, duration_ms, digest, options))
 
         chunk_ms = self.chunk_seconds * 1000
         segments: list[TranscriptSegment] = []
         texts: list[str] = []
         language = options.language
         confidence_available = False
+        total_chunks = (duration_ms + chunk_ms - 1) // chunk_ms
         for index, start_ms in enumerate(range(0, duration_ms, chunk_ms)):
             end_ms = min(duration_ms, start_ms + chunk_ms)
             checkpoint = self.checkpoint_dir / "chunks" / f"{index:06d}.json"
             if checkpoint.exists():
                 try:
-                    result = _result_from_dict(
+                    result = transcription_result_from_dict(
                         json.loads(checkpoint.read_text(encoding="utf-8"))
                     )
                 except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -225,14 +206,32 @@ class ResumableTranscriptionJob:
                         f"chunk checkpoint is malformed: {checkpoint.name}"
                     ) from exc
             else:
+                overlap_ms = self.overlap_seconds * 1000
+                extract_start_ms = max(0, start_ms - overlap_ms)
+                extract_end_ms = min(duration_ms, end_ms + overlap_ms)
                 with tempfile.TemporaryDirectory(
                     prefix="dubbing-transcription-"
                 ) as directory:
                     chunk = Path(directory) / f"{index:06d}.wav"
-                    self._extract_chunk(source, start_ms, end_ms, chunk)
+                    self._extract_chunk(
+                        source,
+                        extract_start_ms,
+                        extract_end_ms,
+                        chunk,
+                    )
                     local = self.backend.transcribe(chunk, options)
+                shifted = local.shifted(extract_start_ms)
+                admitted = tuple(
+                    segment
+                    for segment in shifted.segments
+                    if start_ms
+                    <= segment.start_ms + (segment.end_ms - segment.start_ms) // 2
+                    < end_ms
+                )
                 result = replace(
-                    local.shifted(start_ms),
+                    shifted,
+                    segments=admitted,
+                    text=" ".join(segment.text for segment in admitted).strip(),
                     duration_ms=end_ms,
                     source_sha256=digest,
                 )
@@ -242,6 +241,15 @@ class ResumableTranscriptionJob:
                 texts.append(result.text.strip())
             language = language or result.language
             confidence_available = confidence_available or result.confidence_available
+            _atomic_json(
+                self.checkpoint_dir / "progress.json",
+                {
+                    "schema_version": "dubbing.transcription-progress.v1",
+                    "completed_chunks": index + 1,
+                    "total_chunks": total_chunks,
+                    "completed_through_ms": end_ms,
+                },
+            )
 
         final = TranscriptionResult(
             segments=tuple(

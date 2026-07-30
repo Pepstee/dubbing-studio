@@ -24,6 +24,13 @@ class LinguaLanguageDetector(LanguageDetector):
         self._detector = LanguageDetectorBuilder.from_languages(*languages).build()
         self.minimum_confidence = minimum_confidence
 
+    @property
+    def identity(self) -> str:
+        return (
+            "lingua:en,ko,ro,ru:"
+            f"minimum_confidence={self.minimum_confidence}"
+        )
+
     def detect(self, text: str) -> tuple[str | None, float | None]:
         value = text.strip()
         if not value:

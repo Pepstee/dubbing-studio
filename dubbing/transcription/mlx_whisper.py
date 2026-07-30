@@ -64,7 +64,7 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
 
     @property
     def identity(self) -> str:
-        return f"mlx-whisper:{self.model}"
+        return f"mlx-whisper:{self.model}:temperature={self.temperature}"
 
     @staticmethod
     def _dependency():

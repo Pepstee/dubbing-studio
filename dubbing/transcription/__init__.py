@@ -15,6 +15,7 @@ from dubbing.transcription.models import (
     TranscriptionError,
     TranscriptionOptions,
     TranscriptionResult,
+    transcription_result_from_dict,
 )
 from dubbing.transcription.pipeline import AudioUnderstandingPipeline
 from dubbing.transcription.render import transcript_to_srt, transcript_to_text
@@ -33,6 +34,7 @@ __all__ = [
     "TranscriptionOptions",
     "TranscriptionResult",
     "attribute_transcript",
+    "transcription_result_from_dict",
     "transcript_to_srt",
     "transcript_to_text",
 ]

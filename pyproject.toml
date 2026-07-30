@@ -3,15 +3,18 @@ name = "dubbing-studio"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "flask",
+    "flask>=3.0,<4",
+    "waitress>=3.0,<4",
 ]
 
 [project.scripts]
-dubbing-cli = "dubbing.__main__:main"
+dubbing-cli = "dubbing.cli:main"
 dubbing-gpu = "dubbing.gpu_launcher:main"
-dubbing-web = "dubbing.web:main"
-dubbing-capture-watch = "dubbing.capture.watcher:main"
-dubbing-capture-review = "dubbing.capture.review:main"
+dubbing-web = "dubbing.apps.dubbing_web:main"
+dubbing-capture-watch = "dubbing.apps.personal_capture.watcher:main"
+dubbing-capture-review = "dubbing.apps.personal_capture.review:main"
+dubbing-capture-preflight = "dubbing.apps.personal_capture.preflight:main"
+dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:main"
 
 [project.optional-dependencies]
 diarization = [
@@ -54,10 +57,18 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["audit", "build", "dist", "output"]
 
 [tool.ruff.lint]
 # Keep the repository's historical Ruff profile explicit across Ruff releases.
 select = ["E4", "E7", "E9", "F"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", "audit", "build", "dist", "output"]
+
 [tool.setuptools.packages.find]
 include = ["dubbing*"]
+
+[tool.setuptools.package-data]
+"dubbing.apps.personal_capture" = ["templates/*.html", "static/*.css"]

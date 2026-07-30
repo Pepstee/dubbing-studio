@@ -4,6 +4,7 @@ from dubbing.diarization.attribution import (
     attributed_segment_plan,
 )
 from dubbing.diarization.base import DiarizationBackend
+from dubbing.diarization.job import ResumableDiarizationJob
 from dubbing.diarization.models import (
     DiarizationError,
     DiarizationResult,
@@ -16,6 +17,7 @@ from dubbing.diarization.sherpa import SherpaOnnxDiarizationBackend
 
 __all__ = [
     "DiarizationBackend",
+    "ResumableDiarizationJob",
     "DiarizationError",
     "DiarizationResult",
     "SegmentAttribution",

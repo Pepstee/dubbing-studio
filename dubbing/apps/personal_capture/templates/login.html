@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} · Personal Capture</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main>
+    <h1>Personal Capture</h1>
+    <p>Enter the private review token. It is submitted in the request body and is never placed in the URL.</p>
+    <form method="post" action="{{ url_for('login') }}">
+      <label for="token">Review token</label>
+      <input id="token" name="token" type="password" minlength="32" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

@@ -50,6 +50,8 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
         temperature: float = 0.0,
         cpu_threads: int = 0,
         num_workers: int = 1,
+        local_files_only: bool = False,
+        model_revision: str | None = None,
     ) -> None:
         if not model.strip():
             raise ValueError("model cannot be blank")
@@ -69,13 +71,16 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
         self.temperature = temperature
         self.cpu_threads = cpu_threads
         self.num_workers = num_workers
+        self.local_files_only = local_files_only
+        self.model_revision = model_revision
         self._model_instance = None
 
     @property
     def identity(self) -> str:
         return (
             f"faster-whisper:{self.model}:{self.device}:{self.compute_type}:"
-            f"{self.cpu_threads}:{self.num_workers}"
+            f"{self.temperature}:{self.cpu_threads}:{self.num_workers}:"
+            f"local={self.local_files_only}:revision={self.model_revision or 'unversioned'}"
         )
 
     @staticmethod
@@ -98,6 +103,10 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
 
     def _load_model(self):
         if self._model_instance is None:
+            if self.local_files_only and not Path(self.model).is_dir():
+                raise TranscriptionError(
+                    f"offline Faster-Whisper model directory not found: {self.model}"
+                )
             dependency = self._dependency()
             try:
                 self._model_instance = dependency.WhisperModel(

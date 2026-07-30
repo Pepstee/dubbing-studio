@@ -97,7 +97,7 @@ def check_cli() -> None:
 
 
 def check_web() -> None:
-    from dubbing.web import app
+    from dubbing.apps.dubbing_web import app
 
     thread = threading.Thread(
         target=lambda: app.run(host="127.0.0.1", port=7432, use_reloader=False),

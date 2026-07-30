@@ -20,6 +20,10 @@ def nvidia_library_directories() -> tuple[Path, ...]:
 
 def main() -> None:
     """Re-exec Dubbing Studio with venv-local NVIDIA libraries discoverable."""
+    arguments = [sys.executable, "-m", "dubbing", *sys.argv[1:]]
+    if any(item in {"-h", "--help"} for item in sys.argv[1:]):
+        os.execve(sys.executable, arguments, os.environ.copy())
+        return
     directories = nvidia_library_directories()
     if not directories:
         raise SystemExit(
@@ -34,7 +38,7 @@ def main() -> None:
     env["LD_LIBRARY_PATH"] = os.pathsep.join(values)
     os.execve(
         sys.executable,
-        [sys.executable, "-m", "dubbing", *sys.argv[1:]],
+        arguments,
         env,
     )
 

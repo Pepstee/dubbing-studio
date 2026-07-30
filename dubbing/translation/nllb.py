@@ -20,6 +20,8 @@ class NLLBTranslationBackend(TranslationBackend):
         *,
         device: str = "auto",
         max_new_tokens: int = 256,
+        local_files_only: bool = False,
+        model_revision: str | None = None,
     ) -> None:
         if device not in {"auto", "cpu", "cuda"}:
             raise ValueError("device must be auto, cpu, or cuda")
@@ -28,16 +30,28 @@ class NLLBTranslationBackend(TranslationBackend):
         self.model = model
         self.device = device
         self.max_new_tokens = max_new_tokens
+        self.local_files_only = local_files_only
+        self.model_revision = model_revision
         self._tokenizer = None
         self._model = None
 
     @property
     def identity(self) -> str:
-        return f"nllb:{self.model}"
+        return (
+            f"nllb:{self.model}:{self.device}:max_new_tokens={self.max_new_tokens}:"
+            f"local={self.local_files_only}:revision={self.model_revision or 'unversioned'}"
+        )
 
     def _load(self):
         if self._model is not None:
             return self._tokenizer, self._model
+        if self.local_files_only:
+            from pathlib import Path
+
+            if not Path(self.model).is_dir():
+                raise RuntimeError(
+                    f"offline NLLB model directory not found: {self.model}"
+                )
         try:
             import torch
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -49,8 +63,14 @@ class NLLBTranslationBackend(TranslationBackend):
         device = self.device
         if device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
-        tokenizer = AutoTokenizer.from_pretrained(self.model)
-        model = AutoModelForSeq2SeqLM.from_pretrained(self.model)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model,
+            local_files_only=self.local_files_only,
+        )
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.model,
+            local_files_only=self.local_files_only,
+        )
         model.to(device)
         model.eval()
         self._tokenizer = tokenizer

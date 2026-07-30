@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dubbing-studio.local/schemas/personal-capture-deployment.v1.schema.json",
+  "title": "Personal Capture deployment",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "landing_inbox",
+    "workspace",
+    "paths",
+    "defaults",
+    "service",
+    "network",
+    "giga_outbox",
+    "boundaries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "dubbing.personal-capture-deployment.v1"
+    },
+    "landing_inbox": {
+      "type": "object",
+      "required": ["wsl_path", "minimum_file_age_seconds"],
+      "properties": {
+        "wsl_path": {"type": "string", "minLength": 1},
+        "minimum_file_age_seconds": {"type": "number", "minimum": 30}
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "required": ["wsl_path"],
+      "properties": {
+        "wsl_path": {"type": "string", "minLength": 1}
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": ["packages", "processing", "state"],
+      "properties": {
+        "packages": {"type": "string", "minLength": 1},
+        "processing": {"type": "string", "minLength": 1},
+        "state": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "required": [
+        "asr_backend",
+        "asr_model",
+        "asr_device",
+        "asr_compute_type",
+        "resumable",
+        "transcription_chunk_seconds",
+        "transcription_overlap_seconds",
+        "diarization_chunk_seconds",
+        "maximum_audio_seconds",
+        "minimum_free_bytes",
+        "translation_target",
+        "translation_model",
+        "translation_device",
+        "diarization_device",
+        "segmentation_model",
+        "embedding_model",
+        "model_manifest",
+        "offline_models_required",
+        "review_required"
+      ],
+      "properties": {
+        "asr_backend": {"const": "faster-whisper"},
+        "asr_model": {"type": "string", "minLength": 1},
+        "asr_device": {"enum": ["cpu", "cuda"]},
+        "asr_compute_type": {"type": "string", "minLength": 1},
+        "resumable": {"const": true},
+        "transcription_chunk_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 3600
+        },
+        "transcription_overlap_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1799
+        },
+        "diarization_chunk_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 10800
+        },
+        "maximum_audio_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "minimum_free_bytes": {"type": "integer", "minimum": 0},
+        "translation_target": {"type": "string", "minLength": 1},
+        "translation_model": {"type": "string", "minLength": 1},
+        "translation_device": {"enum": ["cpu", "cuda"]},
+        "diarization_device": {"enum": ["cpu", "cuda"]},
+        "segmentation_model": {"type": "string", "minLength": 1},
+        "embedding_model": {"type": "string", "minLength": 1},
+        "model_manifest": {"type": "string", "minLength": 1},
+        "offline_models_required": {"const": true},
+        "review_required": {"const": true}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["poll_seconds", "restart_policy"],
+      "properties": {
+        "poll_seconds": {"type": "number", "minimum": 2},
+        "restart_policy": {"const": "on-failure"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": ["bind_host", "port", "max_upload_bytes", "token_file"],
+      "properties": {
+        "bind_host": {"enum": ["127.0.0.1", "::1", "localhost"]},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "max_upload_bytes": {"type": "integer", "minimum": 1},
+        "token_file": {"type": "string", "minLength": 1}
+      }
+    },
+    "giga_outbox": {
+      "type": "object",
+      "required": ["path", "automatic_interpreted_memory_promotion"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "automatic_interpreted_memory_promotion": {"const": false}
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "required": [
+        "watcher_enabled",
+        "automatic_giga_promotion",
+        "network_upload_by_dubbing_studio",
+        "source_deletion_by_dubbing_studio"
+      ],
+      "properties": {
+        "watcher_enabled": {"const": true},
+        "automatic_giga_promotion": {"const": false},
+        "network_upload_by_dubbing_studio": {"const": true},
+        "source_deletion_by_dubbing_studio": {"const": false}
+      }
+    }
+  }
+}

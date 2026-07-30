@@ -160,3 +160,45 @@ class TranscriptionResult:
         if self.diarization is not None:
             result["diarization"] = self.diarization
         return result
+
+
+def transcription_result_from_dict(document: dict) -> TranscriptionResult:
+    """Rebuild and validate a transcription result from its JSON contract."""
+    if document.get("schema_version") != "dubbing.transcription.v1":
+        raise ValueError("unsupported transcription schema")
+    segments = []
+    for item in document.get("segments", []):
+        words = tuple(
+            TranscriptWord(
+                start_ms=word["start_ms"],
+                end_ms=word["end_ms"],
+                text=word["text"],
+                confidence=word.get("confidence"),
+                speaker=word.get("speaker"),
+            )
+            for word in item.get("words", [])
+        )
+        segments.append(
+            TranscriptSegment(
+                start_ms=item["start_ms"],
+                end_ms=item["end_ms"],
+                text=item["text"],
+                words=words,
+                confidence=item.get("confidence"),
+                speaker=item.get("speaker"),
+                speakers=tuple(item.get("speakers", [])),
+                speaker_status=item.get("speaker_status", "not_requested"),
+            )
+        )
+    return TranscriptionResult(
+        segments=tuple(segments),
+        text=document.get("text", ""),
+        backend=document["backend"],
+        model=document["model"],
+        device=document["device"],
+        language=document.get("language"),
+        duration_ms=document.get("duration_ms"),
+        confidence_available=document.get("confidence_available", False),
+        source_sha256=document.get("source_sha256"),
+        diarization=document.get("diarization"),
+    )

@@ -1,5 +1,12 @@
 # Dubbing Studio
 
+Architecture, certification and the first real recording procedure are in:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/CERTIFICATION.md`](docs/CERTIFICATION.md)
+- [`docs/FIRST_RECORDING_RUNBOOK.md`](docs/FIRST_RECORDING_RUNBOOK.md)
+- [`docs/PRIVACY_AND_RETENTION.md`](docs/PRIVACY_AND_RETENTION.md)
+
 ## Personal Capture
 
 The private Personal Capture deployment continuously watches a stable-file inbox, transcribes
@@ -12,13 +19,14 @@ On the Gigabyte the persistent user services are:
 
 ```bash
 systemctl --user status dubbing-capture-watch dubbing-capture-review
-cat ~/.local/share/dubbing-studio/personal-capture/health.json
+cat /home/gutua/software-factory/giga-user/life-logging/audio-processing/health.json
 ```
 
-The review service requires its bearer token and is intended only for Tailscale Serve. Uploads
-are size/extension constrained and land as hidden `.partial` files before atomic rename.
+The review service uses a body-submitted token login and is intended only for Tailscale Serve.
+The token is never accepted in a URL. Uploads are size/extension constrained and land as
+hidden `.partial` files before atomic rename.
 Deployment details and recovery procedures are in
-[`deploy/gigabyte/PERSONAL_CAPTURE.md`](deploy/gigabyte/PERSONAL_CAPTURE.md).
+[`deploy/personal_capture/gigabyte/README.md`](deploy/personal_capture/gigabyte/README.md).
 
 A composable, local-first audio pipeline with replaceable speech-to-text,
 speaker-diarisation, and text-to-speech backends. It can transcribe source audio,
@@ -40,7 +48,9 @@ Linux, install `espeak-ng` for the built-in local TTS path. On macOS, the existi
 `say`/`afconvert` backend remains available. Piper is selected automatically only
 when both the `piper` binary and `PIPER_MODEL` are configured.
 
-Flask is required for the web UI (`dubbing-web`). The `say` backend uses macOS
+Flask is required for the web UIs. `dubbing-web` is the separate, unauthenticated subtitle
+dubbing demonstration and binds to loopback unless remote exposure is explicitly acknowledged;
+it is not the authenticated Personal Capture review service. The `say` backend uses macOS
 built-ins and requires no additional Python packages.
 
 ---
@@ -57,7 +67,7 @@ python acceptance.py
 
 ## Sample SRT and example output
 
-Given `sample.srt`:
+Given `samples/sample.srt`:
 
 ```srt
 1
@@ -81,7 +91,7 @@ Multilingual support enables dubbing in any target language.
 <emotion:calm><pitch:low>Voice cloning requires explicit written consent from the voice owner.
 ```
 
-Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary with real synthesis):
+Running `python -m dubbing dub samples/sample.srt --backend say` prints (timing may vary with real synthesis):
 
 ```
 [0–2500] Welcome to Dubbing Studio!
@@ -91,7 +101,7 @@ Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
 
-The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is anchored at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `sample.srt` yields a WAV exactly 17.0 seconds long.
+The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is anchored at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `samples/sample.srt` yields a WAV exactly 17.0 seconds long.
 
 **Overlap policy.** Subtitle windows that overlap (two speakers talking at once) are *mixed*, never shifted: each segment stays anchored at its own SRT start time and the overlapping region carries the sum of both signals, clamped to the 16-bit PCM range. The total output duration is always the end of the last subtitle window — overlapping entries can never stretch the timeline.
 
@@ -177,7 +187,9 @@ pipeline = DubbingPipeline(backend=MyCloudTTS())
 segments = pipeline.run("subtitles.srt")
 ```
 
-The pipeline calls `synthesize` once per `run()` invocation; batching within your backend is up to you.
+The pipeline submits one `synthesize([segment])` call per segment through a bounded thread
+pool and restores result order before alignment. Backends must therefore be safe for concurrent
+calls, or serialize internally.
 
 ---
 
@@ -277,8 +289,8 @@ python -m dubbing transcribe recording.m4a --format text --output transcript.txt
 ```
 
 For long recordings, use resumable chunks. The checkpoint is written atomically
-and is accepted only when the source hash, backend identity, and chunk settings
-still match:
+and is accepted only when the source hash, backend identity, chunk settings, language,
+task, prompt, and word-timestamp policy still match:
 
 ```bash
 python -m dubbing transcribe day.m4a \
@@ -321,8 +333,9 @@ pip install -e '.[understanding-nvidia,translation-local]'
 Scan an inbox on the Gigabyte:
 
 ```bash
-dubbing-gpu capture scan /srv/dubbing/inbox \
-  --workspace /srv/dubbing/personal-capture \
+dubbing-gpu capture scan \
+  /home/gutua/software-factory/giga-user/life-logging/audio-processing/recordings/inbox \
+  --workspace /home/gutua/software-factory/giga-user/life-logging/audio-processing \
   --asr-backend faster-whisper \
   --asr-model large-v3-turbo \
   --asr-device cuda \
@@ -338,20 +351,24 @@ supplying any known speaker aliases, approve it explicitly:
 
 ```bash
 dubbing-gpu capture approve CAPTURE_SHA256 \
-  --workspace /srv/dubbing/personal-capture \
+  --config /home/gutua/.config/dubbing-studio/personal-capture.json \
   --speaker SPEAKER_00=Artiom
 ```
 
-Approval emits `giga-event.json` beside the transcript; it does not directly
-modify GIGA memory. The event retains source and transcript hashes so a later
-ingestion adapter can verify provenance and remain idempotent.
+Approval emits `giga-event.json` beside the transcript and publishes a self-contained,
+hash-verified directory under `outbox/giga/<capture-sha256>/`. The bundle contains the event,
+reviewed transcript, optional translation, and approval record. It does not directly modify
+GIGA memory; a later ingestion adapter can verify the complete bundle and remain idempotent.
 
 The initial NLLB backend is for private dogfooding. Its checkpoint is
 CC-BY-NC-4.0 and is not the eventual commercial translation backend.
 
 The permanent Gigabyte paths and safety boundaries are versioned in
-`deploy/gigabyte/personal-capture.json`. The landing inbox is Windows-visible,
-while the ledger and derived evidence remain on the WSL filesystem.
+`deploy/personal_capture/gigabyte/personal-capture.json`. The landing inbox is Windows-visible,
+while the ledger and derived evidence remain on the WSL filesystem. Production
+ASR and translation directories are also bound to exact commit revisions and
+complete file hashes by `dubbing-capture-model-manifest`; watcher startup fails
+if the approved manifest no longer matches.
 
 ---
 
@@ -503,8 +520,10 @@ No confidence value is fabricated.
 
 Native 16 kHz mono 16-bit PCM WAV is read directly. Other audio/video formats
 and WAV formats needing resampling require `ffmpeg`; missing/invalid media
-produces an actionable error. Inputs longer than four hours are rejected before
-model inference.
+produces an actionable error. The direct one-shot diarization backend rejects
+inputs longer than four hours before model inference. Personal Capture processes
+a recording as independent two-hour resumable chunks and has a separate 24-hour
+admission ceiling.
 
 Speaker embeddings encode voice characteristics and should be treated as
 sensitive biometric-like data. This backend keeps embeddings inside the

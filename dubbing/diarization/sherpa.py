@@ -52,6 +52,13 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
         self.min_duration_on = min_duration_on
         self.min_duration_off = min_duration_off
 
+    @property
+    def identity(self) -> str:
+        return (
+            f"sherpa-onnx:{_MODEL_NAME}:{self.device}:{self.num_threads}:"
+            f"{self.cluster_threshold}:{self.min_duration_on}:{self.min_duration_off}"
+        )
+
     def _dependencies(self):
         try:
             sherpa_onnx = importlib.import_module("sherpa_onnx")
