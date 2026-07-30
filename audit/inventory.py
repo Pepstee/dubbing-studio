@@ -533,7 +533,11 @@ def main() -> None:
         "duplicate_group", "risk_notes", "reason_not_read",
     ]
     with (AUDIT / "FILE_LEDGER.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=ledger_fields)
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=ledger_fields,
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(preliminary)
 
@@ -725,7 +729,11 @@ def main() -> None:
         "external_services", "documented", "status",
     ]
     with (AUDIT / "SYMBOL_LEDGER.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=symbol_fields)
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=symbol_fields,
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(symbol_rows)
 

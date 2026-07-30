@@ -5,6 +5,7 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/gutua/software-factory/projects/dubbing-studio
+Environment="PATH=/home/gutua/software-factory/.control/ffmpeg/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/home/gutua/software-factory/projects/dubbing-studio/.venv/bin/python -m dubbing.apps.personal_capture.watcher --config /home/gutua/.config/dubbing-studio/personal-capture.json
 Restart=on-failure
 RestartSec=10

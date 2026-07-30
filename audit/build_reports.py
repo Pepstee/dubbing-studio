@@ -877,7 +877,7 @@ production certification is made.
         ("systemd/Tailscale deployment", "INVESTIGATE_FURTHER", "Mac-only evidence", "persistent host services", "Gigabyte", "WSL/systemd/Tailscale/CUDA", "high", "none local", "exact-commit host certification receipt", "high", "run host preflight/benchmark"),
     ]
     with (AUDIT / "DISPOSITION_LEDGER.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = csv.writer(handle, lineterminator="\n")
         writer.writerow(disposition_fields)
         writer.writerows(rows)
 

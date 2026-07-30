@@ -14,9 +14,18 @@
   `/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-turbo`
 - NLLB model:
   `/home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M`
+- FFmpeg and FFprobe:
+  `/home/gutua/software-factory/.control/ffmpeg/bin`
 
 This host receives certified GitHub commits only. Do not copy individual
 working-tree files into the deployment.
+
+The systemd units prepend the host-owned FFmpeg directory to `PATH`. This keeps
+the media toolchain available to the unprivileged WSL service account without
+requiring a mutable system package install. Install both `ffmpeg` and `ffprobe`
+there from one pinned release, verify its publisher-provided SHA-256 before
+extraction, and record the release tag, archive name and digest in the host
+release receipt.
 
 The two model settings in `personal-capture.json` are absolute local directories,
 not registry identifiers. Production runtime sets local-only loading, so a cache
@@ -49,6 +58,8 @@ journalctl --user -u dubbing-capture-watch -u dubbing-capture-review
 Before enabling either unit:
 
 ```bash
+export PATH=/home/gutua/software-factory/.control/ffmpeg/bin:$PATH
+
 dubbing-capture-preflight \
   --config /home/gutua/.config/dubbing-studio/personal-capture.json \
   --prepare \
