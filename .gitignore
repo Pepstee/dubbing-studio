@@ -2,3 +2,16 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
+.venv/
+build/
+dist/
+graphify-out/
+output/
+
+# Forensic audit scratch outputs (keep reports and reproducibility scripts).
+audit/validation-source/
+audit/validation-pyc/
+audit/build-dist/
+audit/wheel-venv/
+audit/dubbing-gpu-help.stdout
+audit/dubbing-gpu-help.stderr

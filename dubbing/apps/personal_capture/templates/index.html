@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>Review queue</h1>
+  <p class="muted">
+    Original recordings remain in the inbox. Nothing enters GIGA until you approve it.
+  </p>
+  <form class="upload" method="post" action="{{ url_for('upload') }}"
+        enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="file" name="media" accept="audio/*,video/*" required>
+    <button>Upload recording</button>
+  </form>
+  <h2>Captures</h2>
+  {% if records %}
+    <table>
+      <thead>
+        <tr><th>Recording</th><th>State</th><th>Updated</th><th>Attempts</th></tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+          <tr>
+            <td>
+              <a href="{{ url_for('detail', capture_id=record.capture_id) }}">
+                {{ record.source_name }}
+              </a>
+            </td>
+            <td class="state">{{ record.state }}</td>
+            <td>{{ record.updated_at }}</td>
+            <td>{{ record.attempt_count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>
+      No recordings yet. Uploading a completed recording places it into the same
+      permanent inbox watched by the background worker.
+    </p>
+  {% endif %}
+{% endblock %}

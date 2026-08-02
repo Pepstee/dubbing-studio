@@ -1,0 +1,63 @@
+{
+  "schema_version": "dubbing.personal-capture-deployment.v1",
+  "machine": "gutua",
+  "landing_inbox": {
+    "windows_path": "\\\\wsl.localhost\\Ubuntu\\home\\gutua\\software-factory\\giga-user\\life-logging\\audio-processing\\recordings\\inbox",
+    "wsl_path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing/recordings/inbox",
+    "purpose": "Project-owned landing zone for phone, Tailscale, and manual uploads",
+    "minimum_file_age_seconds": 60,
+    "raw_audio_retention": "operator-controlled; scanner does not copy or delete source audio"
+  },
+  "workspace": {
+    "wsl_path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing",
+    "purpose": "Private SQLite ledger, review packages, transcripts, translations, and GIGA events"
+  },
+  "paths": {
+    "packages": "outputs/packages",
+    "processing": "processing",
+    "state": "state"
+  },
+  "defaults": {
+    "asr_backend": "faster-whisper",
+    "asr_model": "/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-turbo",
+    "asr_device": "cuda",
+    "asr_compute_type": "float16",
+    "resumable": true,
+    "transcription_chunk_seconds": 1800,
+    "transcription_overlap_seconds": 5,
+    "maximum_audio_seconds": 86400,
+    "translation_target": "en",
+    "translation_model": "/home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M",
+    "translation_device": "cuda",
+    "diarization_device": "cpu",
+    "diarization_chunk_seconds": 7200,
+    "minimum_free_bytes": 5368709120,
+    "segmentation_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx",
+    "embedding_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/nemo_en_titanet_small.onnx",
+    "model_manifest": "/home/gutua/software-factory/.control/dubbing-models/personal-capture-model-manifest.json",
+    "offline_models_required": true,
+    "review_required": true
+  },
+  "service": {
+    "poll_seconds": 15,
+    "restart_policy": "on-failure"
+  },
+  "network": {
+    "bind_host": "127.0.0.1",
+    "port": 7433,
+    "max_upload_bytes": 2147483648,
+    "token_file": "/home/gutua/.config/dubbing-studio/capture.token",
+    "secure_cookie": true,
+    "exposure": "tailscale-serve-only"
+  },
+  "giga_outbox": {
+    "path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outbox/giga",
+    "automatic_interpreted_memory_promotion": false
+  },
+  "boundaries": {
+    "watcher_enabled": true,
+    "automatic_giga_promotion": false,
+    "network_upload_by_dubbing_studio": true,
+    "source_deletion_by_dubbing_studio": false
+  }
+}

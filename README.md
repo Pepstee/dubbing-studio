@@ -1,6 +1,37 @@
 # Dubbing Studio
 
-A composable pipeline that converts SRT subtitle files into timed audio segments using a pluggable TTS backend. The pipeline parses subtitles, strips and records prosody/emotion tags, calls a TTS backend, and aligns the rendered audio to the original SRT timestamps.
+Architecture, certification and the first real recording procedure are in:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/CERTIFICATION.md`](docs/CERTIFICATION.md)
+- [`docs/FIRST_RECORDING_RUNBOOK.md`](docs/FIRST_RECORDING_RUNBOOK.md)
+- [`docs/PRIVACY_AND_RETENTION.md`](docs/PRIVACY_AND_RETENTION.md)
+
+## Personal Capture
+
+The private Personal Capture deployment continuously watches a stable-file inbox, transcribes
+and diarises recordings locally, detects English, Russian, Romanian and Korean, translates
+segments into English, and presents every result for explicit review. Originals are neither
+copied nor deleted. Approval emits a hash-verified transactional GIGA outbox event; it does
+not automatically promote an interpretation into memory.
+
+On the Gigabyte the persistent user services are:
+
+```bash
+systemctl --user status dubbing-capture-watch dubbing-capture-review
+cat /home/gutua/software-factory/giga-user/life-logging/audio-processing/health.json
+```
+
+The review service uses a body-submitted token login and is intended only for Tailscale Serve.
+The token is never accepted in a URL. Uploads are size/extension constrained and land as
+hidden `.partial` files before atomic rename.
+Deployment details and recovery procedures are in
+[`deploy/personal_capture/gigabyte/README.md`](deploy/personal_capture/gigabyte/README.md).
+
+A composable, local-first audio pipeline with replaceable speech-to-text,
+speaker-diarisation, and text-to-speech backends. It can transcribe source audio,
+identify who spoke when, and turn edited SRT subtitles back into timestamp-aligned
+audio.
 
 ---
 
@@ -12,9 +43,15 @@ A composable pipeline that converts SRT subtitle files into timed audio segments
 pip install -e .
 ```
 
-This installs the `dubbing-cli` command and makes `python -m dubbing` available.
+This installs the `dubbing-cli` command and makes `python -m dubbing` available. On
+Linux, install `espeak-ng` for the built-in local TTS path. On macOS, the existing
+`say`/`afconvert` backend remains available. Piper is selected automatically only
+when both the `piper` binary and `PIPER_MODEL` are configured.
 
-Flask is required for the web UI (`dubbing-web`). The `say` backend uses macOS built-ins and requires no additional packages.
+Flask is required for the web UIs. `dubbing-web` is the separate, unauthenticated subtitle
+dubbing demonstration and binds to loopback unless remote exposure is explicitly acknowledged;
+it is not the authenticated Personal Capture review service. The `say` backend uses macOS
+built-ins and requires no additional Python packages.
 
 ---
 
@@ -30,7 +67,7 @@ python acceptance.py
 
 ## Sample SRT and example output
 
-Given `sample.srt`:
+Given `samples/sample.srt`:
 
 ```srt
 1
@@ -54,7 +91,7 @@ Multilingual support enables dubbing in any target language.
 <emotion:calm><pitch:low>Voice cloning requires explicit written consent from the voice owner.
 ```
 
-Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary with real synthesis):
+Running `python -m dubbing dub samples/sample.srt --backend say` prints (timing may vary with real synthesis):
 
 ```
 [0–2500] Welcome to Dubbing Studio!
@@ -64,7 +101,7 @@ Running `python -m dubbing dub sample.srt --backend say` prints (timing may vary
 [14000–17000] Voice cloning requires explicit written consent from the voice owner.
 ```
 
-The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is anchored at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `sample.srt` yields a WAV exactly 17.0 seconds long.
+The `say` backend calls macOS `say` to synthesise each segment. The `TimelineAligner` maps every TTS result onto its original SRT window and computes a per-segment `stretch_ratio` from the real synthesis duration. The assembler (`dubbing.assembler.assemble_timeline`) then renders one timeline-true WAV: each segment is anchored at its SRT start time, gaps between subtitles become silence, audio longer than its window is time-compressed to fit exactly, and audio shorter than its window plays at natural speed with the remainder padded by silence. The output WAV always spans the full subtitle timeline — dubbing `samples/sample.srt` yields a WAV exactly 17.0 seconds long.
 
 **Overlap policy.** Subtitle windows that overlap (two speakers talking at once) are *mixed*, never shifted: each segment stays anchored at its own SRT start time and the overlapping region carries the sum of both signals, clamped to the 16-bit PCM range. The total output duration is always the end of the last subtitle window — overlapping entries can never stretch the timeline.
 
@@ -150,7 +187,9 @@ pipeline = DubbingPipeline(backend=MyCloudTTS())
 segments = pipeline.run("subtitles.srt")
 ```
 
-The pipeline calls `synthesize` once per `run()` invocation; batching within your backend is up to you.
+The pipeline submits one `synthesize([segment])` call per segment through a bounded thread
+pool and restores result order before alignment. Backends must therefore be safe for concurrent
+calls, or serialize internally.
 
 ---
 
@@ -202,6 +241,314 @@ results = batch_dub(
 for path, segs in results.items():
     print(f"{path}: {len(segs)} segments")
 ```
+
+---
+
+## Local transcription
+
+The transcription boundary has independent MLX and Faster-Whisper backends.
+Install the backend appropriate for the host.
+
+For Linux/Windows with an NVIDIA GPU:
+
+```bash
+pip install -e '.[transcription-faster]'
+dubbing-gpu transcribe recording.m4a \
+  --asr-backend faster-whisper \
+  --asr-model large-v3-turbo \
+  --asr-device cuda \
+  --asr-compute-type float16 \
+  --output transcript.json
+```
+
+`int8_float16` uses less VRAM if another GPU workload must run concurrently.
+The `dubbing-gpu` launcher exposes the CUDA runtime libraries installed inside
+the active virtual environment; it does not require a system-wide CUDA toolkit.
+
+For Apple silicon:
+
+Install the MLX Whisper backend:
+
+```bash
+pip install -e '.[transcription-mlx]'
+```
+
+Transcribe an audio or video file to versioned JSON:
+
+```bash
+python -m dubbing transcribe recording.m4a \
+  --output transcript.json \
+  --format json
+```
+
+SRT and plain-text renderers use the same transcript model:
+
+```bash
+python -m dubbing transcribe recording.m4a --format srt --output transcript.srt
+python -m dubbing transcribe recording.m4a --format text --output transcript.txt
+```
+
+For long recordings, use resumable chunks. The checkpoint is written atomically
+and is accepted only when the source hash, backend identity, chunk settings, language,
+task, prompt, and word-timestamp policy still match:
+
+```bash
+python -m dubbing transcribe day.m4a \
+  --checkpoint-dir checkpoints/day \
+  --chunk-seconds 1800 \
+  --output day.json
+```
+
+Transcription and diarisation remain independent plugins. They can be composed
+when local Sherpa-ONNX models are configured:
+
+```bash
+python -m dubbing transcribe conversation.wav \
+  --diarize \
+  --segmentation-model models/segmentation.onnx \
+  --embedding-model models/embedding.onnx \
+  --output attributed.json
+```
+
+Word and segment timestamps are preserved. Speaker attribution explicitly marks
+silence, overlap, and ambiguity instead of inventing a dominant speaker. Audio
+and transcripts remain local unless the caller deliberately moves them.
+
+---
+
+## Personal Capture Inbox
+
+The dogfood capture layer turns stable local recordings into reviewable evidence
+packages. It hashes and deduplicates source files, records retryable processing
+state in SQLite, preserves the verbatim transcript, and can add speaker
+diarisation plus segment-level English translations for English, Korean,
+Romanian, and Russian.
+
+Install the personal translation dependencies separately from the audio stack:
+
+```bash
+pip install -e '.[understanding-nvidia,translation-local]'
+```
+
+Scan an inbox on the Gigabyte:
+
+```bash
+dubbing-gpu capture scan \
+  /home/gutua/software-factory/giga-user/life-logging/audio-processing/recordings/inbox \
+  --workspace /home/gutua/software-factory/giga-user/life-logging/audio-processing \
+  --asr-backend faster-whisper \
+  --asr-model large-v3-turbo \
+  --asr-device cuda \
+  --asr-compute-type float16 \
+  --translate-to en \
+  --diarize \
+  --segmentation-model models/segmentation.onnx \
+  --embedding-model models/embedding.onnx
+```
+
+Every package initially stops in `review`. After reviewing the transcript and
+supplying any known speaker aliases, approve it explicitly:
+
+```bash
+dubbing-gpu capture approve CAPTURE_SHA256 \
+  --config /home/gutua/.config/dubbing-studio/personal-capture.json \
+  --speaker SPEAKER_00=Artiom
+```
+
+Approval emits `giga-event.json` beside the transcript and publishes a self-contained,
+hash-verified directory under `outbox/giga/<capture-sha256>/`. The bundle contains the event,
+reviewed transcript, optional translation, and approval record. It does not directly modify
+GIGA memory; a later ingestion adapter can verify the complete bundle and remain idempotent.
+
+The initial NLLB backend is for private dogfooding. Its checkpoint is
+CC-BY-NC-4.0 and is not the eventual commercial translation backend.
+
+The permanent Gigabyte paths and safety boundaries are versioned in
+`deploy/personal_capture/gigabyte/personal-capture.json`. The landing inbox is Windows-visible,
+while the ledger and derived evidence remain on the WSL filesystem. Production
+ASR and translation directories are also bound to exact commit revisions and
+complete file hashes by `dubbing-capture-model-manifest`; watcher startup fails
+if the approved manifest no longer matches.
+
+---
+
+## Local speaker diarisation
+
+Dubbing Studio can answer “who spoke when?” in source audio and map those turns
+onto the existing subtitle/dubbing segment plan without moving or splitting any
+subtitle timestamp. The production backend is
+[Sherpa-ONNX](https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/index.html)
+with its public ONNX conversion of pyannote segmentation 3.0 and a public NeMo
+TitaNet speaker-embedding model. Model inference is local; no audio is uploaded.
+
+### Install
+
+CPU inference, suitable for ordinary laptops:
+
+```bash
+pip install -e '.[diarization]'
+```
+
+Python 3.12 is the exercised/recommended interpreter for the current Sherpa
+wheels.
+
+The standard PyPI wheel is CPU-only. For an NVIDIA GPU, replace it with the
+official Sherpa CUDA wheel matching the installed CUDA/CUDNN runtime. The path
+exercised on an RTX 4060 Laptop GPU was:
+
+```bash
+pip uninstall -y sherpa-onnx
+pip install 'sherpa-onnx==1.13.4+cuda12.cudnn9' \
+  -f https://k2-fsa.github.io/sherpa/onnx/cuda.html
+pip install nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 \
+  nvidia-cufft-cu12 nvidia-curand-cu12
+```
+
+CUDA runtime libraries must be visible to the dynamic linker before Python
+starts. With NVIDIA's pip runtime packages:
+
+```bash
+DIAR_SITE_PACKAGES="$(python -c 'import site; print(site.getsitepackages()[0])')"
+export LD_LIBRARY_PATH="$DIAR_SITE_PACKAGES/nvidia/cublas/lib:$DIAR_SITE_PACKAGES/nvidia/cuda_runtime/lib:$DIAR_SITE_PACKAGES/nvidia/cuda_nvrtc/lib:$DIAR_SITE_PACKAGES/nvidia/cudnn/lib:$DIAR_SITE_PACKAGES/nvidia/cufft/lib:$DIAR_SITE_PACKAGES/nvidia/curand/lib:$DIAR_SITE_PACKAGES/nvidia/nvjitlink/lib:${LD_LIBRARY_PATH:-}"
+```
+
+`--diarization-device` is always explicit: `cpu` or `cuda`. A CPU-only wheel
+with `cuda` requested is rejected before inference. CUDA initialization/runtime
+errors are surfaced; the application never silently falls back to CPU.
+
+### Acquire the public models
+
+Keep weights outside the checkout, for example under
+`$XDG_CACHE_HOME/dubbing-studio/models`:
+
+```bash
+DIAR_MODELS="${XDG_CACHE_HOME:-$HOME/.cache}/dubbing-studio/models"
+mkdir -p "$DIAR_MODELS"
+curl -L -o "$DIAR_MODELS/segmentation.tar.bz2" \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
+tar -xjf "$DIAR_MODELS/segmentation.tar.bz2" -C "$DIAR_MODELS"
+curl -L -o "$DIAR_MODELS/nemo_en_titanet_small.onnx" \
+  https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx
+
+export DUBBING_DIARIZATION_SEGMENTATION_MODEL="$DIAR_MODELS/sherpa-onnx-pyannote-segmentation-3-0/model.onnx"
+export DUBBING_DIARIZATION_EMBEDDING_MODEL="$DIAR_MODELS/nemo_en_titanet_small.onnx"
+```
+
+These release downloads are not gated and require no account or access token.
+Review the licence files shipped with each model before commercial deployment.
+Do not commit weights or caches.
+
+### CLI
+
+Machine-readable diarisation, with optional subtitle attribution:
+
+```bash
+python -m dubbing diarize source.wav \
+  --srt source.srt \
+  --diarization-device cuda \
+  --num-speakers 2 \
+  --output out/source.diarization.json
+```
+
+Run source-audio diarisation, subtitle attribution, the existing TTS core, and
+timeline assembly in one operation:
+
+```bash
+python -m dubbing dub source.srt \
+  --source-audio source.wav \
+  --backend espeak \
+  --diarization-device cuda \
+  --num-speakers 2 \
+  --output out/
+```
+
+The integrated command writes:
+
+- `source.wav`: the timeline-true dubbed output;
+- `source.json`: the existing segment plan plus `speaker`, `speakers`,
+  `speaker_status`, per-speaker overlap durations, and speech coverage;
+- `source.diarization.json`: raw typed turns and backend/model/device metadata.
+
+Pass model paths explicitly with `--segmentation-model` and
+`--embedding-model` when the environment variables above are not set.
+`--num-speakers` supplies a known exact count. Sherpa also supports automatic
+threshold clustering (`--cluster-threshold`, default `0.5`). Its API does not
+guarantee min/max-only counts, so `--min-speakers`/`--max-speakers` without an
+exact count fail clearly instead of pretending the constraint was honoured.
+
+### Python API
+
+```python
+from dubbing.backends.espeak import EspeakTTSBackend
+from dubbing.diarization import (
+    SherpaOnnxDiarizationBackend,
+    SpeakerConstraints,
+)
+from dubbing.pipeline import DubbingPipeline
+
+diarizer = SherpaOnnxDiarizationBackend(
+    segmentation_model="/models/segmentation/model.onnx",
+    embedding_model="/models/nemo_en_titanet_small.onnx",
+    device="cuda",
+)
+timed, tts, diarization, attribution = DubbingPipeline(
+    EspeakTTSBackend()
+).run_full_with_diarization(
+    "source.srt",
+    "source.wav",
+    diarizer,
+    constraints=SpeakerConstraints(num_speakers=2),
+)
+```
+
+`SpeakerTurn` uses integer milliseconds and stable first-appearance labels
+(`SPEAKER_00`, `SPEAKER_01`, ...). Intervals are half-open, so a turn beginning
+at a subtitle's end cannot leak into it. Segment status is explicit:
+
+| Status | Meaning |
+|---|---|
+| `attributed` | Exactly one speaker overlaps the window. |
+| `no_speech` | No diarised speech overlaps; `speaker` is `null`. |
+| `speaker_boundary` | The subtitle crosses sequential speakers; `speaker` is `null`. |
+| `overlap` | Speakers talk simultaneously; `speaker` is `null` and all labels/durations are retained. |
+
+Sherpa's current offline result object does not expose calibrated per-turn
+confidence, so `confidence` is `null` and `confidence_available` is `false`.
+No confidence value is fabricated.
+
+### Media, privacy, and limitations
+
+Native 16 kHz mono 16-bit PCM WAV is read directly. Other audio/video formats
+and WAV formats needing resampling require `ffmpeg`; missing/invalid media
+produces an actionable error. The direct one-shot diarization backend rejects
+inputs longer than four hours before model inference. Personal Capture processes
+a recording as independent two-hour resumable chunks and has a separate 24-hour
+admission ceiling.
+
+Speaker embeddings encode voice characteristics and should be treated as
+sensitive biometric-like data. This backend keeps embeddings inside the
+inference process and persists only anonymous labels/timestamps, but operators
+must still protect source recordings, derived JSON, caches, logs, and any future
+backend that chooses to persist embeddings. Delete source media and outputs
+according to the project's retention policy.
+
+Diarisation accuracy is data-dependent. Clean conversational speech with
+distinct voices and known speaker count performs best. Crosstalk, very short
+turns, noise, reverberation, music, synthetic voices, and domain/language shift
+can cause missed speech or speaker confusion. Anonymous labels identify a
+consistent cluster within one file, not a real-world identity and not the same
+person across files. Inspect consequential output; this module does not claim a
+universal error rate.
+
+### Architecture
+
+`DiarizationBackend` is injectable and returns a typed `DiarizationResult`.
+`SherpaOnnxDiarizationBackend` owns media decoding and model inference.
+`attribute_timed_segments` joins speaker turns to the studio's existing
+`TimedSegment` windows, and `DubbingPipeline.run_full_with_diarization` composes
+that join with the existing parse → prosody → TTS → align flow. This keeps
+diarisation replaceable and prevents speaker analysis from becoming a second,
+divergent dubbing pipeline.
 
 ---
 

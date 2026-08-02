@@ -203,6 +203,13 @@ def _synthesize_with_say(
         return wav_path.read_bytes()
 
 
+def _require_commands() -> None:
+    if shutil.which("say") is None:
+        raise RuntimeError("'say' command not found; macOS TTS is unavailable")
+    if shutil.which("afconvert") is None:
+        raise RuntimeError("'afconvert' command not found; macOS TTS is unavailable")
+
+
 class SayTTSBackend(TTSBackend):
     """TTS backend using macOS `say` and `afconvert`.
 
@@ -213,6 +220,11 @@ class SayTTSBackend(TTSBackend):
     """
 
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
+        if not segments:
+            return []
+        # Check both commands before querying voices so missing afconvert is
+        # reported deterministically and no unavailable subprocess is spawned.
+        _require_commands()
         results: list[TTSResult] = []
         for seg in segments:
             voice = _voice_for_language(seg.language)
