@@ -177,6 +177,8 @@ def evaluate_transcript_quality(
         )
 
     adjacent_duplicates = 0
+    adjacent_duplicate_chain = 0
+    max_adjacent_duplicate_chain = 0
     timestamp_overlaps = 0
     large_gaps: list[tuple[int, int]] = []
     previous: TranscriptSegment | None = None
@@ -184,6 +186,12 @@ def evaluate_transcript_quality(
         if previous is not None:
             if _normalize(previous.text) == _normalize(segment.text):
                 adjacent_duplicates += 1
+                adjacent_duplicate_chain += 1
+                max_adjacent_duplicate_chain = max(
+                    max_adjacent_duplicate_chain, adjacent_duplicate_chain
+                )
+            else:
+                adjacent_duplicate_chain = 0
             if segment.start_ms < previous.start_ms:
                 issues.append(
                     QualityIssue(
@@ -200,6 +208,16 @@ def evaluate_transcript_quality(
             if gap > max_gap_ms:
                 large_gaps.append((previous.end_ms, segment.start_ms))
         diagnostics = segment.diagnostics
+        if segment.text == "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]":
+            issues.append(
+                QualityIssue(
+                    "span_transcription_failed",
+                    "critical",
+                    "A local span exhausted all configured transcription attempts.",
+                    segment.start_ms,
+                    segment.end_ms,
+                )
+            )
         if diagnostics and diagnostics.fallback_exhausted:
             issues.append(
                 QualityIssue(
@@ -215,7 +233,12 @@ def evaluate_transcript_quality(
 
     token, token_run = _max_token_run(tokens)
     phrase, phrase_run = _max_phrase_run(tokens)
-    if token_run >= 8 or phrase_run >= 6 or adjacent_duplicates >= 3:
+    if (
+        token_run >= 8
+        or phrase_run >= 6
+        or adjacent_duplicates >= 20
+        or max_adjacent_duplicate_chain >= 4
+    ):
         issues.append(
             QualityIssue(
                 "pathological_repetition",
@@ -227,6 +250,7 @@ def evaluate_transcript_quality(
                     "max_phrase": phrase,
                     "max_phrase_run": phrase_run,
                     "adjacent_duplicate_segment_transitions": adjacent_duplicates,
+                    "max_adjacent_duplicate_chain": max_adjacent_duplicate_chain,
                 },
             )
         )
@@ -318,6 +342,7 @@ def evaluate_transcript_quality(
             "speech_coverage_ratio": round(coverage_ratio, 6),
             "tokens_per_second_of_segment_time": round(speaking_rate, 4),
             "adjacent_duplicate_segment_transitions": adjacent_duplicates,
+            "max_adjacent_duplicate_chain": max_adjacent_duplicate_chain,
             "max_token_run": token_run,
             "max_phrase_run": phrase_run,
             "timestamp_overlap_count": timestamp_overlaps,

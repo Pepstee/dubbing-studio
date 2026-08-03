@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 
@@ -14,6 +15,8 @@ class SegmentTranslation:
     target_language: str
     status: str
     speaker: str | None = None
+    source_segment_id: str | None = None
+    source_segment_sha256: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -26,7 +29,16 @@ class SegmentTranslation:
             "target_text": self.target_text,
             "target_language": self.target_language,
             "status": self.status,
+            "source_segment_id": self.source_segment_id,
+            "source_segment_sha256": self.source_segment_sha256,
+            "original_language_authoritative": True,
         }
+
+
+def source_segment_identity(start_ms: int, end_ms: int, text: str) -> tuple[str, str]:
+    encoded = f"{start_ms}:{end_ms}:{text}".encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()
+    return f"segment:{start_ms}-{end_ms}:{digest[:16]}", digest
 
 
 @dataclass(frozen=True)

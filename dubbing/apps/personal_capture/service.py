@@ -25,12 +25,18 @@ from dubbing.transcription import (
     transcript_to_text,
 )
 from dubbing.transcription.job import media_duration_ms
+from dubbing.transcription.quality import (
+    TranscriptQualityReport,
+    TranscriptQualityStatus,
+    evaluate_transcript_quality,
+)
 from dubbing.translation import (
     LanguageDetector,
     ResumableTranslationJob,
     TranslationBackend,
     translate_transcript,
 )
+from dubbing.translation.models import source_segment_identity
 
 _PACKAGE_SCHEMA = "dubbing.personal-capture.v1"
 _GIGA_EVENT_SCHEMA = "giga.personal-capture-event.v1"
@@ -186,6 +192,7 @@ class CaptureService:
         record: CaptureRecord,
         transcript,
         translation=None,
+        quality_report: TranscriptQualityReport | None = None,
     ) -> Path:
         destination = self.packages / record.capture_id
         staging = self.packages / f".{record.capture_id}.staging"
@@ -221,6 +228,15 @@ class CaptureService:
                     "srt": "transcript.srt",
                 },
                 "translation": None,
+                "quality": (
+                    {
+                        "report": "quality-report.json",
+                        "status": quality_report.status.value,
+                        "policy_version": quality_report.policy_version,
+                    }
+                    if quality_report is not None
+                    else None
+                ),
                 "review": {
                     "required": True,
                     "speaker_aliases": {},
@@ -240,6 +256,11 @@ class CaptureService:
                 encoding="utf-8",
             )
             (staging / "manifest.json").write_text(_json(manifest), encoding="utf-8")
+            if quality_report is not None:
+                (staging / "quality-report.json").write_text(
+                    _json(quality_report.to_dict()),
+                    encoding="utf-8",
+                )
             if translation is not None:
                 translation_document = translation.to_dict()
                 (staging / "translation.json").write_text(
@@ -355,8 +376,16 @@ class CaptureService:
                     diarizer=self.diarizer,
                     speaker_constraints=self.speaker_constraints,
                 )
+            quality_report = evaluate_transcript_quality(
+                transcript,
+                expected_duration_ms=duration_ms if self.resumable else transcript.duration_ms,
+            )
             translation = None
-            if self.translation_backend is not None and self.language_detector is not None:
+            if (
+                quality_report.status is TranscriptQualityStatus.PASS
+                and self.translation_backend is not None
+                and self.language_detector is not None
+            ):
                 if self.resumable:
                     translation = ResumableTranslationJob(
                         self.language_detector,
@@ -383,6 +412,7 @@ class CaptureService:
                 record,
                 transcript,
                 translation,
+                quality_report,
             )
             self.store.transition(record.capture_id, "review", package_path=str(package))
             return CaptureOutcome(record.capture_id, path.name, "review", package)
@@ -445,6 +475,35 @@ class CaptureService:
         transcript = transcription_result_from_dict(transcript_document)
         manifest_path = package / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        quality_path = package / "quality-report.json"
+        quality_sha256 = None
+        quality_status = None
+        if manifest.get("quality") is not None:
+            if not quality_path.is_file():
+                raise ValueError("quality-controlled package is missing quality-report.json")
+            quality_report = TranscriptQualityReport.from_dict(
+                json.loads(quality_path.read_text(encoding="utf-8"))
+            )
+            refreshed = evaluate_transcript_quality(
+                transcript,
+                expected_duration_ms=transcript.duration_ms,
+            )
+            if refreshed.to_dict() != quality_report.to_dict():
+                _atomic_text(quality_path, _json(refreshed.to_dict()))
+                quality_report = refreshed
+            quality_status = quality_report.status.value
+            if quality_report.status in {
+                TranscriptQualityStatus.FAILED,
+                TranscriptQualityStatus.REPROCESS_REQUIRED,
+            }:
+                raise ValueError(
+                    f"transcript quality is {quality_status}; approval and outbox emission are blocked"
+                )
+            if quality_report.status is not TranscriptQualityStatus.PASS and not notes.strip():
+                raise ValueError(
+                    f"transcript quality is {quality_status}; explicit review notes are required"
+                )
+            quality_sha256 = _sha256(quality_path)
         _atomic_text(package / "transcript.txt", transcript_to_text(transcript))
         _atomic_text(package / "transcript.srt", transcript_to_srt(transcript))
         transcript_sha256 = _sha256(transcript_path)
@@ -460,6 +519,13 @@ class CaptureService:
             ):
                 if translated.get("source_text") != source.text:
                     raise ValueError("translation source text is stale")
+                source_id, source_hash = source_segment_identity(
+                    source.start_ms, source.end_ms, source.text
+                )
+                if translated.get("source_segment_id") not in {None, source_id}:
+                    raise ValueError("translation source segment identity is stale")
+                if translated.get("source_segment_sha256") not in {None, source_hash}:
+                    raise ValueError("translation source segment hash is stale")
                 if translated.get("status") == "source_changed_review_required":
                     raise ValueError(
                         "translation requires review after a source transcript edit"
@@ -487,6 +553,7 @@ class CaptureService:
                     transcript_sha256,
                     translation_sha256,
                     approval_sha256,
+                    quality_sha256,
                 )
                 if value is not None
             ).encode("ascii")
@@ -504,6 +571,8 @@ class CaptureService:
                 "transcript_sha256": transcript_sha256,
                 "translation_sha256": translation_sha256,
                 "approval_sha256": approval_sha256,
+                "quality_report_sha256": quality_sha256,
+                "quality_status": quality_status,
             },
             "payload": {
                 "transcript_file": "transcript.json",
@@ -511,8 +580,13 @@ class CaptureService:
                     "translation.json" if translation_path.is_file() else None
                 ),
                 "approval_file": "approval.json",
+                "quality_report_file": (
+                    "quality-report.json" if quality_path.is_file() else None
+                ),
                 "speaker_aliases": aliases,
                 "review_notes": notes,
+                "original_language_authoritative": True,
+                "memory_admission": "operator-reviewed-evidence-only",
             },
         }
         _atomic_text(package / "giga-event.json", _json(event))
@@ -526,6 +600,7 @@ class CaptureService:
             "transcript.json": transcript_sha256,
             "translation.json": translation_sha256,
             "approval.json": approval_sha256,
+            "quality-report.json": quality_sha256,
         }
         _atomic_text(manifest_path, _json(manifest))
         self.store.transition(capture_id, "approved")
@@ -610,7 +685,15 @@ class CaptureService:
                 if len(target) > 20_000:
                     raise ValueError("translation segment is too long")
                 old_target = existing.get("target_text") or ""
-                existing["source_text"] = transcript["segments"][index]["text"]
+                source_segment = transcript["segments"][index]
+                existing["source_text"] = source_segment["text"]
+                source_id, source_hash = source_segment_identity(
+                    source_segment["start_ms"],
+                    source_segment["end_ms"],
+                    source_segment["text"],
+                )
+                existing["source_segment_id"] = source_id
+                existing["source_segment_sha256"] = source_hash
                 existing["target_text"] = target
                 if source_changed[index] and target == old_target:
                     existing["status"] = "source_changed_review_required"

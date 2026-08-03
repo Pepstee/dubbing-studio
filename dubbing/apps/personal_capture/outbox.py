@@ -13,6 +13,7 @@ _EVIDENCE_FIELDS = {
     "transcript_file": "transcript_sha256",
     "translation_file": "translation_sha256",
     "approval_file": "approval_sha256",
+    "quality_report_file": "quality_report_sha256",
 }
 
 

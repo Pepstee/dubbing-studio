@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dubbing.transcription.models import TranscriptionResult
 from dubbing.translation.base import LanguageDetector, TranslationBackend
-from dubbing.translation.models import SegmentTranslation, TranslationResult
+from dubbing.translation.models import (
+    SegmentTranslation,
+    TranslationResult,
+    source_segment_identity,
+)
 
 
 def translate_segment(
@@ -13,6 +17,9 @@ def translate_segment(
     target_language: str,
     supported_source_languages: tuple[str, ...],
 ) -> SegmentTranslation:
+    source_segment_id, source_segment_sha256 = source_segment_identity(
+        segment.start_ms, segment.end_ms, segment.text
+    )
     language, confidence = detector.detect(segment.text)
     if language is None:
         target_text = None
@@ -40,6 +47,8 @@ def translate_segment(
         target_text=target_text,
         target_language=target_language,
         status=status,
+        source_segment_id=source_segment_id,
+        source_segment_sha256=source_segment_sha256,
     )
 
 

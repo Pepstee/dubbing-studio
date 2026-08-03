@@ -1,5 +1,10 @@
 # Dubbing Studio
 
+For provider-neutral, fail-closed long-video transcription, see
+[`docs/TRANSCRIPTION_CONTROL_PLANE.md`](docs/TRANSCRIPTION_CONTROL_PLANE.md). The migration and
+rollback boundary from the certified personal-capture baseline is documented in
+[`docs/MIGRATION_TRANSCRIPTION_CONTROL_PLANE.md`](docs/MIGRATION_TRANSCRIPTION_CONTROL_PLANE.md).
+
 Architecture, certification and the first real recording procedure are in:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)

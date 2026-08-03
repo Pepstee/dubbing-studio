@@ -37,6 +37,8 @@ def _segment_from_dict(document: dict) -> SegmentTranslation:
         target_text=document.get("target_text"),
         target_language=document["target_language"],
         status=document["status"],
+        source_segment_id=document.get("source_segment_id"),
+        source_segment_sha256=document.get("source_segment_sha256"),
     )
 
 

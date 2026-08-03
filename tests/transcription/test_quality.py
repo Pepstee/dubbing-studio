@@ -65,3 +65,21 @@ def test_uncertain_span_is_not_approval_ready():
 def test_empty_output_is_failed():
     report = evaluate_transcript_quality(_result("", ()))
     assert report.status is TranscriptQualityStatus.FAILED
+
+
+def test_scattered_legitimate_duplicate_segments_do_not_form_a_loop():
+    segments = tuple(
+        TranscriptSegment(index * 1000, index * 1000 + 900, text)
+        for index, text in enumerate(("yes", "yes", "next", "okay", "okay", "done"))
+    )
+    report = evaluate_transcript_quality(_result(" ".join(item.text for item in segments), segments))
+    assert "pathological_repetition" not in {item.code for item in report.issues}
+
+
+def test_failed_span_placeholder_requires_reprocessing():
+    segment = TranscriptSegment(
+        0, 1000, "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]", uncertain=True
+    )
+    report = evaluate_transcript_quality(_result(segment.text, (segment,)))
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert "span_transcription_failed" in {item.code for item in report.issues}

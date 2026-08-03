@@ -57,6 +57,9 @@ def test_translates_each_supported_language_and_preserves_source():
         "translated",
     ]
     assert result.segments[1].target_text == "ru>en:Привет"
+    assert result.segments[1].source_segment_id.startswith("segment:1000-2000:")
+    assert len(result.segments[1].source_segment_sha256) == 64
+    assert result.segments[1].to_dict()["original_language_authoritative"] is True
 
 
 def test_uncertain_language_is_not_guessed_or_translated():
