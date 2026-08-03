@@ -1,11 +1,18 @@
 import io
 import json
+import subprocess
+import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
 from dubbing.transcription.models import TranscriptionOptions
-from dubbing.transcription.whisperkit import WhisperKitTranscriptionBackend
+from dubbing.transcription.whisperkit import (
+    WhisperKitServerProcess,
+    WhisperKitTranscriptionBackend,
+)
 
 
 class _Response(io.BytesIO):
@@ -57,3 +64,27 @@ def test_whisperkit_local_server_parses_verbose_diagnostics(tmp_path):
 def test_whisperkit_endpoint_must_be_loopback_http(url):
     with pytest.raises(ValueError, match="loopback"):
         WhisperKitTranscriptionBackend(model="small", endpoint=url)
+
+
+def test_persistent_server_logs_to_nonblocking_file(tmp_path):
+    model = tmp_path / "model"
+    model.mkdir()
+    process = MagicMock()
+    process.poll.return_value = None
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    with (
+        patch(
+            "dubbing.transcription.whisperkit.subprocess.run",
+            return_value=SimpleNamespace(stdout="v1", stderr=""),
+        ),
+        patch("dubbing.transcription.whisperkit.subprocess.Popen", return_value=process) as popen,
+        patch("dubbing.transcription.whisperkit.socket.create_connection", return_value=connection),
+    ):
+        server = WhisperKitServerProcess(executable=sys.executable, model_path=model)
+        server.start()
+        kwargs = popen.call_args.kwargs
+        assert kwargs["stdout"] != subprocess.PIPE
+        assert kwargs["stdout"].writable()
+        assert kwargs["stderr"] == subprocess.STDOUT
+        server.close()

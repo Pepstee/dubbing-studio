@@ -1,0 +1,194 @@
+{
+  "schema_version": "dubbing.provider-benchmark-report.v1",
+  "fixture_id": "lesson-2026-08-01-193908",
+  "measured_at": "2026-08-03",
+  "admission_verdict": "rejected_fail_closed",
+  "source": {
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "duration_ms": 4987833,
+    "size_bytes": 3845699125
+  },
+  "reference": {
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "kind": "macwhisper-provisional-untimed-text",
+    "human_ground_truth": false,
+    "limitations": [
+      "No timestamped reference exists, so per-time-window WER/CER is unavailable.",
+      "No turn-level language labels exist, so English and Romanian cannot be separated defensibly.",
+      "No speaker reference labels exist, so DER/JER and speaker-attributed WER are unavailable."
+    ]
+  },
+  "candidate": {
+    "result_sha256": "44a9f78aede4631643fa10413d4e9af4d57ea056e24ed769c3471475413354ab",
+    "quality_report_sha256": "40c3a226e133f526f025fcf93f262d9e2e0ecf67522b5ca6700272cfc4b0091f",
+    "run_receipt_sha256": "51471ec22f205ac749da4f456015297d34f33b861ccea48f44a2da743f5f16eb",
+    "transcript_committed": false,
+    "giga_admission_attempted": false
+  },
+  "backend": {
+    "provider": "whisperkit-local-server",
+    "cli_version": "v1.0.0",
+    "model": "openai_whisper-large-v3-v20240930_626MB",
+    "model_tree_sha256": "c73998182489f578953408b4b7a6797433c3744304963500799eef8e6aacaa8c",
+    "model_size_bytes": 626718238,
+    "configuration": {
+      "temperature": 0,
+      "temperature_fallback_count": 0,
+      "word_timestamps": true,
+      "chunking_strategy": "vad",
+      "candidate_languages": [
+        "en",
+        "ru",
+        "ro",
+        "ko"
+      ],
+      "adaptive_planner": {
+        "target_ms": 240000,
+        "minimum_ms": 60000,
+        "maximum_ms": 480000,
+        "overlap_ms": 2000,
+        "chunk_count": 19
+      }
+    }
+  },
+  "runtime": {
+    "cold_end_to_end_seconds": 1049.754,
+    "cold_end_to_end_realtime_factor": 0.210463,
+    "source_seconds_per_processing_second": 4.75143,
+    "checkpoint_resume_seconds_for_final_four_chunks": 533.128,
+    "initial_attempt_note": "The first run was interrupted after 15 checkpoints when process sampling proved that the persistent server was blocked by undrained console-log pipes. The wrapper was fixed and the clean cold run produced byte-identical result and quality-report files."
+  },
+  "metrics": {
+    "wer": {
+      "reference_units": 3612,
+      "candidate_units": 1924,
+      "edits": 2304,
+      "rate": 0.6378737541528239
+    },
+    "cer": {
+      "reference_units": 14923,
+      "candidate_units": 8277,
+      "edits": 9124,
+      "rate": 0.6114052134289352
+    },
+    "per_script": {
+      "cyrillic": {
+        "reference_units": 417,
+        "candidate_units": 414,
+        "edits": 259,
+        "wer": 0.6211031175059952
+      },
+      "hangul": {
+        "reference_units": 15,
+        "candidate_units": 0,
+        "edits": 15,
+        "wer": 1.0
+      },
+      "latin": {
+        "reference_units": 3158,
+        "candidate_units": 1500,
+        "edits": 2064,
+        "wer": 0.6535782140595313
+      },
+      "other": {
+        "reference_units": 22,
+        "candidate_units": 10,
+        "edits": 18,
+        "wer": 0.8181818181818182
+      }
+    },
+    "candidate_segment_languages": {
+      "en": 276,
+      "ru": 114,
+      "unknown": 5,
+      "ro": 0,
+      "ko": 0
+    },
+    "segment_count": 395,
+    "uncertain_segment_count": 32,
+    "decoder_fallback_exhausted_segment_count": 0,
+    "failed_chunk_count_before_overlap_reconciliation": 7,
+    "failed_span_count_after_overlap_reconciliation": 5,
+    "adjacent_duplicate_segment_transitions_after_fail_closed_replacement": 5,
+    "max_token_run_after_fail_closed_replacement": 4,
+    "timestamp_overlap_count": 15,
+    "speech_coverage_ratio": 0.506435
+  },
+  "rejected_attempt_evidence": [
+    {
+      "chunk": 1,
+      "max_phrase": "vine",
+      "max_phrase_run": 217
+    },
+    {
+      "chunk": 5,
+      "max_phrase": "leaves",
+      "max_phrase_run": 8,
+      "max_adjacent_duplicate_chain": 7
+    },
+    {
+      "chunk": 8,
+      "max_phrase": "it",
+      "max_phrase_run": 50
+    },
+    {
+      "chunk": 15,
+      "max_phrase": "laughs",
+      "max_phrase_run": 5
+    },
+    {
+      "chunk": 16,
+      "max_phrase": "no",
+      "max_phrase_run": 3,
+      "max_adjacent_duplicate_chain": 4
+    },
+    {
+      "chunk": 18,
+      "max_phrase": "このように",
+      "max_phrase_run": 73
+    }
+  ],
+  "quality": {
+    "status": "REPROCESS_REQUIRED",
+    "approval_allowed": false,
+    "critical_issue_counts": {
+      "span_transcription_failed": 5
+    },
+    "review_issue_counts": {
+      "large_unexplained_gaps": 1
+    }
+  },
+  "comparison": {
+    "whisperkit_small": {
+      "model_tree_sha256": "7386fb09f71127d2b6d2fce7800d86e3b1be6968af8bbba7e771fc8883d70261",
+      "model_size_bytes": 486487465,
+      "result_sha256": "f4a47a36ac91b16ca97d221e8df5c755f15619cbe0d9f1e4a4ca6280f29def92",
+      "runtime_seconds": 227.097,
+      "wer": 0.5534330011074197,
+      "cer": 0.5115593379347316,
+      "quality_status": "REPROCESS_REQUIRED",
+      "failed_span_count": 2,
+      "uncertain_segment_count": 42,
+      "adjacent_duplicate_segment_transitions": 5,
+      "max_token_run": 4,
+      "cyrillic_candidate_units": 0,
+      "hangul_candidate_units": 0
+    },
+    "defective_mlx_large_v3_turbo": {
+      "result_sha256": "a42ccd85d0206493dadd78a989688bb1d1f5ebcb4623c745855c61dccb037fb9",
+      "runtime_seconds": 2280,
+      "wer": 0.49916943521594687,
+      "cer": 0.4682704550023454,
+      "quality_status": "REPROCESS_REQUIRED",
+      "adjacent_duplicate_segment_transitions": 145,
+      "max_adjacent_duplicate_chain": 32,
+      "max_token": "loops",
+      "max_token_run": 109
+    }
+  },
+  "verdict": {
+    "promotion": "rejected",
+    "reason": "The candidate is slower and less accurate than WhisperKit-small, contains deterministic pathological repetitions in seven chunk candidates, exhausts five reconciled spans, fails Korean recovery, and does not satisfy the transcript quality contract.",
+    "next_smallest_gate": "Replace whole-chunk forced-language retries with VAD-bounded targeted retries around only the detected pathological intervals, then rerun those seven failed chunks with the already-downloaded model. No new model, cloud provider, or private upload is required."
+  }
+}

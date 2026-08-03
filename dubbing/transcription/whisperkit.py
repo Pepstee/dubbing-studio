@@ -6,12 +6,14 @@ import json
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import replace
 from pathlib import Path
+from typing import TextIO
 from urllib.parse import urlparse
 
 from dubbing.transcription.base import TranscriptionBackend
@@ -92,6 +94,7 @@ class WhisperKitServerProcess:
         self.version = (version.stdout or version.stderr).strip() or "unknown"
         self.model_sha256, self.model_size_bytes = _model_tree_fingerprint(self.model_path)
         self.process: subprocess.Popen | None = None
+        self._log_handle: TextIO | None = None
         atexit.register(self.close)
 
     @property
@@ -101,6 +104,12 @@ class WhisperKitServerProcess:
     def start(self) -> None:
         if self.process is not None and self.process.poll() is None:
             return
+        if self._log_handle is not None:
+            self._log_handle.close()
+        # The official server logs every request. A PIPE is unsafe here because
+        # this persistent owner does not continuously drain it; after enough
+        # long-form requests the child can block while writing console output.
+        self._log_handle = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
         command = [
             self.executable,
             "serve",
@@ -121,14 +130,14 @@ class WhisperKitServerProcess:
         self.process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=self._log_handle,
+            stderr=subprocess.STDOUT,
             text=True,
         )
         deadline = time.monotonic() + self.startup_timeout_seconds
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                detail = (self.process.stderr.read() if self.process.stderr else "").strip()
+                detail = self._log_tail()
                 raise TranscriptionError(f"WhisperKit server exited during startup: {detail}")
             try:
                 with socket.create_connection((self.host, self.port), timeout=0.5):
@@ -138,15 +147,26 @@ class WhisperKitServerProcess:
         self.close()
         raise TranscriptionError("WhisperKit local server did not become ready in time")
 
+    def _log_tail(self, limit: int = 16_384) -> str:
+        if self._log_handle is None:
+            return ""
+        self._log_handle.flush()
+        self._log_handle.seek(0, 2)
+        size = self._log_handle.tell()
+        self._log_handle.seek(max(0, size - limit))
+        return self._log_handle.read().strip()
+
     def close(self) -> None:
-        if self.process is None or self.process.poll() is not None:
-            return
-        self.process.terminate()
-        try:
-            self.process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            self.process.kill()
-            self.process.wait(timeout=5)
+        if self.process is not None and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait(timeout=5)
+        if self._log_handle is not None:
+            self._log_handle.close()
+            self._log_handle = None
 
 
 class WhisperKitTranscriptionBackend(TranscriptionBackend):
