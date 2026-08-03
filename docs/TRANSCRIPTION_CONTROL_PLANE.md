@@ -112,8 +112,32 @@ Therefore WhisperKit-small is **rejected for promotion** despite being fast. The
 saved only as a local ignored benchmark artefact under
 `output/control-plane-whisperkit-small-v3/`.
 
-The next official candidate is Argmax's 4-bit
-`openai_whisper-large-v3-v20240930_626MB`, whose published repository size is **627 MB**.
-That model has not been downloaded. Downloading it is an explicit operator gate, after which
-the same 83-minute fixture must be rerun and must be no worse than the provisional reference.
+The authorized 4-bit `openai_whisper-large-v3-v20240930_626MB` benchmark and targeted
+recovery are complete. The repaired candidate has **42.0543% WER**, **37.6801% CER**, no
+failed spans and no decoder-fallback exhaustion. It remains fail-closed at
+`PASS_WITH_UNCERTAIN_SPANS`: 39 turns totalling 30.5 seconds still need a human decision.
 
+## Local uncertain-span review
+
+Build a source- and transcript-hash-bound package without copying the full private recording:
+
+```bash
+dubbing-transcript-review-package \
+  "/path/to/source.mov" \
+  --transcript "/path/to/result.json" \
+  --output "/path/to/private-review-package"
+```
+
+Then start the loopback-only reviewer:
+
+```bash
+dubbing-transcript-review \
+  --package "/path/to/private-review-package" \
+  --port 7444
+```
+
+Open `http://127.0.0.1:7444`. Every uncertain segment has a short WAV clip with bounded
+context. Approve unchanged text, save an explicit correction, or leave it unclear. Decisions
+are written atomically and are resumable. Export is blocked while any item is pending or
+unclear; a successful export retains correction lineage, re-runs the transcript quality
+contract and creates no GIGA event.

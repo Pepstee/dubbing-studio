@@ -17,6 +17,8 @@ dubbing-capture-preflight = "dubbing.apps.personal_capture.preflight:main"
 dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:main"
 dubbing-long-transcribe = "dubbing.control_plane.cli:main"
 dubbing-evaluate-transcript = "dubbing.evaluation.cli:main"
+dubbing-transcript-review-package = "dubbing.apps.transcript_review.package:main"
+dubbing-transcript-review = "dubbing.apps.transcript_review.app:main"
 
 [project.optional-dependencies]
 diarization = [
@@ -77,3 +79,4 @@ include = ["dubbing*"]
 
 [tool.setuptools.package-data]
 "dubbing.apps.personal_capture" = ["templates/*.html", "static/*.css"]
+"dubbing.apps.transcript_review" = ["templates/*.html", "static/*.css", "static/*.js"]
