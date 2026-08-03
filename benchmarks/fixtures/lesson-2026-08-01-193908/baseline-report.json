@@ -1,0 +1,134 @@
+{
+  "backend": {
+    "configuration": {
+      "chunk_seconds": 300,
+      "condition_on_previous_text": false,
+      "hallucination_silence_threshold": 2.0,
+      "overlap_seconds": 5,
+      "temperatures": [
+        0.0,
+        0.2,
+        0.4,
+        0.6,
+        0.8,
+        1.0
+      ],
+      "word_timestamps": true
+    },
+    "model": "mlx-community/whisper-large-v3-turbo",
+    "observed_runtime_seconds": 2280,
+    "promotion_state": "rejected",
+    "provider": "mlx-whisper"
+  },
+  "fixture_id": "lesson-2026-08-01-193908",
+  "metrics": {
+    "cer": {
+      "candidate_units": 16270,
+      "edits": 6988,
+      "rate": 0.4682704550023454,
+      "reference_units": 14923
+    },
+    "language_note": "Script buckets are reported for this untimed mixed-language reference; language-labelled reference turns are required for true per-language WER.",
+    "per_script": {
+      "cyrillic": {
+        "wer": {
+          "candidate_units": 274,
+          "edits": 334,
+          "rate": 0.8009592326139089,
+          "reference_units": 417
+        }
+      },
+      "hangul": {
+        "wer": {
+          "candidate_units": 41,
+          "edits": 41,
+          "rate": 2.7333333333333334,
+          "reference_units": 15
+        }
+      },
+      "latin": {
+        "wer": {
+          "candidate_units": 3690,
+          "edits": 1613,
+          "rate": 0.5107663077897403,
+          "reference_units": 3158
+        }
+      },
+      "other": {
+        "wer": {
+          "candidate_units": 12,
+          "edits": 20,
+          "rate": 0.9090909090909091,
+          "reference_units": 22
+        }
+      }
+    },
+    "per_time_window": [],
+    "schema_version": "dubbing.transcript-evaluation.v1",
+    "time_window_evaluation_available": false,
+    "time_window_limitation": "A timestamped reference is required for defensible window-level WER/CER.",
+    "wer": {
+      "candidate_units": 4017,
+      "edits": 1803,
+      "rate": 0.49916943521594687,
+      "reference_units": 3612
+    }
+  },
+  "quality": {
+    "approval_allowed": false,
+    "issues": [
+      {
+        "code": "pathological_repetition",
+        "end_ms": null,
+        "evidence": {
+          "adjacent_duplicate_segment_transitions": 145,
+          "max_phrase": "loops",
+          "max_phrase_run": 109,
+          "max_token": "loops",
+          "max_token_run": 109
+        },
+        "message": "Repeated decoding output indicates a hallucination loop.",
+        "severity": "critical",
+        "start_ms": null
+      },
+      {
+        "code": "large_unexplained_gaps",
+        "end_ms": null,
+        "evidence": {
+          "gap_count": 2,
+          "largest_gap_ms": 89700
+        },
+        "message": "Long gaps require comparison with VAD evidence.",
+        "severity": "review",
+        "start_ms": null
+      }
+    ],
+    "metrics": {
+      "adjacent_duplicate_segment_transitions": 145,
+      "covered_ms": 2072480,
+      "duration_ms": 4987833,
+      "large_gap_count": 2,
+      "max_phrase_run": 109,
+      "max_token_run": 109,
+      "script_counts": {
+        "cyrillic": 1258,
+        "hangul": 82,
+        "latin": 13900,
+        "other": 109
+      },
+      "segment_count": 815,
+      "speech_coverage_ratio": 0.415507,
+      "timestamp_overlap_count": 4,
+      "token_count": 4017,
+      "tokens_per_second_of_segment_time": 1.9256,
+      "uncertain_segment_count": 0
+    },
+    "policy_version": "dubbing.transcript-quality-policy.v1",
+    "schema_version": "dubbing.transcript-quality-report.v1",
+    "status": "REPROCESS_REQUIRED"
+  },
+  "reference_is_human_ground_truth": false,
+  "reference_kind": "macwhisper-provisional-untimed-text",
+  "schema_version": "dubbing.regression-fixture-report.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+}

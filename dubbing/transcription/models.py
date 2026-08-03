@@ -1,11 +1,57 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Any, Literal
 
 
 class TranscriptionError(RuntimeError):
     """Base error for actionable speech-to-text failures."""
+
+
+@dataclass(frozen=True)
+class DecodeDiagnostics:
+    """Provider-neutral evidence emitted by one decoder window.
+
+    Backends may leave fields unavailable, but must not manufacture replacements.
+    ``backend_metadata`` is deliberately JSON-compatible so provider-specific evidence
+    can be retained without leaking it into quality-policy code.
+    """
+
+    compression_ratio: float | None = None
+    avg_log_probability: float | None = None
+    no_speech_probability: float | None = None
+    temperature: float | None = None
+    fallback_history: tuple[dict[str, Any], ...] = ()
+    language_probabilities: dict[str, float] | None = None
+    fallback_exhausted: bool = False
+    backend_metadata: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "compression_ratio": self.compression_ratio,
+            "avg_log_probability": self.avg_log_probability,
+            "no_speech_probability": self.no_speech_probability,
+            "temperature": self.temperature,
+            "fallback_history": list(self.fallback_history),
+            "language_probabilities": self.language_probabilities,
+            "fallback_exhausted": self.fallback_exhausted,
+            "backend_metadata": self.backend_metadata,
+        }
+
+
+def _diagnostics_from_dict(document: dict | None) -> DecodeDiagnostics | None:
+    if document is None:
+        return None
+    return DecodeDiagnostics(
+        compression_ratio=document.get("compression_ratio"),
+        avg_log_probability=document.get("avg_log_probability"),
+        no_speech_probability=document.get("no_speech_probability"),
+        temperature=document.get("temperature"),
+        fallback_history=tuple(document.get("fallback_history", [])),
+        language_probabilities=document.get("language_probabilities"),
+        fallback_exhausted=bool(document.get("fallback_exhausted", False)),
+        backend_metadata=document.get("backend_metadata"),
+    )
 
 
 @dataclass(frozen=True)
@@ -76,6 +122,10 @@ class TranscriptSegment:
         "overlap",
         "word_attributed",
     ] = "not_requested"
+    language: str | None = None
+    language_confidence: float | None = None
+    uncertain: bool = False
+    diagnostics: DecodeDiagnostics | None = None
 
     def __post_init__(self) -> None:
         if self.start_ms < 0 or self.end_ms <= self.start_ms:
@@ -84,6 +134,8 @@ class TranscriptSegment:
             raise ValueError("segment text cannot be blank")
         if self.confidence is not None and not 0.0 <= self.confidence <= 1.0:
             raise ValueError("segment confidence must be between 0 and 1")
+        if self.language_confidence is not None and not 0.0 <= self.language_confidence <= 1.0:
+            raise ValueError("language_confidence must be between 0 and 1")
         ordered = tuple(sorted(self.words, key=lambda item: (item.start_ms, item.end_ms)))
         if ordered != self.words:
             raise ValueError("segment words must be sorted")
@@ -107,6 +159,10 @@ class TranscriptSegment:
             "speaker": self.speaker,
             "speakers": list(self.speakers),
             "speaker_status": self.speaker_status,
+            "language": self.language,
+            "language_confidence": self.language_confidence,
+            "uncertain": self.uncertain,
+            "diagnostics": self.diagnostics.to_dict() if self.diagnostics else None,
             "words": [word.to_dict() for word in self.words],
         }
 
@@ -123,6 +179,8 @@ class TranscriptionResult:
     confidence_available: bool
     source_sha256: str | None = None
     diarization: dict | None = None
+    diagnostics: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         ordered = tuple(
@@ -159,6 +217,10 @@ class TranscriptionResult:
         }
         if self.diarization is not None:
             result["diarization"] = self.diarization
+        if self.diagnostics is not None:
+            result["diagnostics"] = self.diagnostics
+        if self.provenance is not None:
+            result["provenance"] = self.provenance
         return result
 
 
@@ -188,6 +250,10 @@ def transcription_result_from_dict(document: dict) -> TranscriptionResult:
                 speaker=item.get("speaker"),
                 speakers=tuple(item.get("speakers", [])),
                 speaker_status=item.get("speaker_status", "not_requested"),
+                language=item.get("language"),
+                language_confidence=item.get("language_confidence"),
+                uncertain=bool(item.get("uncertain", False)),
+                diagnostics=_diagnostics_from_dict(item.get("diagnostics")),
             )
         )
     return TranscriptionResult(
@@ -201,4 +267,6 @@ def transcription_result_from_dict(document: dict) -> TranscriptionResult:
         confidence_available=document.get("confidence_available", False),
         source_sha256=document.get("source_sha256"),
         diarization=document.get("diarization"),
+        diagnostics=document.get("diagnostics"),
+        provenance=document.get("provenance"),
     )
