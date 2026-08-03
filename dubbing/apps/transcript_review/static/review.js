@@ -106,16 +106,22 @@
 
   async function saveDecision(status) {
     const item = currentItem();
-    const response = await fetch(`/api/decision/${encodeURIComponent(item.id)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-      body: JSON.stringify({
-        status,
-        text: elements.text.value,
-        language: elements.language.value,
-        notes: elements.notes.value,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(`/api/decision/${encodeURIComponent(item.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({
+          status,
+          text: elements.text.value,
+          language: elements.language.value,
+          notes: elements.notes.value,
+        }),
+      });
+    } catch {
+      showToast("Could not reach the local reviewer. Reload the page and try again.");
+      return;
+    }
     if (!response.ok) {
       showToast("Decision was not saved. Check the transcript and language.");
       return;
@@ -140,10 +146,19 @@
     elements.export.disabled = true;
     elements.export.textContent = "Exporting…";
     elements.exportStatus.textContent = "Running the quality check and writing the reviewed transcript…";
-    const response = await fetch("/api/export", {
-      method: "POST",
-      headers: { "X-CSRF-Token": csrf },
-    });
+    let response;
+    try {
+      response = await fetch("/api/export", {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf },
+      });
+    } catch {
+      elements.export.textContent = "Try export again";
+      elements.export.disabled = false;
+      elements.exportStatus.textContent = "Export was interrupted because the local reviewer disconnected. Reload the page, then try again.";
+      showToast("Export was interrupted. Reload the page and try again.");
+      return;
+    }
     const payload = await response.json();
     elements.export.textContent = "Export reviewed transcript";
     elements.export.disabled = !state.progress.export_ready;
