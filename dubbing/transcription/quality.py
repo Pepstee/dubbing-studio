@@ -155,11 +155,36 @@ def _covered_ms(segments: Iterable[TranscriptSegment]) -> int:
     return total + end - start
 
 
+def _interval_coverage_ms(
+    start_ms: int,
+    end_ms: int,
+    intervals: Iterable[tuple[int, int]],
+) -> int:
+    clipped = sorted(
+        (max(start_ms, start), min(end_ms, end))
+        for start, end in intervals
+        if start < end_ms and end > start_ms
+    )
+    if not clipped:
+        return 0
+    covered = 0
+    cursor_start, cursor_end = clipped[0]
+    for next_start, next_end in clipped[1:]:
+        if next_start <= cursor_end:
+            cursor_end = max(cursor_end, next_end)
+        else:
+            covered += cursor_end - cursor_start
+            cursor_start, cursor_end = next_start, next_end
+    return covered + cursor_end - cursor_start
+
+
 def evaluate_transcript_quality(
     transcript: TranscriptionResult,
     *,
     expected_duration_ms: int | None = None,
     max_gap_ms: int = 60_000,
+    known_silence_intervals: tuple[tuple[int, int], ...] = (),
+    explained_gap_silence_ratio: float = 0.8,
 ) -> TranscriptQualityReport:
     """Evaluate semantic and structural fitness; never equate valid JSON with quality."""
     issues: list[QualityIssue] = []
@@ -181,6 +206,7 @@ def evaluate_transcript_quality(
     max_adjacent_duplicate_chain = 0
     timestamp_overlaps = 0
     large_gaps: list[tuple[int, int]] = []
+    explained_silence_gaps: list[tuple[int, int, float]] = []
     previous: TranscriptSegment | None = None
     for segment in segments:
         if previous is not None:
@@ -206,7 +232,18 @@ def evaluate_transcript_quality(
                 timestamp_overlaps += 1
             gap = segment.start_ms - previous.end_ms
             if gap > max_gap_ms:
-                large_gaps.append((previous.end_ms, segment.start_ms))
+                silence_ms = _interval_coverage_ms(
+                    previous.end_ms,
+                    segment.start_ms,
+                    known_silence_intervals,
+                )
+                silence_ratio = silence_ms / gap
+                if silence_ratio >= explained_gap_silence_ratio:
+                    explained_silence_gaps.append(
+                        (previous.end_ms, segment.start_ms, silence_ratio)
+                    )
+                else:
+                    large_gaps.append((previous.end_ms, segment.start_ms))
         diagnostics = segment.diagnostics
         if segment.text == "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]":
             issues.append(
@@ -347,6 +384,15 @@ def evaluate_transcript_quality(
             "max_phrase_run": phrase_run,
             "timestamp_overlap_count": timestamp_overlaps,
             "large_gap_count": len(large_gaps),
+            "explained_silence_gap_count": len(explained_silence_gaps),
+            "explained_silence_gaps": [
+                {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "silence_ratio": round(silence_ratio, 6),
+                }
+                for start_ms, end_ms, silence_ratio in explained_silence_gaps
+            ],
             "uncertain_segment_count": uncertain_count,
             "script_counts": script_counts,
         },

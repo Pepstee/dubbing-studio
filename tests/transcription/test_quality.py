@@ -83,3 +83,25 @@ def test_failed_span_placeholder_requires_reprocessing():
     report = evaluate_transcript_quality(_result(segment.text, (segment,)))
     assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
     assert "span_transcription_failed" in {item.code for item in report.issues}
+
+
+def test_large_gap_is_explained_only_when_vad_silence_covers_eighty_percent():
+    segments = (
+        TranscriptSegment(0, 1000, "before"),
+        TranscriptSegment(81_000, 82_000, "after"),
+    )
+    transcript = _result("before after", segments)
+    unexplained = evaluate_transcript_quality(
+        transcript,
+        expected_duration_ms=82_000,
+        known_silence_intervals=((10_000, 60_000),),
+    )
+    explained = evaluate_transcript_quality(
+        transcript,
+        expected_duration_ms=82_000,
+        known_silence_intervals=((1000, 70_000),),
+    )
+    assert unexplained.status is TranscriptQualityStatus.HUMAN_REVIEW_REQUIRED
+    assert explained.status is TranscriptQualityStatus.PASS
+    assert explained.metrics["explained_silence_gap_count"] == 1
+    assert explained.metrics["large_gap_count"] == 0

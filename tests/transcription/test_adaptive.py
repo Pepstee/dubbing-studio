@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from dubbing.transcription.adaptive import (
@@ -49,6 +50,41 @@ def test_planner_chooses_silence_near_target_and_bounds_chunks():
     assert chunks[1].extract_start_ms == 108_000
 
 
+def test_targeted_retry_spans_are_vad_bounded_between_20_and_60_seconds():
+    spans = AdaptiveLongFormCoordinator._bounded_retry_spans(
+        [(10_000, 160_000)],
+        duration_ms=200_000,
+        silence_centres=(55_000, 100_000, 145_000),
+    )
+    assert spans == (
+        (8_000, 55_000),
+        (55_000, 100_000),
+        (100_000, 142_000),
+        (142_000, 162_000),
+    )
+    assert all(20_000 <= end - start <= 60_000 for start, end in spans)
+
+
+def test_v3_checkpoint_manifest_migrates_only_when_other_contract_fields_match(tmp_path):
+    backend = _RetryingBackend()
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
+    chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
+    expected = coordinator._manifest(source, "0" * 64, probe, chunks)
+    existing = dict(expected)
+    existing["coordinator_version"] = "adaptive-long-form-v3"
+    existing.pop("targeted_retry")
+    manifest = tmp_path / "job" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps(existing), encoding="utf-8")
+
+    coordinator._admit_manifest(expected)
+
+    assert json.loads(manifest.read_text(encoding="utf-8")) == expected
+
+
 def test_overlap_reconciliation_drops_duplicate_boundary_segment():
     chunks = [
         AdaptiveChunk(0, 0, 10_000, 0, 12_000, "silence"),
@@ -80,18 +116,33 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     def extract(source, stream, chunk, output):
         output.write_bytes(b"span")
 
+    def extract_retry(source, segment, destination):
+        destination.write_bytes(b"retry span")
+
     with patch(
         "dubbing.transcription.adaptive.probe_media",
         return_value=MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),)),
     ), patch(
         "dubbing.transcription.adaptive.detect_silence_centres", return_value=()
-    ), patch.object(coordinator, "_extract", side_effect=extract):
+    ), patch.object(coordinator, "_extract", side_effect=extract), patch.object(
+        coordinator, "_extract_language_span", side_effect=extract_retry
+    ):
         result, quality = coordinator.run(source)
         coordinator.run(source)
     assert backend.calls == 2
     assert result.text == "clean ordinary phrase"
     assert quality["status"] == "PASS"
     assert (tmp_path / "job" / "chunks" / "000000.json").is_file()
+    receipt = json.loads(
+        (tmp_path / "job" / "receipts" / "000000.json").read_text()
+    )
+    targeted = [
+        attempt
+        for attempt in receipt["attempts"]
+        if attempt.get("kind") == "targeted-span-redecode"
+    ]
+    assert len(targeted) == 1
+    assert targeted[0]["source_end_ms"] == 20_000
 
 
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):

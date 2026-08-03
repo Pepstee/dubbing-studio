@@ -21,9 +21,17 @@ from dubbing.transcription.models import (
     transcription_result_from_dict,
 )
 from dubbing.transcription.quality import (
+    TranscriptQualityReport,
     TranscriptQualityStatus,
     evaluate_transcript_quality,
 )
+
+
+_FAILED_SPAN_TEXT = "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]"
+_TARGET_RETRY_MIN_MS = 20_000
+_TARGET_RETRY_TARGET_MS = 45_000
+_TARGET_RETRY_MAX_MS = 60_000
+_TARGET_RETRY_PADDING_MS = 2_000
 
 
 @dataclass(frozen=True)
@@ -117,6 +125,38 @@ def detect_silence_centres(
     minimum_silence_seconds: float = 0.7,
     noise_db: float = -35.0,
 ) -> tuple[int, ...]:
+    return tuple(
+        round((start + end) * 500)
+        for start, end in _detect_silence_seconds(
+            path,
+            minimum_silence_seconds=minimum_silence_seconds,
+            noise_db=noise_db,
+        )
+    )
+
+
+def detect_silence_intervals(
+    path: str | Path,
+    *,
+    minimum_silence_seconds: float = 0.7,
+    noise_db: float = -35.0,
+) -> tuple[tuple[int, int], ...]:
+    return tuple(
+        (round(start * 1000), round(end * 1000))
+        for start, end in _detect_silence_seconds(
+            path,
+            minimum_silence_seconds=minimum_silence_seconds,
+            noise_db=noise_db,
+        )
+    )
+
+
+def _detect_silence_seconds(
+    path: str | Path,
+    *,
+    minimum_silence_seconds: float,
+    noise_db: float,
+) -> tuple[tuple[float, float], ...]:
     ffmpeg = ffmpeg_executable()
     if ffmpeg is None:
         raise TranscriptionError("ffmpeg is required for silence-aware chunking")
@@ -139,7 +179,7 @@ def detect_silence_centres(
     )
     starts = [float(value) for value in re.findall(r"silence_start: ([0-9.]+)", process.stderr)]
     ends = [float(value) for value in re.findall(r"silence_end: ([0-9.]+)", process.stderr)]
-    return tuple(round((start + end) * 500) for start, end in zip(starts, ends))
+    return tuple((start, end) for start, end in zip(starts, ends) if end > start)
 
 
 class AdaptiveChunkPlanner:
@@ -296,13 +336,20 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         return {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v3",
+            "coordinator_version": "adaptive-long-form-v4",
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
             "backend_identity": self.backend.identity,
             "retry_backend_identity": self.retry_backend.identity if self.retry_backend else None,
             "candidate_languages": list(self.candidate_languages),
+            "targeted_retry": {
+                "minimum_ms": _TARGET_RETRY_MIN_MS,
+                "target_ms": _TARGET_RETRY_TARGET_MS,
+                "maximum_ms": _TARGET_RETRY_MAX_MS,
+                "padding_ms": _TARGET_RETRY_PADDING_MS,
+                "maximum_rounds": 2,
+            },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
         }
@@ -314,10 +361,304 @@ class AdaptiveLongFormCoordinator:
                 existing = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise TranscriptionError("adaptive checkpoint manifest is malformed") from exc
-            if existing != expected:
+            compatible_v3 = existing.get("coordinator_version") == "adaptive-long-form-v3"
+            if compatible_v3:
+                migrated = dict(existing)
+                migrated["coordinator_version"] = expected["coordinator_version"]
+                migrated["targeted_retry"] = expected["targeted_retry"]
+                compatible_v3 = migrated == expected
+            if existing != expected and not compatible_v3:
                 raise TranscriptionError("adaptive checkpoint does not match source or configuration")
+            if compatible_v3:
+                _atomic_json(path, expected)
         else:
             _atomic_json(path, expected)
+
+    @staticmethod
+    def _has_repeated_tokens(text: str) -> bool:
+        tokens = _normalize(text).split()
+        run = 1
+        for previous, current in zip(tokens, tokens[1:]):
+            run = run + 1 if current == previous else 1
+            if run >= 8:
+                return True
+        for width in range(1, min(6, len(tokens)) + 1):
+            for index in range(0, len(tokens) - (2 * width) + 1):
+                phrase = tokens[index : index + width]
+                repeats = 1
+                cursor = index + width
+                while tokens[cursor : cursor + width] == phrase:
+                    repeats += 1
+                    cursor += width
+                if repeats >= 6:
+                    return True
+        return False
+
+    @staticmethod
+    def _critical_failure_intervals(
+        result: TranscriptionResult,
+        quality: TranscriptQualityReport,
+    ) -> list[tuple[int, int]]:
+        critical_codes = {
+            issue.code for issue in quality.issues if issue.severity in {"critical", "fatal"}
+        }
+        if not critical_codes:
+            return []
+        intervals: list[tuple[int, int]] = []
+        previous: TranscriptSegment | None = None
+        for segment in result.segments:
+            if (
+                AdaptiveLongFormCoordinator._has_repeated_tokens(segment.text)
+                or segment.text == _FAILED_SPAN_TEXT
+                or (segment.diagnostics and segment.diagnostics.fallback_exhausted)
+            ):
+                intervals.append((segment.start_ms, segment.end_ms))
+            if previous is not None:
+                if _normalize(previous.text) == _normalize(segment.text):
+                    intervals.extend(
+                        [
+                            (previous.start_ms, previous.end_ms),
+                            (segment.start_ms, segment.end_ms),
+                        ]
+                    )
+                if (
+                    "excessive_timestamp_overlap" in critical_codes
+                    and segment.start_ms < previous.end_ms
+                ):
+                    intervals.append(
+                        (min(previous.start_ms, segment.start_ms), max(previous.end_ms, segment.end_ms))
+                    )
+            previous = segment
+        if not intervals:
+            duration_ms = result.duration_ms or max(
+                (segment.end_ms for segment in result.segments), default=1
+            )
+            intervals.append((0, max(1, duration_ms)))
+        return intervals
+
+    @staticmethod
+    def _bounded_retry_spans(
+        intervals: list[tuple[int, int]],
+        *,
+        duration_ms: int,
+        silence_centres: tuple[int, ...],
+    ) -> tuple[tuple[int, int], ...]:
+        padded = []
+        for start_ms, end_ms in sorted(intervals):
+            start_ms = max(0, start_ms - _TARGET_RETRY_PADDING_MS)
+            end_ms = min(duration_ms, end_ms + _TARGET_RETRY_PADDING_MS)
+            if (
+                duration_ms >= _TARGET_RETRY_MIN_MS
+                and end_ms - start_ms < _TARGET_RETRY_MIN_MS
+            ):
+                centre = start_ms + (end_ms - start_ms) // 2
+                start_ms = max(0, centre - _TARGET_RETRY_MIN_MS // 2)
+                end_ms = min(duration_ms, start_ms + _TARGET_RETRY_MIN_MS)
+                start_ms = max(0, end_ms - _TARGET_RETRY_MIN_MS)
+            if padded and start_ms <= padded[-1][1] + _TARGET_RETRY_PADDING_MS:
+                padded[-1] = (padded[-1][0], max(padded[-1][1], end_ms))
+            else:
+                padded.append((start_ms, end_ms))
+
+        bounded: list[tuple[int, int]] = []
+        for start_ms, end_ms in padded:
+            group_start_index = len(bounded)
+            cursor = start_ms
+            while end_ms - cursor > _TARGET_RETRY_MAX_MS:
+                eligible = [
+                    point
+                    for point in silence_centres
+                    if cursor + _TARGET_RETRY_MIN_MS
+                    <= point
+                    <= cursor + _TARGET_RETRY_MAX_MS
+                ]
+                target = cursor + _TARGET_RETRY_TARGET_MS
+                boundary = (
+                    min(eligible, key=lambda point: (abs(point - target), point))
+                    if eligible
+                    else cursor + _TARGET_RETRY_MAX_MS
+                )
+                bounded.append((cursor, boundary))
+                cursor = boundary
+            if end_ms > cursor:
+                if len(bounded) > group_start_index and end_ms - cursor < _TARGET_RETRY_MIN_MS:
+                    previous_start, _ = bounded[-1]
+                    if end_ms - previous_start <= _TARGET_RETRY_MAX_MS:
+                        bounded[-1] = (previous_start, end_ms)
+                        continue
+                    revised_boundary = end_ms - _TARGET_RETRY_MIN_MS
+                    if revised_boundary - previous_start >= _TARGET_RETRY_MIN_MS:
+                        bounded[-1] = (previous_start, revised_boundary)
+                        cursor = revised_boundary
+                bounded.append((cursor, end_ms))
+        return tuple(bounded)
+
+    @staticmethod
+    def _splice_retry_spans(
+        original: TranscriptionResult,
+        spans: tuple[tuple[int, int], ...],
+        replacements: list[TranscriptSegment],
+    ) -> TranscriptionResult:
+        retained = [
+            segment
+            for segment in original.segments
+            if not any(segment.start_ms < end_ms and segment.end_ms > start_ms for start_ms, end_ms in spans)
+        ]
+        segments = tuple(
+            sorted(retained + replacements, key=lambda item: (item.start_ms, item.end_ms))
+        )
+        return replace(original, segments=segments, text=" ".join(item.text for item in segments))
+
+    def _target_languages(self, text: str) -> tuple[str, ...]:
+        evidence = script_evidence(text)
+        if evidence["cyrillic"] > evidence["latin"]:
+            return ("ru",)
+        if evidence["hangul"] > evidence["latin"]:
+            return ("ko",)
+        if evidence["latin"]:
+            return ("en", "ro")
+        return self.candidate_languages
+
+    def _decode_target_span(
+        self,
+        audio: Path,
+        span: tuple[int, int],
+        original_text: str,
+        options: TranscriptionOptions,
+        attempts: list[dict],
+    ) -> tuple[TranscriptSegment, ...] | None:
+        start_ms, end_ms = span
+        candidates: list[tuple[TranscriptionBackend, TranscriptionOptions]] = [
+            (self.backend, options)
+        ]
+        if self.retry_backend is not None:
+            candidates.append((self.retry_backend, options))
+        retry_backend = self.retry_backend or self.backend
+        for language in self._target_languages(original_text):
+            candidate_options = replace(options, language=language)
+            if not any(
+                backend.identity == retry_backend.identity and existing == candidate_options
+                for backend, existing in candidates
+            ):
+                candidates.append((retry_backend, candidate_options))
+
+        eligible: list[tuple[tuple[float, ...], int, tuple[TranscriptSegment, ...]]] = []
+        with tempfile.TemporaryDirectory(prefix="dubbing-targeted-retry-") as directory:
+            retry_audio = Path(directory) / "span.wav"
+            marker = TranscriptSegment(start_ms, end_ms, "targeted retry span")
+            self._extract_language_span(audio, marker, retry_audio)
+            for backend, retry_options in candidates:
+                candidate = annotate_transcript_languages(
+                    backend.transcribe(retry_audio, retry_options)
+                )
+                quality = evaluate_transcript_quality(
+                    candidate, expected_duration_ms=end_ms - start_ms
+                )
+                attempts.append(
+                    {
+                        "kind": "targeted-span-redecode",
+                        "source_start_ms": start_ms,
+                        "source_end_ms": end_ms,
+                        "backend": backend.identity,
+                        "language": retry_options.language,
+                        "quality": quality.to_dict(),
+                    }
+                )
+                if not candidate.segments or quality.status in {
+                    TranscriptQualityStatus.FAILED,
+                    TranscriptQualityStatus.REPROCESS_REQUIRED,
+                }:
+                    continue
+                uncertain_count = sum(item.uncertain for item in candidate.segments)
+                log_probabilities = [
+                    item.diagnostics.avg_log_probability
+                    for item in candidate.segments
+                    if item.diagnostics and item.diagnostics.avg_log_probability is not None
+                ]
+                average_log_probability = (
+                    sum(log_probabilities) / len(log_probabilities)
+                    if log_probabilities
+                    else -10.0
+                )
+                score = (
+                    2.0 if quality.status is TranscriptQualityStatus.PASS else 1.0,
+                    -float(uncertain_count),
+                    average_log_probability,
+                )
+                shifted = tuple(item.shifted(start_ms) for item in candidate.segments)
+                eligible.append((score, len(attempts) - 1, shifted))
+                if quality.status is TranscriptQualityStatus.PASS and not uncertain_count:
+                    break
+        if not eligible:
+            return None
+        _, selected_attempt, selected = max(eligible, key=lambda item: item[0])
+        attempts[selected_attempt]["selected"] = True
+        return selected
+
+    def _repair_rejected_spans(
+        self,
+        audio: Path,
+        result: TranscriptionResult,
+        quality: TranscriptQualityReport,
+        expected_duration_ms: int,
+        options: TranscriptionOptions,
+        attempts: list[dict],
+    ) -> tuple[TranscriptionResult, TranscriptQualityReport]:
+        duration_ms = expected_duration_ms
+        silence_centres = detect_silence_centres(audio)
+        repaired = result
+        report = quality
+        for round_index in range(2):
+            intervals = self._critical_failure_intervals(repaired, report)
+            if not intervals:
+                break
+            spans = self._bounded_retry_spans(
+                intervals,
+                duration_ms=duration_ms,
+                silence_centres=silence_centres,
+            )
+            replacements: list[TranscriptSegment] = []
+            for span in spans:
+                original_text = " ".join(
+                    segment.text
+                    for segment in repaired.segments
+                    if segment.start_ms < span[1] and segment.end_ms > span[0]
+                )
+                replacement = self._decode_target_span(
+                    audio, span, original_text, options, attempts
+                )
+                if replacement is None:
+                    replacements.append(
+                        TranscriptSegment(
+                            span[0],
+                            span[1],
+                            _FAILED_SPAN_TEXT,
+                            uncertain=True,
+                        )
+                    )
+                else:
+                    replacements.extend(replacement)
+            repaired = self._splice_retry_spans(repaired, spans, replacements)
+            report = evaluate_transcript_quality(
+                repaired, expected_duration_ms=duration_ms
+            )
+            attempts.append(
+                {
+                    "kind": "targeted-repair-round",
+                    "round": round_index + 1,
+                    "spans": [
+                        {"start_ms": start_ms, "end_ms": end_ms}
+                        for start_ms, end_ms in spans
+                    ],
+                    "quality": report.to_dict(),
+                }
+            )
+            if report.status not in {
+                TranscriptQualityStatus.FAILED,
+                TranscriptQualityStatus.REPROCESS_REQUIRED,
+            }:
+                break
+        return repaired, report
 
     def _decode_chunk(
         self,
@@ -326,58 +667,42 @@ class AdaptiveLongFormCoordinator:
         options: TranscriptionOptions,
     ) -> tuple[TranscriptionResult, dict]:
         attempts: list[dict] = []
-        candidates = [(self.backend, options)]
-        if self.retry_backend is not None:
-            candidates.append((self.retry_backend, options))
-        for language in self.candidate_languages:
-            if language != options.language:
-                candidates.append((self.retry_backend or self.backend, replace(options, language=language)))
-        for backend, attempt_options in candidates:
-            result = annotate_transcript_languages(
-                backend.transcribe(audio, attempt_options)
-            )
-            result = self._resolve_uncertain_turns(
-                audio,
-                result,
-                backend,
-                attempt_options,
-                attempts,
-            )
-            quality = evaluate_transcript_quality(
-                result,
-                expected_duration_ms=chunk.extract_end_ms - chunk.extract_start_ms,
-            )
-            attempts.append(
-                {
-                    "backend": backend.identity,
-                    "language": attempt_options.language,
-                    "quality": quality.to_dict(),
-                }
-            )
-            if quality.status not in {
-                TranscriptQualityStatus.FAILED,
-                TranscriptQualityStatus.REPROCESS_REQUIRED,
-            }:
-                return result, {"attempts": attempts, "selected_attempt": len(attempts) - 1}
-        placeholder = TranscriptionResult(
-            segments=(
-                TranscriptSegment(
-                    0,
-                    max(1, chunk.extract_end_ms - chunk.extract_start_ms),
-                    "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]",
-                    uncertain=True,
-                ),
-            ),
-            text="[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]",
-            backend="failed-local-adjudication",
-            model="none",
-            device="local",
-            language=None,
-            duration_ms=chunk.extract_end_ms - chunk.extract_start_ms,
-            confidence_available=False,
-            diagnostics={"attempts": attempts},
+        duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
+        result = annotate_transcript_languages(self.backend.transcribe(audio, options))
+        result = self._resolve_uncertain_turns(
+            audio,
+            result,
+            self.backend,
+            options,
+            attempts,
         )
-        return placeholder, {"attempts": attempts, "selected_attempt": None}
+        quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
+        attempts.append(
+            {
+                "kind": "chunk",
+                "backend": self.backend.identity,
+                "language": options.language,
+                "quality": quality.to_dict(),
+            }
+        )
+        if quality.status in {
+            TranscriptQualityStatus.FAILED,
+            TranscriptQualityStatus.REPROCESS_REQUIRED,
+        }:
+            result, quality = self._repair_rejected_spans(
+                audio, result, quality, duration_ms, options, attempts
+            )
+        selected_attempt = None
+        if quality.status not in {
+            TranscriptQualityStatus.FAILED,
+            TranscriptQualityStatus.REPROCESS_REQUIRED,
+        }:
+            selected_attempt = len(attempts) - 1
+        return result, {
+            "attempts": attempts,
+            "selected_attempt": selected_attempt,
+            "targeted_retry_exhausted": selected_attempt is None,
+        }
 
     @staticmethod
     def _extract_language_span(
@@ -558,7 +883,13 @@ class AdaptiveLongFormCoordinator:
                     result = transcription_result_from_dict(json.loads(checkpoint.read_text(encoding="utf-8")))
                 except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
                     raise TranscriptionError(f"malformed adaptive chunk: {checkpoint.name}") from exc
+                if any(item.text == _FAILED_SPAN_TEXT for item in result.segments):
+                    checkpoint.unlink()
+                    receipt_path.unlink(missing_ok=True)
+                    result = None
             else:
+                result = None
+            if result is None:
                 with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
                     audio = Path(directory) / f"{chunk.index:06d}.wav"
                     self._extract(source, stream, chunk, audio)
@@ -587,12 +918,18 @@ class AdaptiveLongFormCoordinator:
             confidence_available=any(item.confidence is not None for item in segments),
             source_sha256=digest,
             provenance={
-                "coordinator": "adaptive-long-form-v1",
+                "coordinator": "adaptive-long-form-v4",
                 "chunk_count": len(chunks),
                 "audio_stream": stream.to_dict(),
             },
         )
         quality = evaluate_transcript_quality(result, expected_duration_ms=probe.duration_ms)
+        if any(issue.code == "large_unexplained_gaps" for issue in quality.issues):
+            quality = evaluate_transcript_quality(
+                result,
+                expected_duration_ms=probe.duration_ms,
+                known_silence_intervals=detect_silence_intervals(source),
+            )
         _atomic_json(self.checkpoint_dir / "result.json", result.to_dict())
         _atomic_json(self.checkpoint_dir / "quality-report.json", quality.to_dict())
         return result, quality.to_dict()

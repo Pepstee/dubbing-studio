@@ -1,0 +1,165 @@
+{
+  "schema_version": "dubbing.provider-benchmark-report.v1",
+  "fixture_id": "lesson-2026-08-01-193908",
+  "measured_at": "2026-08-03",
+  "admission_verdict": "blocked_pending_uncertain_span_review",
+  "source": {
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "duration_ms": 4987833,
+    "size_bytes": 3845699125
+  },
+  "reference": {
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "kind": "macwhisper-provisional-untimed-text",
+    "human_ground_truth": false,
+    "limitations": [
+      "No timestamped reference exists, so per-time-window WER/CER is unavailable.",
+      "No turn-level language labels exist, so English and Romanian cannot be separated defensibly.",
+      "No speaker reference labels exist, so DER/JER and speaker-attributed WER are unavailable."
+    ]
+  },
+  "candidate": {
+    "result_sha256": "20ee9e6135929c1159d2bb162439f2a5640aa50c8549659ef2bc383130a224db",
+    "quality_report_sha256": "dfa73f774c3999f2c41096717f814ca5cc35fc6ff84092d6ecc0c1e1f92c3282",
+    "run_receipt_sha256": "b684a0cf072000fe1ddb4e9d1cb7a1267d25a87cd7e23cbd84d5fc57a28f78e5",
+    "transcript_committed": false,
+    "giga_admission_attempted": false
+  },
+  "backend": {
+    "provider": "whisperkit-local-server",
+    "cli_version": "v1.0.0",
+    "model": "openai_whisper-large-v3-v20240930_626MB",
+    "model_tree_sha256": "c73998182489f578953408b4b7a6797433c3744304963500799eef8e6aacaa8c",
+    "model_size_bytes": 626718238,
+    "coordinator": "adaptive-long-form-v4",
+    "targeted_retry": {
+      "minimum_ms": 20000,
+      "target_ms": 45000,
+      "maximum_ms": 60000,
+      "padding_ms": 2000,
+      "maximum_rounds": 2,
+      "vad_boundary_preferred": true
+    }
+  },
+  "checkpoint_execution": {
+    "reused_clean_v3_chunks": 12,
+    "reprocessed_failed_chunks": [
+      1,
+      5,
+      7,
+      8,
+      15,
+      16,
+      18
+    ],
+    "targeted_span_decode_calls": 35,
+    "targeted_repair_runtime_seconds": 264.73,
+    "final_all_checkpoint_validation_seconds": 49.12,
+    "cold_v4_runtime_measured": false,
+    "note": "No clean checkpoint was re-decoded. The repair timing includes only the seven failed chunks and their bounded local retry spans."
+  },
+  "metrics": {
+    "wer": {
+      "reference_units": 3612,
+      "candidate_units": 3851,
+      "edits": 1519,
+      "rate": 0.42054263565891475
+    },
+    "cer": {
+      "reference_units": 14923,
+      "candidate_units": 15838,
+      "edits": 5623,
+      "rate": 0.37680091134490384
+    },
+    "per_script": {
+      "cyrillic": {
+        "reference_units": 417,
+        "candidate_units": 445,
+        "edits": 271,
+        "wer": 0.6498800959232613
+      },
+      "hangul": {
+        "reference_units": 15,
+        "candidate_units": 37,
+        "edits": 28,
+        "wer": 1.8666666666666667
+      },
+      "latin": {
+        "reference_units": 3158,
+        "candidate_units": 3348,
+        "edits": 1298,
+        "wer": 0.41101963267891073
+      },
+      "other": {
+        "reference_units": 22,
+        "candidate_units": 21,
+        "edits": 20,
+        "wer": 0.9090909090909091
+      }
+    },
+    "candidate_segment_languages": {
+      "en": 650,
+      "ru": 127,
+      "ko": 7,
+      "ro": 0,
+      "unknown": 0
+    },
+    "segment_count": 784,
+    "uncertain_segment_count": 39,
+    "uncertain_audio_duration_ms": 30500,
+    "decoder_fallback_exhausted_segment_count": 0,
+    "failed_span_count": 0,
+    "adjacent_duplicate_segment_transitions": 13,
+    "max_adjacent_duplicate_chain": 2,
+    "max_phrase_run": 4,
+    "max_token_run": 4,
+    "timestamp_overlap_count": 15,
+    "speech_coverage_ratio": 0.352964,
+    "explained_silence_gaps": [
+      {
+        "start_ms": 955118,
+        "end_ms": 1034499,
+        "silence_ratio": 0.96925
+      }
+    ],
+    "unexplained_large_gap_count": 0
+  },
+  "quality": {
+    "status": "PASS_WITH_UNCERTAIN_SPANS",
+    "approval_allowed": false,
+    "issues": [],
+    "uncertainty_note": "Thirty-nine turns totaling 30.5 seconds retain explicit script/language uncertainty. They were not guessed into a passing state."
+  },
+  "comparison": {
+    "whisperkit_large_v3_v3_coordinator": {
+      "wer": 0.6378737541528239,
+      "cer": 0.6114052134289352,
+      "quality_status": "REPROCESS_REQUIRED",
+      "failed_span_count": 5,
+      "uncertain_segment_count": 32,
+      "raw_failed_chunk_count": 7
+    },
+    "whisperkit_small": {
+      "runtime_seconds": 227.097,
+      "wer": 0.5534330011074197,
+      "cer": 0.5115593379347316,
+      "quality_status": "REPROCESS_REQUIRED",
+      "failed_span_count": 2,
+      "uncertain_segment_count": 42
+    },
+    "defective_mlx_large_v3_turbo": {
+      "runtime_seconds": 2280,
+      "wer": 0.49916943521594687,
+      "cer": 0.4682704550023454,
+      "quality_status": "REPROCESS_REQUIRED",
+      "adjacent_duplicate_segment_transitions": 145,
+      "max_token": "loops",
+      "max_token_run": 109
+    }
+  },
+  "verdict": {
+    "promotion": "not_yet_promoted",
+    "reason": "Targeted retry removed all critical repetition and failed spans and produced the best overall WER/CER of the measured local candidates, but explicit uncertain turns remain and the reference is not human ground truth.",
+    "next_smallest_gate": "Review or correct the 39 uncertain turns totaling 30.5 seconds. Only after those corrections are lineage-bound should the quality contract be rerun; GIGA admission remains blocked until status PASS."
+  }
+}
