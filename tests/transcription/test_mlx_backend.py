@@ -23,6 +23,9 @@ class _MLX:
                     "end": 1.4,
                     "text": " Hello world ",
                     "avg_logprob": -0.2,
+                    "compression_ratio": 1.2,
+                    "no_speech_prob": 0.03,
+                    "temperature": 1.0,
                     "words": [
                         {
                             "start": 0.1,
@@ -79,10 +82,16 @@ def test_parses_timestamped_words_and_forwards_options(tmp_path):
     assert result.segments[0].start_ms == 100
     assert result.segments[0].words[1].end_ms == 1400
     assert result.confidence_available is True
+    assert result.segments[0].diagnostics.compression_ratio == 1.2
+    assert result.segments[0].diagnostics.fallback_exhausted
+    assert result.provenance["promotion_state"] == "experimental-fallback"
     assert len(result.source_sha256 or "") == 64
     assert call.call_args.kwargs["language"] == "en"
     assert call.call_args.kwargs["initial_prompt"] == "Names: Artiom."
     assert call.call_args.kwargs["word_timestamps"] is True
+    assert call.call_args.kwargs["temperature"] == (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+    assert call.call_args.kwargs["condition_on_previous_text"] is False
+    assert call.call_args.kwargs["hallucination_silence_threshold"] == 2.0
 
 
 def test_zero_length_model_fragments_are_skipped(tmp_path):
@@ -107,3 +116,36 @@ def test_zero_length_model_fragments_are_skipped(tmp_path):
         result = MLXWhisperTranscriptionBackend("fixture").transcribe(audio)
     assert result.segments == ()
     assert result.text == ""
+
+
+def test_normalizes_out_of_order_model_timestamps(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"audio")
+
+    class _Unordered:
+        @staticmethod
+        def transcribe(path, **kwargs):
+            return {
+                "text": "first second",
+                "segments": [
+                    {
+                        "start": 2,
+                        "end": 3,
+                        "text": "second",
+                        "words": [
+                            {"start": 2.5, "end": 3, "word": "part two"},
+                            {"start": 2, "end": 2.5, "word": "part one"},
+                        ],
+                    },
+                    {"start": 0, "end": 1, "text": "first"},
+                ],
+            }
+
+    with patch(
+        "dubbing.transcription.mlx_whisper.importlib.import_module",
+        return_value=_Unordered(),
+    ):
+        result = MLXWhisperTranscriptionBackend("fixture").transcribe(audio)
+
+    assert [segment.text for segment in result.segments] == ["first", "second"]
+    assert [word.text for word in result.segments[1].words] == ["part one", "part two"]

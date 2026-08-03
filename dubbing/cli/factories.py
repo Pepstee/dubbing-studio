@@ -67,16 +67,16 @@ def speaker_constraints(args: argparse.Namespace) -> SpeakerConstraints:
 
 def make_transcriber(args: argparse.Namespace):
     if args.asr_backend == "mlx-whisper":
-        return MLXWhisperTranscriptionBackend(
-            model=args.asr_model or DEFAULT_MLX_MODEL,
-            temperature=args.asr_temperature,
-        )
+        options = {"model": args.asr_model or DEFAULT_MLX_MODEL}
+        if args.asr_temperature is not None:
+            options["temperature"] = args.asr_temperature
+        return MLXWhisperTranscriptionBackend(**options)
     if args.asr_backend == "faster-whisper":
         return FasterWhisperTranscriptionBackend(
             model=args.asr_model or DEFAULT_FASTER_WHISPER_MODEL,
             device=args.asr_device,
             compute_type=args.asr_compute_type,
-            temperature=args.asr_temperature,
+            temperature=0.0 if args.asr_temperature is None else args.asr_temperature,
             cpu_threads=args.asr_cpu_threads,
             num_workers=args.asr_workers,
         )

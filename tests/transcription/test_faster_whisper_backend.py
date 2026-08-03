@@ -31,6 +31,9 @@ class _Model:
                 end=1.4,
                 text=" Hello world ",
                 avg_logprob=-0.2,
+                compression_ratio=1.1,
+                no_speech_prob=0.02,
+                temperature=0.0,
                 words=words,
             )
         ]
@@ -93,6 +96,8 @@ def test_parses_words_and_forwards_gpu_configuration(tmp_path):
     assert result.duration_ms == 1500
     assert result.device == "cuda"
     assert result.confidence_available is True
+    assert result.segments[0].diagnostics.compression_ratio == 1.1
+    assert result.provenance["persistent_model_instance"]
 
 
 def test_model_is_loaded_only_once(tmp_path):

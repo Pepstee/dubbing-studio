@@ -369,7 +369,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     transcribe_p.add_argument("--asr-cpu-threads", type=int, default=0)
     transcribe_p.add_argument("--asr-workers", type=int, default=1)
-    transcribe_p.add_argument("--asr-temperature", type=float, default=0.0)
+    transcribe_p.add_argument(
+        "--asr-temperature",
+        type=float,
+        default=None,
+        help=(
+            "Force one decoding temperature. By default MLX Whisper uses its "
+            "anti-repetition fallback sequence and Faster-Whisper uses 0.0"
+        ),
+    )
     transcribe_p.add_argument("--language", help="Optional source language code")
     transcribe_p.add_argument(
         "--task",

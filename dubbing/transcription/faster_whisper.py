@@ -8,6 +8,7 @@ from typing import Any
 
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.models import (
+    DecodeDiagnostics,
     TranscriptSegment,
     TranscriptWord,
     TranscriptionError,
@@ -168,6 +169,19 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
             text=text,
             words=words,
             confidence=confidence,
+            diagnostics=DecodeDiagnostics(
+                compression_ratio=getattr(item, "compression_ratio", None),
+                avg_log_probability=(
+                    float(average_logprob) if average_logprob is not None else None
+                ),
+                no_speech_probability=getattr(item, "no_speech_prob", None),
+                temperature=getattr(item, "temperature", None),
+                fallback_exhausted=bool(getattr(item, "fallback_exhausted", False)),
+                backend_metadata={
+                    "seek": getattr(item, "seek", None),
+                    "tokens": list(getattr(item, "tokens", ()) or ()),
+                },
+            ),
         )
 
     def transcribe(
@@ -220,4 +234,16 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
             duration_ms=duration_ms,
             confidence_available=confidence_available,
             source_sha256=self._source_hash(path),
+            diagnostics={
+                "language_probability": getattr(info, "language_probability", None),
+                "duration_after_vad": getattr(info, "duration_after_vad", None),
+                "vad_options": getattr(info, "vad_options", None),
+            },
+            provenance={
+                "provider": "faster-whisper",
+                "backend_identity": self.identity,
+                "persistent_model_instance": True,
+                "model_revision": self.model_revision,
+                "local_files_only": self.local_files_only,
+            },
         )

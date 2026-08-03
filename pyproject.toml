@@ -15,12 +15,17 @@ dubbing-capture-watch = "dubbing.apps.personal_capture.watcher:main"
 dubbing-capture-review = "dubbing.apps.personal_capture.review:main"
 dubbing-capture-preflight = "dubbing.apps.personal_capture.preflight:main"
 dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:main"
+dubbing-long-transcribe = "dubbing.control_plane.cli:main"
+dubbing-evaluate-transcript = "dubbing.evaluation.cli:main"
 
 [project.optional-dependencies]
 diarization = [
     "imageio-ffmpeg>=0.6",
     "numpy>=1.23",
     "sherpa-onnx>=1.10.28",
+]
+diarization-pyannote = [
+    "pyannote.audio>=4,<5",
 ]
 transcription-mlx = [
     "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",

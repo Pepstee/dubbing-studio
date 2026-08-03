@@ -8,6 +8,7 @@ from typing import Any
 
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.models import (
+    DecodeDiagnostics,
     TranscriptSegment,
     TranscriptWord,
     TranscriptionError,
@@ -16,6 +17,7 @@ from dubbing.transcription.models import (
 )
 
 DEFAULT_MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
+DEFAULT_MLX_TEMPERATURES = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
 
 
 def _milliseconds(value: Any, field: str) -> int:
@@ -53,18 +55,30 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
         self,
         model: str = DEFAULT_MLX_MODEL,
         *,
-        temperature: float = 0.0,
+        temperature: float | tuple[float, ...] = DEFAULT_MLX_TEMPERATURES,
+        condition_on_previous_text: bool = False,
+        hallucination_silence_threshold: float | None = 2.0,
     ) -> None:
         if not model.strip():
             raise ValueError("model cannot be blank")
-        if temperature < 0:
+        temperatures = (temperature,) if isinstance(temperature, (int, float)) else temperature
+        if not temperatures or any(value < 0 for value in temperatures):
             raise ValueError("temperature cannot be negative")
+        if hallucination_silence_threshold is not None and hallucination_silence_threshold < 0:
+            raise ValueError("hallucination_silence_threshold cannot be negative")
         self.model = model
-        self.temperature = temperature
+        self.temperature = tuple(float(value) for value in temperatures)
+        self.condition_on_previous_text = condition_on_previous_text
+        self.hallucination_silence_threshold = hallucination_silence_threshold
 
     @property
     def identity(self) -> str:
-        return f"mlx-whisper:{self.model}:temperature={self.temperature}"
+        temperatures = ",".join(f"{value:g}" for value in self.temperature)
+        return (
+            f"mlx-whisper:{self.model}:temperature={temperatures}:"
+            f"condition_on_previous_text={self.condition_on_previous_text}:"
+            f"hallucination_silence_threshold={self.hallucination_silence_threshold}"
+        )
 
     @staticmethod
     def _dependency():
@@ -101,7 +115,13 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
         )
 
     @classmethod
-    def _parse_segment(cls, item: dict) -> TranscriptSegment | None:
+    def _parse_segment(
+        cls,
+        item: dict,
+        *,
+        max_temperature: float | None = None,
+        fallback_schedule: tuple[float, ...] = (),
+    ) -> TranscriptSegment | None:
         text = str(item.get("text", "")).strip()
         if not text:
             return None
@@ -110,16 +130,51 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
         if end_ms <= start_ms:
             return None
         words = tuple(
-            word
-            for word in (cls._parse_word(raw) for raw in item.get("words", []))
-            if word is not None
+            sorted(
+                (
+                    word
+                    for word in (
+                        cls._parse_word(raw) for raw in item.get("words", [])
+                    )
+                    if word is not None
+                ),
+                key=lambda word: (word.start_ms, word.end_ms),
+            )
         )
+        temperature = item.get("temperature")
+        try:
+            parsed_temperature = float(temperature) if temperature is not None else None
+        except (TypeError, ValueError):
+            parsed_temperature = None
         return TranscriptSegment(
             start_ms=start_ms,
             end_ms=end_ms,
             text=text,
             words=words,
             confidence=_confidence(item),
+            diagnostics=DecodeDiagnostics(
+                compression_ratio=item.get("compression_ratio"),
+                avg_log_probability=item.get("avg_logprob"),
+                no_speech_probability=item.get("no_speech_prob"),
+                temperature=parsed_temperature,
+                fallback_history=tuple(
+                    {"configured_temperature": value} for value in fallback_schedule
+                ),
+                language_probabilities=item.get("language_probs")
+                or item.get("language_probabilities"),
+                fallback_exhausted=bool(
+                    parsed_temperature is not None
+                    and max_temperature is not None
+                    and parsed_temperature >= max_temperature
+                    and len(fallback_schedule) > 1
+                ),
+                backend_metadata={
+                    key: item.get(key)
+                    for key in ("seek", "tokens")
+                    if key in item
+                }
+                or None,
+            ),
         )
 
     def transcribe(
@@ -138,6 +193,8 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
             "word_timestamps": options.word_timestamps,
             "verbose": False,
             "temperature": self.temperature,
+            "condition_on_previous_text": self.condition_on_previous_text,
+            "hallucination_silence_threshold": self.hallucination_silence_threshold,
         }
         if options.language:
             kwargs["language"] = options.language
@@ -150,11 +207,21 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
         if not isinstance(raw, dict):
             raise TranscriptionError("MLX Whisper returned a non-object result")
         segments = tuple(
-            segment
-            for segment in (
-                self._parse_segment(item) for item in raw.get("segments", [])
+            sorted(
+                (
+                    segment
+                    for segment in (
+                        self._parse_segment(
+                            item,
+                            max_temperature=max(self.temperature),
+                            fallback_schedule=self.temperature,
+                        )
+                        for item in raw.get("segments", [])
+                    )
+                    if segment is not None
+                ),
+                key=lambda segment: (segment.start_ms, segment.end_ms),
             )
-            if segment is not None
         )
         text = str(raw.get("text", "")).strip()
         if not text and segments:
@@ -175,4 +242,14 @@ class MLXWhisperTranscriptionBackend(TranscriptionBackend):
             duration_ms=duration_ms,
             confidence_available=confidence_available,
             source_sha256=self._source_hash(path),
+            diagnostics={
+                "configured_temperature_fallbacks": list(self.temperature),
+                "condition_on_previous_text": self.condition_on_previous_text,
+                "hallucination_silence_threshold": self.hallucination_silence_threshold,
+            },
+            provenance={
+                "provider": "mlx-whisper",
+                "backend_identity": self.identity,
+                "promotion_state": "experimental-fallback",
+            },
         )
