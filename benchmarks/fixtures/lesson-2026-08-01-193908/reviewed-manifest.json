@@ -1,0 +1,56 @@
+{
+  "schema_version": "dubbing.regression-fixture.v1",
+  "fixture_id": "lesson-2026-08-01-193908-reviewed-v1",
+  "description": "83-minute WhisperKit large-v3 transcript after uncertain-span operator review",
+  "source": {
+    "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "duration_ms": 4987833,
+    "size_bytes": 3845699125
+  },
+  "reference": {
+    "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-06.txt",
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "kind": "macwhisper-provisional-untimed-text",
+    "human_ground_truth": false,
+    "limitations": [
+      "not human corrected",
+      "no reference timestamps",
+      "no reference speaker labels",
+      "no reference turn-level language labels"
+    ]
+  },
+  "candidate": {
+    "path": "/Users/admin/Documents/dubbing-studio/output/review/lesson-2026-08-01-193908-uncertain-v1/reviewed-result.json",
+    "sha256": "679965f0a95f597b44a9e7b0480738cab23b96fe7595c4544a351d68eaa3a480",
+    "kind": "dubbing-reviewed-transcription-v1"
+  },
+  "backend": {
+    "provider": "whisperkit-local-server",
+    "model": "openai_whisper-large-v3-v20240930_626MB",
+    "configuration": {
+      "coordinator": "adaptive-targeted-recovery-v4",
+      "operator_reviewed_spans": 39,
+      "corrected_spans": 38,
+      "removed_no_speech_spans": 1,
+      "remaining_uncertain_spans": 0
+    },
+    "promotion_state": "evaluation-only"
+  },
+  "review_evidence": {
+    "package_manifest_sha256": "3e89e4bc393f2ab1e602a0d68c2f906f9e21493c0d2e143fcea5d8cf3ed6f24c",
+    "decisions_sha256": "537faee0c2d2aefd0a24b6ce91246804c70149fc959916a6c3f3c990d2ee58cd",
+    "quality_report_sha256": "eb106de093755a61bf42a3a6c33f65ea493cf397b998fe571be42852c801e4ff",
+    "giga_admission_emitted": false
+  },
+  "evaluation": {
+    "window_ms": 300000,
+    "known_silence_intervals": [
+      {
+        "start_ms": 955118,
+        "end_ms": 1034499,
+        "source": "local-ffmpeg-silencedetect"
+      }
+    ]
+  }
+}

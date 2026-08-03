@@ -99,7 +99,8 @@ button { color: inherit; }
 .review-list button span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-list button span:last-child { color: var(--muted); font-size: .75rem; text-transform: capitalize; }
 .review-list button[data-status="approved"] span:last-child,
-.review-list button[data-status="corrected"] span:last-child { color: var(--moss); font-weight: 700; }
+.review-list button[data-status="corrected"] span:last-child,
+.review-list button[data-status="no_speech"] span:last-child { color: var(--moss); font-weight: 700; }
 .review-list button[data-status="unclear"] span:last-child { color: var(--amber); font-weight: 700; }
 
 .review-stage { width: min(900px, 100%); padding: 42px clamp(24px, 5vw, 72px) 64px; }
@@ -117,7 +118,8 @@ button { color: inherit; }
   text-transform: capitalize;
 }
 .status-badge[data-status="approved"],
-.status-badge[data-status="corrected"] { background: var(--moss-soft); color: var(--moss-hover); }
+.status-badge[data-status="corrected"],
+.status-badge[data-status="no_speech"] { background: var(--moss-soft); color: var(--moss-hover); }
 .status-badge[data-status="unclear"] { background: var(--amber-soft); color: oklch(.42 .10 78); }
 
 .loading-state { margin-top: 36px; color: var(--muted); }

@@ -168,3 +168,44 @@ def test_unclear_decision_exports_fail_closed_and_remains_visible_after_reload(t
     state = client.get("/api/state").get_json()
     assert state["export"]["quality_status"] == "PASS_WITH_UNCERTAIN_SPANS"
     assert state["export"]["giga_admission_emitted"] is False
+
+
+def test_no_speech_decision_removes_segment_with_lineage(tmp_path):
+    source, transcript, package = _fixture(tmp_path)
+    with patch(
+        "dubbing.apps.transcript_review.package._extract_clip",
+        side_effect=_write_clip,
+    ):
+        manifest = build_review_package(source, transcript, package)
+    item_id = manifest["items"][0]["id"]
+    client = create_review_app(package).test_client()
+    client.get("/")
+    with client.session_transaction() as flask_session:
+        csrf = flask_session["csrf"]
+
+    decision = client.post(
+        f"/api/decision/{item_id}",
+        json={
+            "status": "no_speech",
+            "text": "placeholder ignored by server",
+            "language": "ru",
+            "notes": "no transcribable speech in this interval",
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    with patch(
+        "dubbing.apps.transcript_review.app.detect_silence_intervals",
+        return_value=(),
+    ):
+        exported = client.post("/api/export", headers={"X-CSRF-Token": csrf})
+
+    assert decision.status_code == 200
+    assert exported.status_code == 200
+    assert exported.get_json()["quality_status"] == "PASS"
+    reviewed = json.loads((package / "reviewed-result.json").read_text())
+    assert [segment["text"] for segment in reviewed["segments"]] == ["certain words"]
+    lineage = reviewed["provenance"]["uncertain_span_review"]["lineage"]
+    assert lineage[0]["segment_removed_as_no_speech"] is True
+    saved = json.loads((package / "decisions.json").read_text())
+    assert saved["items"][item_id]["text"] == ""
+    assert saved["items"][item_id]["language"] == "unknown"

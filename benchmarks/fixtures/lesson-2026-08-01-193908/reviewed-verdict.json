@@ -1,0 +1,78 @@
+{
+  "schema_version": "dubbing.reviewed-transcript-verdict.v1",
+  "fixture_id": "lesson-2026-08-01-193908-reviewed-v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "reference": {
+    "kind": "macwhisper-provisional-untimed-text",
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "human_ground_truth": false
+  },
+  "candidate": {
+    "sha256": "679965f0a95f597b44a9e7b0480738cab23b96fe7595c4544a351d68eaa3a480",
+    "quality_report_sha256": "eb106de093755a61bf42a3a6c33f65ea493cf397b998fe571be42852c801e4ff",
+    "review_manifest_sha256": "3e89e4bc393f2ab1e602a0d68c2f906f9e21493c0d2e143fcea5d8cf3ed6f24c",
+    "review_decisions_sha256": "537faee0c2d2aefd0a24b6ce91246804c70149fc959916a6c3f3c990d2ee58cd",
+    "evaluation_manifest_sha256": "b3a206e6cefd03e07a22a8be432177082eb6b319df04eb04c49b309b449b1866",
+    "evaluation_report_sha256": "6a80f94eaebddbb0ee0312a550bfdeffa483fdb3002b0ff1affdd4852310b8f7"
+  },
+  "review": {
+    "corrected_spans": 38,
+    "removed_no_speech_spans": 1,
+    "remaining_uncertain_spans": 0,
+    "reviewed_uncertain_audio_ms": 30500,
+    "full_recording_human_corrected": false
+  },
+  "metrics": {
+    "wer_percent": 43.6323,
+    "cer_percent": 38.9265,
+    "per_script_wer_percent": {
+      "cyrillic": 67.8657,
+      "hangul": 180.0,
+      "latin": 42.3686,
+      "other": 90.9091
+    },
+    "quality_status": "PASS",
+    "adjacent_duplicate_segment_transitions": 13,
+    "max_adjacent_duplicate_chain": 2,
+    "max_phrase_run": 4,
+    "max_token_run": 4,
+    "decoder_fallback_exhausted_spans": 0,
+    "remaining_uncertain_spans": 0
+  },
+  "comparisons": {
+    "whisperkit_large_v3_pre_review": {
+      "evidence_sha256": "2aa920d259590996a47bfe8dc5845c675c75269de5374c92a6c5337788e12461",
+      "wer_percent": 42.0543,
+      "cer_percent": 37.6801,
+      "reviewed_minus_baseline_wer_percentage_points": 1.5781,
+      "reviewed_minus_baseline_cer_percentage_points": 1.2464,
+      "interpretation": "Operator corrections disagree more with the provisional reference; the reference is not human ground truth."
+    },
+    "whisperkit_small": {
+      "evidence_sha256": "d525a4b99ec5df0b1a0f94c225cded1250c26ae1f88d8eaac0bf1c3e159a0c25",
+      "wer_percent": 55.3433,
+      "cer_percent": 51.1559,
+      "reviewed_improvement_wer_percentage_points": 11.711,
+      "reviewed_improvement_cer_percentage_points": 12.2294,
+      "quality_status": "REPROCESS_REQUIRED"
+    },
+    "defective_mlx": {
+      "evidence_sha256": "b48d50925f57db4ad8f3964793b31793a5127067691d58891ff693fe6f5e229e",
+      "wer_percent": 49.9169,
+      "cer_percent": 46.827,
+      "reviewed_improvement_wer_percentage_points": 6.2846,
+      "reviewed_improvement_cer_percentage_points": 7.9005,
+      "quality_status": "REPROCESS_REQUIRED",
+      "adjacent_duplicate_segment_transitions": 145,
+      "max_phrase_run": 109
+    }
+  },
+  "verdict": {
+    "structural_and_pathology_gate": "PASS",
+    "accuracy_certification": "BLOCKED_NO_HUMAN_GROUND_TRUTH",
+    "speaker_attribution_certification": "BLOCKED_NO_REFERENCE_SPEAKER_LABELS",
+    "giga_admission_emitted": false,
+    "promotion_state": "NOT_PRODUCTION_CERTIFIED",
+    "next_smallest_operator_gate": "Create a short, timestamped, human-ground-truth sample from representative English, Russian, Romanian and Korean intervals and score WER plus speaker-attributed WER against it."
+  }
+}

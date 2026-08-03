@@ -117,6 +117,14 @@ recovery are complete. The repaired candidate has **42.0543% WER**, **37.6801% C
 failed spans and no decoder-fallback exhaustion. It remains fail-closed at
 `PASS_WITH_UNCERTAIN_SPANS`: 39 turns totalling 30.5 seconds still need a human decision.
 
+The operator subsequently corrected 38 of those turns and classified one impossible 20 ms
+segment as `no_speech`. The reviewed result has no uncertain spans and passes the pathology
+contract. Against the provisional, non-human MacWhisper reference it measures **43.6323%
+WER** and **38.9265% CER**—1.5781 and 1.2464 percentage points worse than the pre-review
+candidate. This disagreement cannot be interpreted as operator error because the reference is
+not ground truth. Structural promotion passes; accuracy and speaker-attribution certification
+remain blocked pending a small timestamped human-ground-truth sample. No GIGA event was emitted.
+
 ## Local uncertain-span review
 
 Build a source- and transcript-hash-bound package without copying the full private recording:
@@ -138,7 +146,8 @@ dubbing-transcript-review \
 
 Open `http://127.0.0.1:7444`. Every uncertain segment has a short WAV clip with bounded
 context. Approve unchanged text, save an explicit correction, or leave it unclear. Decisions
-are written atomically and are resumable. Export is blocked while any item is pending. A span
+are written atomically and are resumable. A segment that contains no transcribable speech can
+be removed with an explicit `no_speech` lineage decision. Export is blocked while any item is pending. A span
 explicitly marked unclear remains uncertain in the local export, so the quality contract still
 blocks approval and GIGA admission. Every export retains correction lineage, re-runs the
 transcript quality contract and creates no GIGA event.

@@ -18,6 +18,7 @@
     approve: document.getElementById("approve-button"),
     correct: document.getElementById("correct-button"),
     unclear: document.getElementById("unclear-button"),
+    noSpeech: document.getElementById("no-speech-button"),
     previous: document.getElementById("previous-button"),
     next: document.getElementById("next-button"),
     completion: document.getElementById("completion"),
@@ -51,7 +52,7 @@
     if (complete) {
       elements.completionCopy.textContent = progress.unclear
         ? `All spans are reviewed. ${progress.unclear} span${progress.unclear === 1 ? " remains" : "s remain"} explicitly uncertain; local export is allowed, but approval and GIGA admission remain blocked.`
-        : "Every uncertain span is approved or corrected. The reviewed transcript can now be exported locally.";
+        : "Every reviewed span is resolved or removed as no speech. The transcript can now be exported locally.";
       elements.export.disabled = !progress.export_ready;
       if (state.export) {
         elements.export.textContent = "Export again";
@@ -129,15 +130,15 @@
     const payload = await response.json();
     state.decisions[item.id] = {
       status,
-      text: status === "approved" ? item.proposed_text : elements.text.value.trim(),
-      language: status === "approved" ? item.proposed_language : elements.language.value,
+      text: status === "approved" ? item.proposed_text : status === "no_speech" ? "" : elements.text.value.trim(),
+      language: status === "approved" ? item.proposed_language : status === "no_speech" ? "unknown" : elements.language.value,
       notes: elements.notes.value.trim(),
     };
     state.progress = payload.progress;
     renderProgress();
     const destination = nextPending();
     renderList();
-    showToast(status === "approved" ? "Approved unchanged" : status === "corrected" ? "Correction saved" : "Marked unclear");
+    showToast(status === "approved" ? "Approved unchanged" : status === "corrected" ? "Correction saved" : status === "no_speech" ? "Marked as no speech" : "Marked unclear");
     if (destination !== currentIndex) select(destination, { focus: true });
     else renderCurrent();
   }
@@ -181,6 +182,7 @@
   elements.approve.addEventListener("click", () => saveDecision("approved"));
   elements.correct.addEventListener("click", () => saveDecision("corrected"));
   elements.unclear.addEventListener("click", () => saveDecision("unclear"));
+  elements.noSpeech.addEventListener("click", () => saveDecision("no_speech"));
   elements.previous.addEventListener("click", () => select(currentIndex - 1, { focus: true }));
   elements.next.addEventListener("click", () => select(currentIndex + 1, { focus: true }));
   elements.export.addEventListener("click", exportReview);
@@ -201,6 +203,8 @@
       saveDecision("approved");
     } else if (event.key.toLowerCase() === "u") {
       saveDecision("unclear");
+    } else if (event.key.toLowerCase() === "n") {
+      saveDecision("no_speech");
     } else if (event.key === "ArrowLeft") {
       select(currentIndex - 1, { focus: true });
     } else if (event.key === "ArrowRight") {

@@ -1,0 +1,108 @@
+{
+  "backend": {
+    "configuration": {
+      "coordinator": "adaptive-targeted-recovery-v4",
+      "corrected_spans": 38,
+      "operator_reviewed_spans": 39,
+      "remaining_uncertain_spans": 0,
+      "removed_no_speech_spans": 1
+    },
+    "model": "openai_whisper-large-v3-v20240930_626MB",
+    "promotion_state": "evaluation-only",
+    "provider": "whisperkit-local-server"
+  },
+  "fixture_id": "lesson-2026-08-01-193908-reviewed-v1",
+  "metrics": {
+    "cer": {
+      "candidate_units": 16094,
+      "edits": 5809,
+      "rate": 0.3892648931180058,
+      "reference_units": 14923
+    },
+    "language_note": "Script buckets are reported for this untimed mixed-language reference; language-labelled reference turns are required for true per-language WER.",
+    "per_script": {
+      "cyrillic": {
+        "wer": {
+          "candidate_units": 474,
+          "edits": 283,
+          "rate": 0.6786570743405276,
+          "reference_units": 417
+        }
+      },
+      "hangul": {
+        "wer": {
+          "candidate_units": 36,
+          "edits": 27,
+          "rate": 1.8,
+          "reference_units": 15
+        }
+      },
+      "latin": {
+        "wer": {
+          "candidate_units": 3394,
+          "edits": 1338,
+          "rate": 0.4236858771374288,
+          "reference_units": 3158
+        }
+      },
+      "other": {
+        "wer": {
+          "candidate_units": 22,
+          "edits": 20,
+          "rate": 0.9090909090909091,
+          "reference_units": 22
+        }
+      }
+    },
+    "per_time_window": [],
+    "schema_version": "dubbing.transcript-evaluation.v1",
+    "time_window_evaluation_available": false,
+    "time_window_limitation": "A timestamped reference is required for defensible window-level WER/CER.",
+    "wer": {
+      "candidate_units": 3926,
+      "edits": 1576,
+      "rate": 0.4363233665559247,
+      "reference_units": 3612
+    }
+  },
+  "quality": {
+    "approval_allowed": true,
+    "issues": [],
+    "metrics": {
+      "adjacent_duplicate_segment_transitions": 13,
+      "covered_ms": 1760506,
+      "duration_ms": 4987833,
+      "explained_silence_gap_count": 1,
+      "explained_silence_gaps": [
+        {
+          "end_ms": 1034499,
+          "silence_ratio": 1.0,
+          "start_ms": 955118
+        }
+      ],
+      "large_gap_count": 0,
+      "max_adjacent_duplicate_chain": 2,
+      "max_phrase_run": 4,
+      "max_token_run": 4,
+      "script_counts": {
+        "cyrillic": 2233,
+        "hangul": 95,
+        "latin": 12446,
+        "other": 34
+      },
+      "segment_count": 783,
+      "speech_coverage_ratio": 0.35296,
+      "timestamp_overlap_count": 15,
+      "token_count": 3926,
+      "tokens_per_second_of_segment_time": 2.2114,
+      "uncertain_segment_count": 0
+    },
+    "policy_version": "dubbing.transcript-quality-policy.v1",
+    "schema_version": "dubbing.transcript-quality-report.v1",
+    "status": "PASS"
+  },
+  "reference_is_human_ground_truth": false,
+  "reference_kind": "macwhisper-provisional-untimed-text",
+  "schema_version": "dubbing.regression-fixture-report.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+}

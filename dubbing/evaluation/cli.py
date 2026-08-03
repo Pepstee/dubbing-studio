@@ -71,8 +71,14 @@ def evaluate_fixture(manifest_path: str | Path, output_path: str | Path | None =
         duration_ms=manifest["source"].get("duration_ms"),
         window_ms=manifest.get("evaluation", {}).get("window_ms", 300_000),
     )
+    silence_rows = manifest.get("evaluation", {}).get("known_silence_intervals", [])
+    known_silence_intervals = tuple(
+        (int(row["start_ms"]), int(row["end_ms"])) for row in silence_rows
+    )
     quality = evaluate_transcript_quality(
-        candidate, expected_duration_ms=manifest["source"].get("duration_ms")
+        candidate,
+        expected_duration_ms=manifest["source"].get("duration_ms"),
+        known_silence_intervals=known_silence_intervals,
     )
     report = {
         "schema_version": "dubbing.regression-fixture-report.v1",

@@ -19,7 +19,7 @@ from dubbing.transcription.job import source_sha256
 from dubbing.transcription.models import transcription_result_from_dict
 from dubbing.transcription.quality import evaluate_transcript_quality
 
-_STATUSES = {"pending", "approved", "corrected", "unclear"}
+_STATUSES = {"pending", "approved", "corrected", "unclear", "no_speech"}
 _LANGUAGES = {"en", "ru", "ro", "ko", "mixed", "unknown"}
 
 
@@ -178,7 +178,15 @@ def create_review_app(package_dir: str | Path) -> Flask:
         if status == "approved":
             text = item["proposed_text"]
             language = item["proposed_language"]
-        if not text or language not in _LANGUAGES or len(text) > 20_000 or len(notes) > 4000:
+        elif status == "no_speech":
+            text = ""
+            language = "unknown"
+        if (
+            (status != "no_speech" and not text)
+            or language not in _LANGUAGES
+            or len(text) > 20_000
+            or len(notes) > 4000
+        ):
             abort(400)
         with lock:
             decisions = load_decisions()
@@ -203,30 +211,45 @@ def create_review_app(package_dir: str | Path) -> Flask:
             transcript = transcription_result_from_dict(transcript_document)
             segments = list(transcript.segments)
             lineage = []
+            removed_segment_indices = set()
             for item in manifest["items"]:
                 selected = decisions["items"][item["id"]]
                 before = segments[item["segment_index"]]
                 corrected = selected["status"] == "corrected"
                 unresolved = selected["status"] == "unclear"
-                after = replace(
-                    before,
-                    text=selected["text"],
-                    language=selected["language"],
-                    uncertain=unresolved,
-                    words=() if corrected else before.words,
-                )
-                segments[item["segment_index"]] = after
+                no_speech = selected["status"] == "no_speech"
+                if no_speech:
+                    after_text = ""
+                    after_language = "unknown"
+                    removed_segment_indices.add(item["segment_index"])
+                else:
+                    after = replace(
+                        before,
+                        text=selected["text"],
+                        language=selected["language"],
+                        uncertain=unresolved,
+                        words=() if corrected else before.words,
+                    )
+                    segments[item["segment_index"]] = after
+                    after_text = after.text
+                    after_language = after.language
                 lineage.append(
                     {
                         "item_id": item["id"],
                         "segment_index": item["segment_index"],
                         "decision": selected["status"],
                         "before_text_sha256": _text_sha256(before.text),
-                        "after_text_sha256": _text_sha256(after.text),
+                        "after_text_sha256": _text_sha256(after_text),
                         "before_language": before.language,
-                        "after_language": after.language,
+                        "after_language": after_language,
+                        "segment_removed_as_no_speech": no_speech,
                     }
                 )
+            segments = [
+                segment
+                for index, segment in enumerate(segments)
+                if index not in removed_segment_indices
+            ]
             provenance = dict(transcript.provenance or {})
             provenance["uncertain_span_review"] = {
                 "manifest_sha256": source_sha256(manifest_path),
