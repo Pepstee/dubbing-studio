@@ -192,6 +192,7 @@ kbd {
 .completion__mark { margin: 0; color: var(--moss); font-weight: 760; }
 .completion h2 { margin: 6px 0; font-size: 1.5rem; }
 .completion p { max-width: 64ch; }
+.export-status { min-height: 1.5em; color: var(--moss-hover); font-weight: 700; }
 .safety-copy { color: var(--muted); font-size: .84rem; }
 
 .toast {

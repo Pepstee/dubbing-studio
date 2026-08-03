@@ -138,6 +138,7 @@ dubbing-transcript-review \
 
 Open `http://127.0.0.1:7444`. Every uncertain segment has a short WAV clip with bounded
 context. Approve unchanged text, save an explicit correction, or leave it unclear. Decisions
-are written atomically and are resumable. Export is blocked while any item is pending or
-unclear; a successful export retains correction lineage, re-runs the transcript quality
-contract and creates no GIGA event.
+are written atomically and are resumable. Export is blocked while any item is pending. A span
+explicitly marked unclear remains uncertain in the local export, so the quality contract still
+blocks approval and GIGA admission. Every export retains correction lineage, re-runs the
+transcript quality contract and creates no GIGA event.

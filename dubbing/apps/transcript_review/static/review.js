@@ -23,6 +23,7 @@
     completion: document.getElementById("completion"),
     completionCopy: document.getElementById("completion-copy"),
     export: document.getElementById("export-button"),
+    exportStatus: document.getElementById("export-status"),
     toast: document.getElementById("toast"),
   };
 
@@ -49,9 +50,13 @@
     elements.completion.hidden = !complete;
     if (complete) {
       elements.completionCopy.textContent = progress.unclear
-        ? `${progress.unclear} span${progress.unclear === 1 ? " remains" : "s remain"} unclear. Resolve them before export.`
+        ? `All spans are reviewed. ${progress.unclear} span${progress.unclear === 1 ? " remains" : "s remain"} explicitly uncertain; local export is allowed, but approval and GIGA admission remain blocked.`
         : "Every uncertain span is approved or corrected. The reviewed transcript can now be exported locally.";
       elements.export.disabled = !progress.export_ready;
+      if (state.export) {
+        elements.export.textContent = "Export again";
+        elements.exportStatus.textContent = `Last export succeeded · quality ${state.export.quality_status} · no GIGA event emitted.`;
+      }
     }
   }
 
@@ -134,6 +139,7 @@
   async function exportReview() {
     elements.export.disabled = true;
     elements.export.textContent = "Exporting…";
+    elements.exportStatus.textContent = "Running the quality check and writing the reviewed transcript…";
     const response = await fetch("/api/export", {
       method: "POST",
       headers: { "X-CSRF-Token": csrf },
@@ -142,10 +148,14 @@
     elements.export.textContent = "Export reviewed transcript";
     elements.export.disabled = !state.progress.export_ready;
     if (!response.ok) {
+      elements.exportStatus.textContent = "Export did not run. Finish every pending span, then try again.";
       showToast("Export remains blocked until every span is resolved.");
       return;
     }
+    state.export = payload;
+    elements.export.textContent = "Export again";
     showToast(`Export complete · quality ${payload.quality_status}`);
+    elements.exportStatus.textContent = `Export succeeded · quality ${payload.quality_status} · no GIGA event emitted.`;
     elements.completionCopy.textContent = `Reviewed transcript exported locally with quality status ${payload.quality_status}. No GIGA event was emitted.`;
   }
 

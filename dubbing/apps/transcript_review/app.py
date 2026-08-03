@@ -44,7 +44,7 @@ def _progress(decisions: dict) -> dict:
     counts = {status: sum(item["status"] == status for item in values) for status in _STATUSES}
     counts["reviewed"] = len(values) - counts["pending"]
     counts["total"] = len(values)
-    counts["export_ready"] = counts["pending"] == 0 and counts["unclear"] == 0
+    counts["export_ready"] = counts["pending"] == 0
     return counts
 
 
@@ -65,6 +65,8 @@ def create_review_app(package_dir: str | Path) -> Flask:
         raise ValueError("review transcript hash mismatch")
     item_by_id = {item["id"]: item for item in manifest["items"]}
     lock = threading.Lock()
+    result_path = package / "reviewed-result.json"
+    quality_path = package / "reviewed-quality-report.json"
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.secret_key = secrets.token_bytes(32)
@@ -87,6 +89,21 @@ def create_review_app(package_dir: str | Path) -> Flask:
         ):
             raise ValueError("review decisions contain malformed entries")
         return document
+
+    def export_state() -> dict | None:
+        if not result_path.is_file() or not quality_path.is_file():
+            return None
+        quality = json.loads(quality_path.read_text(encoding="utf-8"))
+        return {
+            "quality_status": quality["status"],
+            "approval_allowed": quality["approval_allowed"],
+            "exported_at": datetime.fromtimestamp(
+                result_path.stat().st_mtime, timezone.utc
+            ).isoformat(),
+            "result": str(result_path),
+            "quality_report": str(quality_path),
+            "giga_admission_emitted": False,
+        }
 
     @app.before_request
     def csrf_session():
@@ -130,6 +147,7 @@ def create_review_app(package_dir: str | Path) -> Flask:
                 "decisions": decisions["items"],
                 "progress": _progress(decisions),
                 "uncertain_audio_duration_ms": manifest["uncertain_audio_duration_ms"],
+                "export": export_state(),
             }
         )
 
@@ -189,11 +207,12 @@ def create_review_app(package_dir: str | Path) -> Flask:
                 selected = decisions["items"][item["id"]]
                 before = segments[item["segment_index"]]
                 corrected = selected["status"] == "corrected"
+                unresolved = selected["status"] == "unclear"
                 after = replace(
                     before,
                     text=selected["text"],
                     language=selected["language"],
-                    uncertain=False,
+                    uncertain=unresolved,
                     words=() if corrected else before.words,
                 )
                 segments[item["segment_index"]] = after
@@ -228,16 +247,18 @@ def create_review_app(package_dir: str | Path) -> Flask:
                 expected_duration_ms=reviewed.duration_ms,
                 known_silence_intervals=detect_silence_intervals(source),
             )
-            result_path = package / "reviewed-result.json"
-            quality_path = package / "reviewed-quality-report.json"
             _atomic_json(result_path, reviewed.to_dict())
             _atomic_json(quality_path, quality.to_dict())
+            exported_at = datetime.fromtimestamp(
+                result_path.stat().st_mtime, timezone.utc
+            ).isoformat()
         return jsonify(
             {
                 "ok": True,
                 "quality_status": quality.status.value,
                 "approval_allowed": quality.approval_allowed,
                 "giga_admission_emitted": False,
+                "exported_at": exported_at,
                 "result": str(result_path),
                 "quality_report": str(quality_path),
             }

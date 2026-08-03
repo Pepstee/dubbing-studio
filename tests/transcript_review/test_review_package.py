@@ -126,3 +126,45 @@ def test_export_remains_blocked_while_review_is_pending(tmp_path):
 
     assert response.status_code == 409
     assert response.get_json()["error"] == "review_incomplete"
+
+
+def test_unclear_decision_exports_fail_closed_and_remains_visible_after_reload(tmp_path):
+    source, transcript, package = _fixture(tmp_path)
+    with patch(
+        "dubbing.apps.transcript_review.package._extract_clip",
+        side_effect=_write_clip,
+    ):
+        manifest = build_review_package(source, transcript, package)
+    item_id = manifest["items"][0]["id"]
+    client = create_review_app(package).test_client()
+    client.get("/")
+    with client.session_transaction() as flask_session:
+        csrf = flask_session["csrf"]
+
+    decision = client.post(
+        f"/api/decision/{item_id}",
+        json={
+            "status": "unclear",
+            "text": "неясные слова",
+            "language": "ru",
+            "notes": "could not resolve from the audio",
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    with patch(
+        "dubbing.apps.transcript_review.app.detect_silence_intervals",
+        return_value=(),
+    ):
+        exported = client.post("/api/export", headers={"X-CSRF-Token": csrf})
+
+    assert decision.status_code == 200
+    assert decision.get_json()["progress"]["export_ready"] is True
+    assert exported.status_code == 200
+    payload = exported.get_json()
+    assert payload["quality_status"] == "PASS_WITH_UNCERTAIN_SPANS"
+    assert payload["approval_allowed"] is False
+    reviewed = json.loads((package / "reviewed-result.json").read_text())
+    assert reviewed["segments"][1]["uncertain"] is True
+    state = client.get("/api/state").get_json()
+    assert state["export"]["quality_status"] == "PASS_WITH_UNCERTAIN_SPANS"
+    assert state["export"]["giga_admission_emitted"] is False
