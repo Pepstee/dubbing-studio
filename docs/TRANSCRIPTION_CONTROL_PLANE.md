@@ -147,7 +147,34 @@ dubbing-transcript-review \
 Open `http://127.0.0.1:7444`. Every uncertain segment has a short WAV clip with bounded
 context. Approve unchanged text, save an explicit correction, or leave it unclear. Decisions
 are written atomically and are resumable. A segment that contains no transcribable speech can
-be removed with an explicit `no_speech` lineage decision. Export is blocked while any item is pending. A span
-explicitly marked unclear remains uncertain in the local export, so the quality contract still
-blocks approval and GIGA admission. Every export retains correction lineage, re-runs the
-transcript quality contract and creates no GIGA event.
+be removed with an explicit `no_speech` lineage decision. Export is blocked while any item is
+pending. A span explicitly marked unclear remains uncertain in the local export, so the quality
+contract still blocks approval and GIGA admission. Every export retains correction lineage,
+re-runs the transcript quality contract and creates no GIGA event.
+
+## Human-ground-truth calibration
+
+Structural quality is not an accuracy certificate. Build a deterministic 8–12 minute
+stratified calibration set from a reviewed transcript:
+
+```bash
+dubbing-calibration-package \
+  "/path/to/source.mov" \
+  --transcript "/path/to/reviewed-result.json" \
+  --output "/path/to/private-calibration-package"
+```
+
+Start the loopback-only turn reviewer separately from the uncertain-span reviewer:
+
+```bash
+dubbing-calibration-review \
+  --package "/path/to/private-calibration-package" \
+  --port 7445
+```
+
+The reviewer pre-fills timestamped candidate turns but requires the operator to verify exact
+text, language, approximate boundaries and anonymous `Speaker A`/`Speaker B` labels. Intelligible
+speech cannot be saved as `UNKNOWN`; overlapping speech and `[unclear]` remain explicit. Export
+is blocked until every clip is reviewed, records full correction lineage and never emits a
+GIGA event. Languages absent from the source remain declared coverage gaps rather than being
+fabricated into the sample.
