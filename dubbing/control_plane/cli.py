@@ -42,7 +42,10 @@ def discover_whisperkit_models() -> tuple[Path, ...]:
 
 def _backend(args: argparse.Namespace):
     if args.backend == "mlx":
-        return MLXWhisperTranscriptionBackend(model=args.model or "mlx-community/whisper-large-v3-turbo")
+        options = {"model": args.model or "mlx-community/whisper-large-v3-turbo"}
+        if args.mlx_temperature is not None:
+            options["temperature"] = tuple(args.mlx_temperature)
+        return MLXWhisperTranscriptionBackend(**options)
     if args.backend == "faster-whisper":
         return FasterWhisperTranscriptionBackend(model=args.model or "large-v3-turbo")
     models = discover_whisperkit_models()
@@ -95,6 +98,15 @@ def main() -> None:
     parser.add_argument("--server-url")
     parser.add_argument("--port", type=int, default=50060)
     parser.add_argument("--whisperkit-cli")
+    parser.add_argument(
+        "--mlx-temperature",
+        action="append",
+        type=float,
+        help=(
+            "MLX decode temperature; repeat to configure fallbacks. "
+            "Use once with 0 for deterministic fail-fast adjudication."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 

@@ -152,9 +152,41 @@ pending. A span explicitly marked unclear remains uncertain in the local export,
 contract still blocks approval and GIGA admission. Every export retains correction lineage,
 re-runs the transcript quality contract and creates no GIGA event.
 
-## Human-ground-truth calibration
+## Automatic local adjudication (default)
 
-Structural quality is not an accuracy certificate. Build a deterministic 8–12 minute
+Manual calibration is optional, not an operational prerequisite. Compare the reviewed primary
+against one or more independently executed, source-bound local candidates:
+
+```bash
+dubbing-adjudicate-local \
+  --source "/path/to/source.mov" \
+  --primary "/path/to/reviewed-result.json" \
+  --comparator "/path/to/independent-local-result.json" \
+  --output "/path/to/local-adjudication.json"
+```
+
+Comparators that fail the transcript quality contract remain visible as negative evidence but
+cannot vote in consensus. The policy computes symmetric whole-document and one-minute-window
+token agreement. Low-agreement windows fail closed; model consensus is explicitly not represented
+as human ground truth. The command never emits a GIGA event. A consensus pass only makes the
+package eligible for the existing separate explicit approval gate.
+Supplying `--source` hash-binds the media and recomputes every quality report with local silence
+evidence; omit it only when consuming an already-bound review package with a matching sidecar.
+
+For an MLX comparator, deterministic fail-fast decoding avoids the expensive and increasingly
+hallucination-prone temperature escalation used by the legacy baseline:
+
+```bash
+dubbing-long-transcribe "/path/to/source.mov" \
+  --output "/path/to/mlx-comparator" \
+  --backend mlx \
+  --model mlx-community/whisper-large-v3-turbo \
+  --mlx-temperature 0
+```
+
+## Optional human-ground-truth calibration
+
+For a formal accuracy certificate, build a deterministic 8–12 minute
 stratified calibration set from a reviewed transcript:
 
 ```bash

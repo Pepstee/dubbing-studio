@@ -31,6 +31,9 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 7. Translation rows now hash-bind their authoritative source segment.
 8. New capture packages contain `quality-report.json`; `FAILED` and `REPROCESS_REQUIRED`
    packages cannot be approved or exported.
+9. Automatic local multi-run adjudication was added as the default non-cloud accuracy-evidence
+   path. Manual calibration remains available for formal human-ground-truth certification but is
+   not required to operate the local consensus gate.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.
@@ -59,10 +62,8 @@ repository. No large model was downloaded by this migration.
 
 ## Remaining explicit gates
 
-- Operator approval to download the official 627 MB WhisperKit large-v3 4-bit model.
-- A full benchmark of that model against the bound 83-minute fixture.
-- Human-corrected, timestamped, language-labelled transcript turns for defensible
-  per-language/window WER.
+- Human-corrected, timestamped, language-labelled transcript turns remain necessary only for a
+  formal ground-truth accuracy certificate, not for automatic local consensus operation.
 - Consented voice reference clips and labelled diarization reference for identity/DER/JER.
 - Acceptance of pyannote Community-1 terms plus a locally configured Hugging Face token or
   an already-downloaded local model.

@@ -1,0 +1,2082 @@
+{
+  "comparators": [
+    {
+      "backend": "whisperkit-local-server",
+      "label": "control-plane-whisperkit-small-v3",
+      "model": "whisperkit-local-server:small:http://127.0.0.1:50060",
+      "path": "/Users/admin/Documents/dubbing-studio/output/control-plane-whisperkit-small-v3/result.json",
+      "quality": {
+        "approval_allowed": false,
+        "issues": [
+          {
+            "code": "span_transcription_failed",
+            "end_ms": 2162176,
+            "evidence": null,
+            "message": "A local span exhausted all configured transcription attempts.",
+            "severity": "critical",
+            "start_ms": 1916701
+          },
+          {
+            "code": "span_transcription_failed",
+            "end_ms": 4581241,
+            "evidence": null,
+            "message": "A local span exhausted all configured transcription attempts.",
+            "severity": "critical",
+            "start_ms": 4390307
+          },
+          {
+            "code": "large_unexplained_gaps",
+            "end_ms": null,
+            "evidence": {
+              "gap_count": 2,
+              "largest_gap_ms": 83400
+            },
+            "message": "Long gaps require comparison with VAD evidence.",
+            "severity": "review",
+            "start_ms": null
+          }
+        ],
+        "metrics": {
+          "adjacent_duplicate_segment_transitions": 5,
+          "covered_ms": 1927336,
+          "duration_ms": 4987833,
+          "explained_silence_gap_count": 1,
+          "explained_silence_gaps": [
+            {
+              "end_ms": 1068179,
+              "silence_ratio": 0.984581,
+              "start_ms": 905778
+            }
+          ],
+          "large_gap_count": 2,
+          "max_adjacent_duplicate_chain": 1,
+          "max_phrase_run": 4,
+          "max_token_run": 4,
+          "script_counts": {
+            "cyrillic": 0,
+            "hangul": 0,
+            "latin": 11781,
+            "other": 0
+          },
+          "segment_count": 509,
+          "speech_coverage_ratio": 0.386407,
+          "timestamp_overlap_count": 11,
+          "token_count": 3152,
+          "tokens_per_second_of_segment_time": 1.6212,
+          "uncertain_segment_count": 42
+        },
+        "policy_version": "dubbing.transcript-quality-policy.v1",
+        "schema_version": "dubbing.transcript-quality-report.v1",
+        "status": "REPROCESS_REQUIRED"
+      },
+      "quality_evidence": {
+        "path": null,
+        "recomputed_from_source_vad": true,
+        "sha256": null
+      },
+      "sha256": "f4a47a36ac91b16ca97d221e8df5c755f15619cbe0d9f1e4a4ca6280f29def92"
+    },
+    {
+      "backend": "mlx-whisper",
+      "label": "lesson-2026-08-01-193908-safe-v2",
+      "model": "mlx-community/whisper-large-v3-turbo:temperature=0,0.2,0.4,0.6,0.8,1:condition_on_previous_text=False:hallucination_silence_threshold=2.0",
+      "path": "/Users/admin/Documents/dubbing-studio/output/transcribe/lesson-2026-08-01-193908-safe-v2/transcript.json",
+      "quality": {
+        "approval_allowed": false,
+        "issues": [
+          {
+            "code": "pathological_repetition",
+            "end_ms": null,
+            "evidence": {
+              "adjacent_duplicate_segment_transitions": 145,
+              "max_adjacent_duplicate_chain": 32,
+              "max_phrase": "loops",
+              "max_phrase_run": 109,
+              "max_token": "loops",
+              "max_token_run": 109
+            },
+            "message": "Repeated decoding output indicates a hallucination loop.",
+            "severity": "critical",
+            "start_ms": null
+          },
+          {
+            "code": "large_unexplained_gaps",
+            "end_ms": null,
+            "evidence": {
+              "gap_count": 2,
+              "largest_gap_ms": 89700
+            },
+            "message": "Long gaps require comparison with VAD evidence.",
+            "severity": "review",
+            "start_ms": null
+          }
+        ],
+        "metrics": {
+          "adjacent_duplicate_segment_transitions": 145,
+          "covered_ms": 2072480,
+          "duration_ms": 4987833,
+          "explained_silence_gap_count": 0,
+          "explained_silence_gaps": [],
+          "large_gap_count": 2,
+          "max_adjacent_duplicate_chain": 32,
+          "max_phrase_run": 109,
+          "max_token_run": 109,
+          "script_counts": {
+            "cyrillic": 1258,
+            "hangul": 82,
+            "latin": 13900,
+            "other": 109
+          },
+          "segment_count": 815,
+          "speech_coverage_ratio": 0.415507,
+          "timestamp_overlap_count": 4,
+          "token_count": 4017,
+          "tokens_per_second_of_segment_time": 1.9256,
+          "uncertain_segment_count": 0
+        },
+        "policy_version": "dubbing.transcript-quality-policy.v1",
+        "schema_version": "dubbing.transcript-quality-report.v1",
+        "status": "REPROCESS_REQUIRED"
+      },
+      "quality_evidence": {
+        "path": null,
+        "recomputed_from_source_vad": true,
+        "sha256": null
+      },
+      "sha256": "a42ccd85d0206493dadd78a989688bb1d1f5ebcb4623c745855c61dccb037fb9"
+    }
+  ],
+  "minimum_healthy_document_agreement": null,
+  "policy": {
+    "cloud_allowed": false,
+    "consensus_is_ground_truth": false,
+    "consensus_threshold": 0.75,
+    "human_calibration_required": false,
+    "low_agreement_threshold": 0.55,
+    "policy_version": "dubbing.local-consensus-policy.v1",
+    "window_ms": 60000
+  },
+  "primary": {
+    "backend": "whisperkit-local-server",
+    "model": "whisperkit-local-server:large-v3-v20240930_626MB:http://127.0.0.1:50060",
+    "path": "/Users/admin/Documents/dubbing-studio/output/review/lesson-2026-08-01-193908-uncertain-v1/reviewed-result.json",
+    "quality": {
+      "approval_allowed": true,
+      "issues": [],
+      "metrics": {
+        "adjacent_duplicate_segment_transitions": 13,
+        "covered_ms": 1760506,
+        "duration_ms": 4987833,
+        "explained_silence_gap_count": 1,
+        "explained_silence_gaps": [
+          {
+            "end_ms": 1034499,
+            "silence_ratio": 0.96925,
+            "start_ms": 955118
+          }
+        ],
+        "large_gap_count": 0,
+        "max_adjacent_duplicate_chain": 2,
+        "max_phrase_run": 4,
+        "max_token_run": 4,
+        "script_counts": {
+          "cyrillic": 2233,
+          "hangul": 95,
+          "latin": 12446,
+          "other": 34
+        },
+        "segment_count": 783,
+        "speech_coverage_ratio": 0.35296,
+        "timestamp_overlap_count": 15,
+        "token_count": 3926,
+        "tokens_per_second_of_segment_time": 2.2114,
+        "uncertain_segment_count": 0
+      },
+      "policy_version": "dubbing.transcript-quality-policy.v1",
+      "schema_version": "dubbing.transcript-quality-report.v1",
+      "status": "PASS"
+    },
+    "quality_evidence": {
+      "path": null,
+      "recomputed_from_source_vad": true,
+      "sha256": null
+    },
+    "sha256": "679965f0a95f597b44a9e7b0480738cab23b96fe7595c4544a351d68eaa3a480"
+  },
+  "schema_version": "dubbing.local-transcript-adjudication.v1",
+  "source": {
+    "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+  },
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "uncertain_window_count": 84,
+  "verdict": {
+    "accuracy_certified_against_ground_truth": false,
+    "eligible_for_explicit_approval": false,
+    "giga_admission_emitted": false,
+    "reason": "No comparator passed the semantic quality contract.",
+    "status": "INSUFFICIENT_HEALTHY_COMPARATORS"
+  },
+  "whole_document_comparisons": [
+    {
+      "agreement": 0.476821,
+      "candidate": "control-plane-whisperkit-small-v3",
+      "quality_status": "REPROCESS_REQUIRED"
+    },
+    {
+      "agreement": 0.622853,
+      "candidate": "lesson-2026-08-01-193908-safe-v2",
+      "quality_status": "REPROCESS_REQUIRED"
+    }
+  ],
+  "windows": [
+    {
+      "comparisons": [
+        {
+          "agreement": 0.85,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 19,
+          "primary_token_count": 20,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.95,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 19,
+          "primary_token_count": 20,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 60000,
+      "start_ms": 0,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.878788,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 63,
+          "primary_token_count": 66,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.818182,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 60,
+          "primary_token_count": 66,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 120000,
+      "start_ms": 60000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.804878,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 35,
+          "primary_token_count": 41,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.926829,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 38,
+          "primary_token_count": 41,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 180000,
+      "start_ms": 120000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.571429,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 46,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.673469,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 49,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 240000,
+      "start_ms": 180000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.83871,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 62,
+          "primary_token_count": 61,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.836066,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 58,
+          "primary_token_count": 61,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 300000,
+      "start_ms": 240000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.564103,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 28,
+          "primary_token_count": 39,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.794872,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 36,
+          "primary_token_count": 39,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 360000,
+      "start_ms": 300000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.682927,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 41,
+          "primary_token_count": 30,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.666667,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 39,
+          "primary_token_count": 30,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 420000,
+      "start_ms": 360000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.636364,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 44,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.44186,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 26,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 480000,
+      "start_ms": 420000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.913793,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 58,
+          "primary_token_count": 55,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.898305,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 59,
+          "primary_token_count": 55,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 540000,
+      "start_ms": 480000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.918919,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 37,
+          "primary_token_count": 36,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.772727,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 44,
+          "primary_token_count": 36,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 600000,
+      "start_ms": 540000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.816327,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 49,
+          "primary_token_count": 48,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.8125,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 48,
+          "primary_token_count": 48,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 660000,
+      "start_ms": 600000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.756757,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 37,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.169118,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 136,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 720000,
+      "start_ms": 660000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.574468,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 40,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.632653,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 49,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 780000,
+      "start_ms": 720000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.636364,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 42,
+          "primary_token_count": 44,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.681818,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 40,
+          "primary_token_count": 44,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 840000,
+      "start_ms": 780000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.863636,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 41,
+          "primary_token_count": 44,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.895833,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 48,
+          "primary_token_count": 44,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 900000,
+      "start_ms": 840000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.727273,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 11,
+          "primary_token_count": 8,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.727273,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 11,
+          "primary_token_count": 8,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 960000,
+      "start_ms": 900000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 1.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 0,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 4,
+          "primary_token_count": 0,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1020000,
+      "start_ms": 960000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 6,
+          "primary_token_count": 3,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.333333,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 6,
+          "primary_token_count": 3,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1080000,
+      "start_ms": 1020000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.913043,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 22,
+          "primary_token_count": 23,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 1.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 23,
+          "primary_token_count": 23,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1140000,
+      "start_ms": 1080000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.878049,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 41,
+          "primary_token_count": 41,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.829268,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 41,
+          "primary_token_count": 41,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1200000,
+      "start_ms": 1140000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.396552,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 58,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.44898,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 49,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1260000,
+      "start_ms": 1200000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.638889,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 34,
+          "primary_token_count": 36,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.805556,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 35,
+          "primary_token_count": 36,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1320000,
+      "start_ms": 1260000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.722222,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 54,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.857143,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 42,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1380000,
+      "start_ms": 1320000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.857143,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 56,
+          "primary_token_count": 48,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.842105,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 57,
+          "primary_token_count": 48,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1440000,
+      "start_ms": 1380000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.306122,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 48,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.734694,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 47,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1500000,
+      "start_ms": 1440000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.782609,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 43,
+          "primary_token_count": 46,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.73913,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 36,
+          "primary_token_count": 46,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1560000,
+      "start_ms": 1500000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.870968,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 27,
+          "primary_token_count": 31,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.619048,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 42,
+          "primary_token_count": 31,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1620000,
+      "start_ms": 1560000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.781818,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 54,
+          "primary_token_count": 55,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.690909,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 48,
+          "primary_token_count": 55,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1680000,
+      "start_ms": 1620000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.756757,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 37,
+          "primary_token_count": 34,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.882353,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 34,
+          "primary_token_count": 34,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1740000,
+      "start_ms": 1680000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.761905,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 36,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.844444,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 45,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1800000,
+      "start_ms": 1740000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.90625,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 30,
+          "primary_token_count": 32,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.878788,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 33,
+          "primary_token_count": 32,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1860000,
+      "start_ms": 1800000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.877551,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 44,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.877551,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 44,
+          "primary_token_count": 49,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1920000,
+      "start_ms": 1860000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 56,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.732143,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 54,
+          "primary_token_count": 56,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 1980000,
+      "start_ms": 1920000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 4,
+          "primary_token_count": 75,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.76,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 61,
+          "primary_token_count": 75,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2040000,
+      "start_ms": 1980000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 35,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.6,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 33,
+          "primary_token_count": 35,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2100000,
+      "start_ms": 2040000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.673469,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 49,
+          "primary_token_count": 42,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2160000,
+      "start_ms": 2100000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.933333,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 30,
+          "primary_token_count": 28,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.931034,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 29,
+          "primary_token_count": 28,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2220000,
+      "start_ms": 2160000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.157895,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 38,
+          "primary_token_count": 24,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.125,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 11,
+          "primary_token_count": 24,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2280000,
+      "start_ms": 2220000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.321429,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 28,
+          "primary_token_count": 24,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.346154,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 26,
+          "primary_token_count": 24,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2340000,
+      "start_ms": 2280000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.8,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 40,
+          "primary_token_count": 38,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.857143,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 42,
+          "primary_token_count": 38,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2400000,
+      "start_ms": 2340000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.930233,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 43,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.883721,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 41,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2460000,
+      "start_ms": 2400000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.684211,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 94,
+          "primary_token_count": 95,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.621053,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 88,
+          "primary_token_count": 95,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2520000,
+      "start_ms": 2460000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.619565,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 92,
+          "primary_token_count": 69,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.623188,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 69,
+          "primary_token_count": 69,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2580000,
+      "start_ms": 2520000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.037975,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 51,
+          "primary_token_count": 79,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.265823,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 54,
+          "primary_token_count": 79,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2640000,
+      "start_ms": 2580000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.28125,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 40,
+          "primary_token_count": 64,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.015625,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 5,
+          "primary_token_count": 64,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2700000,
+      "start_ms": 2640000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.32,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 50,
+          "primary_token_count": 38,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.684211,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 37,
+          "primary_token_count": 38,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2760000,
+      "start_ms": 2700000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.193548,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 62,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.422222,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 44,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2820000,
+      "start_ms": 2760000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.136752,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 117,
+          "primary_token_count": 95,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.768421,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 92,
+          "primary_token_count": 95,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2880000,
+      "start_ms": 2820000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.325301,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 83,
+          "primary_token_count": 69,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.550725,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 64,
+          "primary_token_count": 69,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 2940000,
+      "start_ms": 2880000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.588235,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 41,
+          "primary_token_count": 51,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.294118,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 33,
+          "primary_token_count": 51,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3000000,
+      "start_ms": 2940000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.62963,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 68,
+          "primary_token_count": 81,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.654321,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 76,
+          "primary_token_count": 81,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3060000,
+      "start_ms": 3000000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.265625,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 52,
+          "primary_token_count": 64,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.328125,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 41,
+          "primary_token_count": 64,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3120000,
+      "start_ms": 3060000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.5,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 52,
+          "primary_token_count": 40,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.6,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 29,
+          "primary_token_count": 40,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3180000,
+      "start_ms": 3120000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.088889,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 44,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.2,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 44,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3240000,
+      "start_ms": 3180000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.5625,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 64,
+          "primary_token_count": 56,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.362069,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 58,
+          "primary_token_count": 56,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3300000,
+      "start_ms": 3240000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.666667,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 33,
+          "primary_token_count": 32,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.666667,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 33,
+          "primary_token_count": 32,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3360000,
+      "start_ms": 3300000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.787234,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 44,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.803922,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 51,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3420000,
+      "start_ms": 3360000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.186047,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 26,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.534884,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 42,
+          "primary_token_count": 43,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3480000,
+      "start_ms": 3420000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.097222,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 14,
+          "primary_token_count": 72,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.513889,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 57,
+          "primary_token_count": 72,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3540000,
+      "start_ms": 3480000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.545455,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 25,
+          "primary_token_count": 33,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.757576,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 33,
+          "primary_token_count": 33,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3600000,
+      "start_ms": 3540000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.52,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 20,
+          "primary_token_count": 25,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.428571,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 28,
+          "primary_token_count": 25,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3660000,
+      "start_ms": 3600000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.57971,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 69,
+          "primary_token_count": 54,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.492754,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 69,
+          "primary_token_count": 54,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3720000,
+      "start_ms": 3660000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.606557,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 55,
+          "primary_token_count": 61,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.590164,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 58,
+          "primary_token_count": 61,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3780000,
+      "start_ms": 3720000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.675,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 80,
+          "primary_token_count": 80,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.740741,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 81,
+          "primary_token_count": 80,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3840000,
+      "start_ms": 3780000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.328947,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 26,
+          "primary_token_count": 76,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.692308,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 91,
+          "primary_token_count": 76,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3900000,
+      "start_ms": 3840000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.064935,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 9,
+          "primary_token_count": 77,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.752941,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 85,
+          "primary_token_count": 77,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 3960000,
+      "start_ms": 3900000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.486957,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 76,
+          "primary_token_count": 115,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.591304,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 104,
+          "primary_token_count": 115,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4020000,
+      "start_ms": 3960000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.377049,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 61,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.388889,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 54,
+          "primary_token_count": 47,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4080000,
+      "start_ms": 4020000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.022222,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 4,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.425532,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 47,
+          "primary_token_count": 45,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4140000,
+      "start_ms": 4080000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.344444,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 32,
+          "primary_token_count": 90,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.7,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 87,
+          "primary_token_count": 90,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4200000,
+      "start_ms": 4140000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.420455,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 53,
+          "primary_token_count": 88,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.545455,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 79,
+          "primary_token_count": 88,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4260000,
+      "start_ms": 4200000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.683673,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 83,
+          "primary_token_count": 98,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.826531,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 95,
+          "primary_token_count": 98,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4320000,
+      "start_ms": 4260000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.311111,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 90,
+          "primary_token_count": 82,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.557692,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 104,
+          "primary_token_count": 82,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4380000,
+      "start_ms": 4320000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.172414,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 12,
+          "primary_token_count": 29,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.55,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 40,
+          "primary_token_count": 29,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4440000,
+      "start_ms": 4380000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 4,
+          "primary_token_count": 13,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.160714,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 56,
+          "primary_token_count": 13,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4500000,
+      "start_ms": 4440000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 21,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.357143,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 42,
+          "primary_token_count": 21,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4560000,
+      "start_ms": 4500000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 88,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.693182,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 81,
+          "primary_token_count": 88,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4620000,
+      "start_ms": 4560000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 33,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.65,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 40,
+          "primary_token_count": 33,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4680000,
+      "start_ms": 4620000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 1,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 1,
+          "primary_token_count": 1,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4740000,
+      "start_ms": 4680000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 6,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0625,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 16,
+          "primary_token_count": 6,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4800000,
+      "start_ms": 4740000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.168539,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 89,
+          "primary_token_count": 37,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4860000,
+      "start_ms": 4800000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 39,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 22,
+          "primary_token_count": 39,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4920000,
+      "start_ms": 4860000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 2,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 0,
+          "primary_token_count": 2,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4980000,
+      "start_ms": 4920000,
+      "uncertain": true
+    },
+    {
+      "comparisons": [
+        {
+          "agreement": 1.0,
+          "candidate": "control-plane-whisperkit-small-v3",
+          "candidate_token_count": 0,
+          "primary_token_count": 0,
+          "quality_eligible": false
+        },
+        {
+          "agreement": 0.0,
+          "candidate": "lesson-2026-08-01-193908-safe-v2",
+          "candidate_token_count": 6,
+          "primary_token_count": 0,
+          "quality_eligible": false
+        }
+      ],
+      "consensus_agreement": null,
+      "end_ms": 4987833,
+      "start_ms": 4980000,
+      "uncertain": true
+    }
+  ]
+}
