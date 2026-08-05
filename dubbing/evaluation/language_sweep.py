@@ -384,6 +384,20 @@ def evaluate_language_sweep(
         "model_bin_sha256": sweep["model_bin_sha256"],
         "compute_type": sweep["compute_type"],
         "runtime_seconds": sweep["runtime_seconds"],
+        "decode_configuration": {
+            "beam_sizes": sweep.get("beam_sizes", []),
+            "forced_languages": sweep.get("forced_languages", []),
+            "temperatures": sweep.get("temperatures", [0.0]),
+            "patience": sweep.get("patience", 1.0),
+            "length_penalty": sweep.get("length_penalty", 1.0),
+            "multilingual": sweep.get("multilingual", True),
+            "word_timestamps": sweep.get("word_timestamps", True),
+            "condition_on_previous_text": sweep.get("condition_on_previous_text", False),
+            "initial_prompt": sweep.get("initial_prompt"),
+            "context_transcript_sha256": sweep.get("context_transcript_sha256"),
+            "context_seconds": sweep.get("context_seconds"),
+            "context_max_chars": sweep.get("context_max_chars"),
+        },
         "coverage_gaps": fixture["coverage_gaps"],
         "accuracy_certification_scope": fixture.get("selection_policy", {}).get(
             "scope_limitation", "fixture scope is not declared"

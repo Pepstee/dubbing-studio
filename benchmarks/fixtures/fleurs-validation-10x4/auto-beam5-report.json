@@ -3,6 +3,26 @@
   "accuracy_certification_scope": "Clean read speech validates language coverage; it does not certify noisy long-form or code-switched production audio.",
   "compute_type": "int8_float16",
   "coverage_gaps": [],
+  "decode_configuration": {
+    "beam_sizes": [
+      5
+    ],
+    "condition_on_previous_text": false,
+    "context_max_chars": null,
+    "context_seconds": null,
+    "context_transcript_sha256": null,
+    "forced_languages": [
+      "auto"
+    ],
+    "initial_prompt": null,
+    "length_penalty": 1.0,
+    "multilingual": true,
+    "patience": 1.0,
+    "temperatures": [
+      0.0
+    ],
+    "word_timestamps": true
+  },
   "fixture_gate_passed": false,
   "fixture_gate_passed_methods": [],
   "fixture_sha256": "180dacf40e031c218b73d0eadeeff024d8f7ffe9cb57a523b8524e13b6b035ee",

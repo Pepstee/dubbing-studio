@@ -51,6 +51,9 @@ controls both scored 90.59% aggregate but left one Korean clip blank; disabling 
 mode made no accuracy difference. Disabling word timestamps produced byte-for-byte identical
 recognized text and the same WER/CER, reducing runtime only from 110.047 to 107.484 seconds;
 it is rejected because it removes required timing evidence without improving accuracy.
+Enabling previous-text conditioning also produced identical recognized text and WER/CER
+(107.0 seconds, no repetition issues), so decoder context within these complete utterances is
+not the missing capacity either.
 
 ## Human evidence discovered
 

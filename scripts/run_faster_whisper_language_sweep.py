@@ -58,6 +58,11 @@ def main() -> None:
     parser.add_argument(
         "--word-timestamps", action=argparse.BooleanOptionalAction, default=True
     )
+    parser.add_argument(
+        "--condition-on-previous-text",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--temperatures", default="0")
     parser.add_argument("--initial-prompt")
     parser.add_argument("--context-transcript")
@@ -141,7 +146,7 @@ def main() -> None:
                     temperature=decode_temperatures,
                     word_timestamps=args.word_timestamps,
                     vad_filter=False,
-                    condition_on_previous_text=False,
+                    condition_on_previous_text=args.condition_on_previous_text,
                     initial_prompt=span_prompt,
                 )
                 segments = list(iterator)
@@ -216,6 +221,7 @@ def main() -> None:
         "length_penalty": args.length_penalty,
         "multilingual": args.multilingual,
         "word_timestamps": args.word_timestamps,
+        "condition_on_previous_text": args.condition_on_previous_text,
         "temperatures": list(temperatures),
         "forced_languages": ["auto" if value is None else value for value in languages],
         "model_load_seconds": round(model_load_seconds, 6),

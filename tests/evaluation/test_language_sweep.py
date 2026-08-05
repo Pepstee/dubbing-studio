@@ -104,6 +104,8 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
         is False
     )
     assert report["fixture_gate_passed"] is False
+    assert report["decode_configuration"]["condition_on_previous_text"] is False
+    assert report["decode_configuration"]["word_timestamps"] is True
     assert report["methods"]["automatic_minimum_beam"]["quality_diagnostics"] == {
         "selected_candidate_count": 1,
         "maximum_compression_ratio": None,
