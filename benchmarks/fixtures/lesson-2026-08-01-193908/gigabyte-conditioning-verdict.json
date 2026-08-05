@@ -1,0 +1,40 @@
+{
+  "schema_version": "dubbing.gigabyte-conditioning-verdict.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "base_fixture_sha256": "6cd6156505123fa01b143847c8f4c9c04f6d8118a87cb69978b541cabfd6ae6f",
+  "model": "faster-whisper-large-v3-turbo-ct2",
+  "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+  "compute_type": "int8_float16",
+  "timing_policy": "full_clip",
+  "accuracy_certification_eligible": false,
+  "baseline": {
+    "word_accuracy": 0.5454545454545454,
+    "wer": 0.45454545454545453
+  },
+  "experiments": [
+    {
+      "id": "denoise-loudnorm",
+      "filter_graph": "highpass=f=80,lowpass=f=7600,afftdn=nr=12:nf=-45:tn=1:gs=5,loudnorm=I=-18:TP=-2:LRA=7",
+      "fixture_sha256": "985658bc75a67071605bfe56914cd9a65316e96d326fc6db0f7ccc10741add32",
+      "sweep_sha256": "4fc83aa371a55484e4977ff562020e64abb97a1b6ab5f883d6114f765dff58ea",
+      "report_sha256": "5c179edaefb784be3abd735b47908fcaadc87e1b64101dba84ceaa26f3f23f26",
+      "runtime_seconds": 70.172,
+      "word_accuracy": 0.46464646464646464,
+      "wer": 0.5353535353535354,
+      "verdict": "REJECTED"
+    },
+    {
+      "id": "speech-expand",
+      "filter_graph": "highpass=f=80,lowpass=f=7600,speechnorm=e=8:c=2:r=0.0005:f=0.0005,loudnorm=I=-18:TP=-2:LRA=7",
+      "fixture_sha256": "10b8040daf84e7936a14b086d73a6f704d1c70690c18de118b4e92bb60f1d63a",
+      "sweep_sha256": "c6958789fc5eda337ebc9e96d64b5de10aa9d1b6a8e3b3c689f7222eaba181e2",
+      "report_sha256": "931ed25e0633f1f5d8fc129c68690fdebcb3c710d99c48cdc4ba07799ba44567",
+      "runtime_seconds": 65.078,
+      "word_accuracy": 0.5353535353535354,
+      "wer": 0.46464646464646464,
+      "verdict": "REJECTED"
+    }
+  ],
+  "promotion_passed": false,
+  "giga_admission_emitted": false
+}

@@ -1,6 +1,10 @@
 import json
 
-from dubbing.evaluation.review_ground_truth import build_fixture, evaluate_candidate
+from dubbing.evaluation.review_ground_truth import (
+    build_conditioned_fixture,
+    build_fixture,
+    evaluate_candidate,
+)
 from dubbing.transcription.models import TranscriptSegment, TranscriptWord, TranscriptionResult
 
 
@@ -104,3 +108,34 @@ def test_evaluate_candidate_uses_word_timestamps(tmp_path):
     report = evaluate_candidate(fixture_path, candidate_path, tmp_path / "report.json")
     assert report["metrics"]["word_accuracy"] == 1.0
     assert report["metrics"]["target_passed"]
+
+
+def test_build_conditioned_fixture_rejects_modified_source_clip(tmp_path):
+    clip = tmp_path / "clip.wav"
+    clip.write_bytes(b"changed")
+    fixture_path = tmp_path / "fixture.json"
+    fixture_path.write_text(
+        json.dumps(
+            {
+                "fixture_id": "fixture",
+                "spans": [
+                    {
+                        "id": "x",
+                        "clip_path": str(clip),
+                        "clip_sha256": "0" * 64,
+                    }
+                ],
+            }
+        )
+    )
+    try:
+        build_conditioned_fixture(
+            fixture_path,
+            tmp_path / "conditioned.json",
+            tmp_path / "clips",
+            filter_graph="loudnorm=I=-16",
+        )
+    except ValueError as error:
+        assert "SHA-256 mismatch" in str(error)
+    else:
+        raise AssertionError("modified source clip was accepted")

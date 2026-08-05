@@ -44,6 +44,8 @@ These numbers are development diagnostics, not certification:
 | FP16, all selectors | 51.5% | Quantization is not the bottleneck |
 | 30-second context oracle | 62.6% | Context adds only about 3 points to the oracle |
 | Fixed four-language initial prompt | 21.2% | Rejected; strong harmful conditioning |
+| FFT denoise + loudness normalization | 46.5% | Rejected; removed useful speech evidence |
+| Speech expansion + loudness normalization | 53.5% | Rejected; one point below raw baseline |
 
 Strict word-midpoint scoring produced only 24.2% because the inherited segment times do
 not match the corrected text extent. Whole-clip scoring can count neighbouring speech as
@@ -55,7 +57,8 @@ errors. Both policies are retained and labelled; neither can be used for certifi
    for all four languages. This is the minimum external evidence needed for a defensible
    90% claim.
 2. Continue no-download work on deterministic speech enhancement and target-aware
-   segmentation, evaluated as development signals until the exact fixture exists.
+   segmentation, evaluated as development signals until the exact fixture exists. The two
+   initial speech-conditioning variants were rejected; do not promote them.
 3. Promote only a reference-independent selector. Oracle and declared-reference-language
    selection remain diagnostic upper bounds.
 4. Keep cloud disabled and GIGA admission false.

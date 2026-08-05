@@ -230,6 +230,92 @@ def build_context_fixture(
     return derived
 
 
+def build_conditioned_fixture(
+    fixture_path: str | Path,
+    output_path: str | Path,
+    clips_dir: str | Path,
+    *,
+    filter_graph: str,
+) -> dict:
+    if not filter_graph.strip():
+        raise ValueError("filter graph must not be empty")
+    fixture_file = Path(fixture_path).resolve()
+    fixture = json.loads(fixture_file.read_text(encoding="utf-8"))
+    ffmpeg = ffmpeg_executable()
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is required to condition clips")
+    destination_dir = Path(clips_dir).resolve()
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    spans = []
+    for span in fixture["spans"]:
+        source_clip = Path(span["clip_path"]).resolve()
+        if not source_clip.is_file():
+            raise ValueError(f"source clip does not exist: {source_clip}")
+        if _sha256(source_clip) != span["clip_sha256"]:
+            raise ValueError(f"source clip SHA-256 mismatch: {source_clip.name}")
+        clip = destination_dir / source_clip.name
+        temporary = clip.with_name(f".{clip.name}.{os.getpid()}.tmp.wav")
+        process = subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                str(source_clip),
+                "-af",
+                filter_graph,
+                "-map",
+                "0:a:0",
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                "-y",
+                str(temporary),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if process.returncode:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(f"conditioning failed for {span['id']}: {process.stderr}")
+        os.replace(temporary, clip)
+        updated = dict(span)
+        updated.update(
+            {
+                "clip_path": str(clip),
+                "clip_sha256": _sha256(clip),
+                "unconditioned_clip_sha256": span["clip_sha256"],
+            }
+        )
+        spans.append(updated)
+    derived = dict(fixture)
+    derived["schema_version"] = "dubbing.operator-ground-truth-conditioned.v1"
+    derived["fixture_id"] = f"{fixture['fixture_id']}-conditioned"
+    derived["base_fixture_sha256"] = _sha256(fixture_file)
+    derived["audio_conditioning"] = {
+        "tool": Path(ffmpeg).name,
+        "filter_graph": filter_graph,
+        "output_codec": "pcm_s16le",
+        "sample_rate_hz": 16000,
+        "channels": 1,
+    }
+    derived["spans"] = spans
+    destination = Path(output_path).resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(derived, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return derived
+
+
 def _candidate_tokens(result: TranscriptionResult, start_ms: int, end_ms: int) -> list[str]:
     tokens = []
     for segment in result.segments:
@@ -388,6 +474,11 @@ def main() -> None:
     context.add_argument("--output", required=True)
     context.add_argument("--clips-dir", required=True)
     context.add_argument("--context-seconds", type=int, default=30)
+    condition = subparsers.add_parser("condition")
+    condition.add_argument("--fixture", required=True)
+    condition.add_argument("--output", required=True)
+    condition.add_argument("--clips-dir", required=True)
+    condition.add_argument("--filter-graph", required=True)
     evaluate = subparsers.add_parser("evaluate")
     evaluate.add_argument("--fixture", required=True)
     evaluate.add_argument("--candidate", required=True)
@@ -415,6 +506,22 @@ def main() -> None:
         print(
             json.dumps(
                 {"spans": len(report["spans"]), "context_seconds": report["context_seconds"]},
+                indent=2,
+            )
+        )
+    elif args.command == "condition":
+        report = build_conditioned_fixture(
+            args.fixture,
+            args.output,
+            args.clips_dir,
+            filter_graph=args.filter_graph,
+        )
+        print(
+            json.dumps(
+                {
+                    "spans": len(report["spans"]),
+                    "filter_graph": report["audio_conditioning"]["filter_graph"],
+                },
                 indent=2,
             )
         )
