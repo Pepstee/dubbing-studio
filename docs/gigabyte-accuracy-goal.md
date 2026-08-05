@@ -46,6 +46,11 @@ These numbers are development diagnostics, not certification:
 | Fixed four-language initial prompt | 21.2% | Rejected; strong harmful conditioning |
 | FFT denoise + loudness normalization | 46.5% | Rejected; removed useful speech evidence |
 | Speech expansion + loudness normalization | 53.5% | Rejected; one point below raw baseline |
+| Left channel only | 53.5% | Rejected; downmix remains better |
+| Right channel only | 48.5% | Rejected; downmix remains better |
+| 500 ms segment padding | 36.4% | Rejected; too little decoder context |
+| 1,000 ms segment padding | 43.4% | Rejected; below the 1,500 ms baseline |
+| Prior non-overlapping WhisperKit context | 50.5% | Rejected; independent context did not help |
 
 Strict word-midpoint scoring produced only 24.2% because the inherited segment times do
 not match the corrected text extent. Whole-clip scoring can count neighbouring speech as

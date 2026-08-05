@@ -316,6 +316,100 @@ def build_conditioned_fixture(
     return derived
 
 
+def build_trimmed_fixture(
+    fixture_path: str | Path,
+    output_path: str | Path,
+    clips_dir: str | Path,
+    *,
+    padding_ms: int,
+) -> dict:
+    if padding_ms < 0 or padding_ms > 1500:
+        raise ValueError("padding_ms must be between 0 and 1500")
+    fixture_file = Path(fixture_path).resolve()
+    fixture = json.loads(fixture_file.read_text(encoding="utf-8"))
+    ffmpeg = ffmpeg_executable()
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is required to trim clips")
+    destination_dir = Path(clips_dir).resolve()
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    spans = []
+    for span in fixture["spans"]:
+        source_clip = Path(span["clip_path"]).resolve()
+        if not source_clip.is_file():
+            raise ValueError(f"source clip does not exist: {source_clip}")
+        if _sha256(source_clip) != span["clip_sha256"]:
+            raise ValueError(f"source clip SHA-256 mismatch: {source_clip.name}")
+        start_ms = max(span["start_ms"], span["segment_start_ms"] - padding_ms)
+        end_ms = min(span["end_ms"], span["segment_end_ms"] + padding_ms)
+        relative_start = (start_ms - span["start_ms"]) / 1000
+        duration = (end_ms - start_ms) / 1000
+        clip = destination_dir / source_clip.name
+        temporary = clip.with_name(f".{clip.name}.{os.getpid()}.tmp.wav")
+        process = subprocess.run(
+            [
+                ffmpeg,
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{relative_start:.3f}",
+                "-i",
+                str(source_clip),
+                "-t",
+                f"{duration:.3f}",
+                "-map",
+                "0:a:0",
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                "-y",
+                str(temporary),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if process.returncode:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(f"trimming failed for {span['id']}: {process.stderr}")
+        os.replace(temporary, clip)
+        updated = dict(span)
+        updated.update(
+            {
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+                "clip_path": str(clip),
+                "clip_sha256": _sha256(clip),
+                "untrimmed_clip_sha256": span["clip_sha256"],
+            }
+        )
+        spans.append(updated)
+    derived = dict(fixture)
+    derived["schema_version"] = "dubbing.operator-ground-truth-trimmed.v1"
+    derived["fixture_id"] = f"{fixture['fixture_id']}-padding-{padding_ms}ms"
+    derived["base_fixture_sha256"] = _sha256(fixture_file)
+    derived["audio_trimming"] = {
+        "tool": Path(ffmpeg).name,
+        "padding_ms": padding_ms,
+        "output_codec": "pcm_s16le",
+        "sample_rate_hz": 16000,
+        "channels": 1,
+    }
+    derived["spans"] = spans
+    destination = Path(output_path).resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(derived, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return derived
+
+
 def _candidate_tokens(result: TranscriptionResult, start_ms: int, end_ms: int) -> list[str]:
     tokens = []
     for segment in result.segments:
@@ -479,6 +573,11 @@ def main() -> None:
     condition.add_argument("--output", required=True)
     condition.add_argument("--clips-dir", required=True)
     condition.add_argument("--filter-graph", required=True)
+    trim = subparsers.add_parser("trim")
+    trim.add_argument("--fixture", required=True)
+    trim.add_argument("--output", required=True)
+    trim.add_argument("--clips-dir", required=True)
+    trim.add_argument("--padding-ms", type=int, required=True)
     evaluate = subparsers.add_parser("evaluate")
     evaluate.add_argument("--fixture", required=True)
     evaluate.add_argument("--candidate", required=True)
@@ -521,6 +620,22 @@ def main() -> None:
                 {
                     "spans": len(report["spans"]),
                     "filter_graph": report["audio_conditioning"]["filter_graph"],
+                },
+                indent=2,
+            )
+        )
+    elif args.command == "trim":
+        report = build_trimmed_fixture(
+            args.fixture,
+            args.output,
+            args.clips_dir,
+            padding_ms=args.padding_ms,
+        )
+        print(
+            json.dumps(
+                {
+                    "spans": len(report["spans"]),
+                    "padding_ms": report["audio_trimming"]["padding_ms"],
                 },
                 indent=2,
             )

@@ -7,7 +7,10 @@ import os
 import time
 from pathlib import Path
 
-from run_faster_whisper_gpu import configure_nvidia_dlls
+try:
+    from run_faster_whisper_gpu import configure_nvidia_dlls
+except ModuleNotFoundError:  # Imported as scripts.run_faster_whisper_language_sweep in tests.
+    from scripts.run_faster_whisper_gpu import configure_nvidia_dlls
 
 
 def sha256(path: Path) -> str:
@@ -16,6 +19,28 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def preceding_context_prompt(
+    transcript: dict, target_start_ms: int, *, context_seconds: int, max_chars: int
+) -> str | None:
+    lower_bound = target_start_ms - context_seconds * 1000
+    texts = [
+        str(segment.get("text", "")).strip()
+        for segment in transcript.get("segments", [])
+        if int(segment.get("end_ms", 0)) <= target_start_ms
+        and int(segment.get("end_ms", 0)) > lower_bound
+        and str(segment.get("text", "")).strip()
+    ]
+    if not texts:
+        return None
+    prompt = " ".join(texts)
+    if len(prompt) > max_chars:
+        prompt = prompt[-max_chars:]
+        first_space = prompt.find(" ")
+        if first_space >= 0:
+            prompt = prompt[first_space + 1 :]
+    return prompt or None
 
 
 def main() -> None:
@@ -27,6 +52,9 @@ def main() -> None:
     parser.add_argument("--beam-sizes", default="1,5")
     parser.add_argument("--compute-type", default="int8_float16")
     parser.add_argument("--initial-prompt")
+    parser.add_argument("--context-transcript")
+    parser.add_argument("--context-seconds", type=int, default=30)
+    parser.add_argument("--context-max-chars", type=int, default=240)
     args = parser.parse_args()
 
     fixture_path = Path(args.fixture).resolve()
@@ -34,6 +62,17 @@ def main() -> None:
     model_path = Path(args.model).resolve()
     output = Path(args.output).resolve()
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    context_path = Path(args.context_transcript).resolve() if args.context_transcript else None
+    context_transcript = (
+        json.loads(context_path.read_text(encoding="utf-8")) if context_path else None
+    )
+    if (
+        context_transcript
+        and context_transcript.get("source_sha256") != fixture["source"]["sha256"]
+    ):
+        raise SystemExit("context transcript source SHA-256 mismatch")
+    if args.context_seconds < 1 or args.context_max_chars < 1:
+        raise SystemExit("context bounds must be positive")
     beam_sizes = tuple(int(value) for value in args.beam_sizes.split(","))
     if not beam_sizes or any(value < 1 for value in beam_sizes):
         raise SystemExit("beam sizes must be positive integers")
@@ -59,6 +98,14 @@ def main() -> None:
         if sha256(clip) != span["clip_sha256"]:
             raise SystemExit(f"clip SHA-256 mismatch: {clip.name}")
         candidates = []
+        span_prompt = args.initial_prompt
+        if context_transcript is not None:
+            span_prompt = preceding_context_prompt(
+                context_transcript,
+                span["segment_start_ms"],
+                context_seconds=args.context_seconds,
+                max_chars=args.context_max_chars,
+            )
         for beam_size in beam_sizes:
             for language in languages:
                 decode_started = time.monotonic()
@@ -71,7 +118,7 @@ def main() -> None:
                     word_timestamps=True,
                     vad_filter=False,
                     condition_on_previous_text=False,
-                    initial_prompt=args.initial_prompt,
+                    initial_prompt=span_prompt,
                 )
                 segments = list(iterator)
                 text = " ".join(
@@ -121,6 +168,7 @@ def main() -> None:
                 "clip_end_ms": span["end_ms"],
                 "target_start_ms": span["segment_start_ms"],
                 "target_end_ms": span["segment_end_ms"],
+                "initial_prompt": span_prompt,
                 "candidates": candidates,
             }
         )
@@ -132,6 +180,9 @@ def main() -> None:
         "model_bin_sha256": sha256(model_path / "model.bin"),
         "compute_type": args.compute_type,
         "initial_prompt": args.initial_prompt,
+        "context_transcript_sha256": sha256(context_path) if context_path else None,
+        "context_seconds": args.context_seconds if context_path else None,
+        "context_max_chars": args.context_max_chars if context_path else None,
         "beam_sizes": list(beam_sizes),
         "forced_languages": ["auto", "en", "ru", "ro", "ko"],
         "model_load_seconds": round(model_load_seconds, 6),

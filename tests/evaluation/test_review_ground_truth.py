@@ -3,6 +3,7 @@ import json
 from dubbing.evaluation.review_ground_truth import (
     build_conditioned_fixture,
     build_fixture,
+    build_trimmed_fixture,
     evaluate_candidate,
 )
 from dubbing.transcription.models import TranscriptSegment, TranscriptWord, TranscriptionResult
@@ -139,3 +140,19 @@ def test_build_conditioned_fixture_rejects_modified_source_clip(tmp_path):
         assert "SHA-256 mismatch" in str(error)
     else:
         raise AssertionError("modified source clip was accepted")
+
+
+def test_build_trimmed_fixture_rejects_excessive_padding(tmp_path):
+    fixture_path = tmp_path / "fixture.json"
+    fixture_path.write_text(json.dumps({"spans": []}))
+    try:
+        build_trimmed_fixture(
+            fixture_path,
+            tmp_path / "trimmed.json",
+            tmp_path / "clips",
+            padding_ms=1501,
+        )
+    except ValueError as error:
+        assert "between 0 and 1500" in str(error)
+    else:
+        raise AssertionError("excessive padding was accepted")
