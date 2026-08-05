@@ -369,6 +369,7 @@ def evaluate_language_sweep(
         method
         for method, values in methods.items()
         if not fixture["coverage_gaps"]
+        and sweep.get("word_timestamps", True)
         and values["deployable"]
         and values["metrics"]["target_passed"]
         and values["metrics"]["all_language_targets_passed"]
@@ -388,6 +389,8 @@ def evaluate_language_sweep(
             "scope_limitation", "fixture scope is not declared"
         ),
         "timing_policy": timing_policy,
+        "word_timestamps": sweep.get("word_timestamps", True),
+        "word_timestamp_gate_passed": sweep.get("word_timestamps", True),
         "accuracy_certification_eligible": fixture.get("selection_policy", {}).get(
             "accuracy_certification_eligible", False
         ),

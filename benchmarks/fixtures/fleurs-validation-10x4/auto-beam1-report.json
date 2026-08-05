@@ -5203,5 +5203,7 @@
   "schema_version": "dubbing.faster-whisper-language-sweep-evaluation.v1",
   "source_sha256": "8b706ec8eb9ea47f827861132b9a0397efe467eae58a837fea3523c83b7b0573",
   "sweep_sha256": "7e1087bb46a4711bbfb71504e7f0d777579e7904f60bf609764a2fefeb0709c5",
-  "timing_policy": "full_clip"
+  "timing_policy": "full_clip",
+  "word_timestamp_gate_passed": true,
+  "word_timestamps": true
 }

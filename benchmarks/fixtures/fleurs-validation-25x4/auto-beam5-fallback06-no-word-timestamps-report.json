@@ -15,21 +15,21 @@
       "metrics": {
         "all_language_targets_passed": false,
         "cer": {
-          "candidate_units": 9134,
-          "edits": 377,
-          "rate": 0.040372670807453416,
+          "candidate_units": 9167,
+          "edits": 344,
+          "rate": 0.03683872349539516,
           "reference_units": 9338
         },
-        "character_accuracy": 0.9596273291925466,
+        "character_accuracy": 0.9631612765046048,
         "target_passed": true,
         "target_word_accuracy": 0.9,
         "wer": {
-          "candidate_units": 1912,
-          "edits": 183,
-          "rate": 0.0941358024691358,
+          "candidate_units": 1924,
+          "edits": 171,
+          "rate": 0.08796296296296297,
           "reference_units": 1944
         },
-        "word_accuracy": 0.9058641975308642
+        "word_accuracy": 0.912037037037037
       },
       "per_language": {
         "en": {
@@ -52,21 +52,21 @@
         },
         "ko": {
           "cer": {
-            "candidate_units": 1190,
-            "edits": 140,
-            "rate": 0.1076923076923077,
+            "candidate_units": 1223,
+            "edits": 107,
+            "rate": 0.0823076923076923,
             "reference_units": 1300
           },
-          "character_accuracy": 0.8923076923076922,
+          "character_accuracy": 0.9176923076923077,
           "target_passed": false,
           "target_word_accuracy": 0.9,
           "wer": {
-            "candidate_units": 384,
-            "edits": 64,
-            "rate": 0.15647921760391198,
+            "candidate_units": 396,
+            "edits": 52,
+            "rate": 0.1271393643031785,
             "reference_units": 409
           },
-          "word_accuracy": 0.843520782396088
+          "word_accuracy": 0.8728606356968215
         },
         "ro": {
           "cer": {
@@ -106,21 +106,21 @@
         }
       },
       "quality_diagnostics": {
-        "configured_maximum_temperature": 0.0,
-        "fallback_used_count": 0,
-        "fallback_used_ids": [],
+        "configured_maximum_temperature": 0.6,
+        "fallback_used_count": 1,
+        "fallback_used_ids": [
+          "fleurs-ko_kr-validation-000021-1551"
+        ],
         "issues": {
           "adjacent_duplicate_segments": [],
-          "blank_hypotheses": [
-            "fleurs-ko_kr-validation-000021-1551"
-          ],
+          "blank_hypotheses": [],
           "fallback_exhausted": [],
           "malformed_timestamps": [],
           "repeated_token_runs": []
         },
         "maximum_compression_ratio": 1.8506493506493507,
-        "maximum_used_temperature": 0.0,
-        "quality_gate_passed": false,
+        "maximum_used_temperature": 0.2,
+        "quality_gate_passed": true,
         "selected_candidate_count": 100
       },
       "spans": [
@@ -2334,26 +2334,26 @@
         },
         {
           "beam_size": 5,
-          "candidate": "",
+          "candidate": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "cer": {
-            "candidate_units": 0,
-            "edits": 33,
-            "rate": 1.0,
+            "candidate_units": 33,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 33
           },
-          "character_accuracy": 0.0,
+          "character_accuracy": 1.0,
           "detected_language": "ko",
           "forced_language": null,
           "id": "fleurs-ko_kr-validation-000021-1551",
           "language": "ko",
           "reference": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "wer": {
-            "candidate_units": 0,
-            "edits": 12,
-            "rate": 1.0,
+            "candidate_units": 12,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 12
           },
-          "word_accuracy": 0.0
+          "word_accuracy": 1.0
         },
         {
           "beam_size": 5,
@@ -2432,21 +2432,21 @@
       "metrics": {
         "all_language_targets_passed": false,
         "cer": {
-          "candidate_units": 9134,
-          "edits": 377,
-          "rate": 0.040372670807453416,
+          "candidate_units": 9167,
+          "edits": 344,
+          "rate": 0.03683872349539516,
           "reference_units": 9338
         },
-        "character_accuracy": 0.9596273291925466,
+        "character_accuracy": 0.9631612765046048,
         "target_passed": true,
         "target_word_accuracy": 0.9,
         "wer": {
-          "candidate_units": 1912,
-          "edits": 183,
-          "rate": 0.0941358024691358,
+          "candidate_units": 1924,
+          "edits": 171,
+          "rate": 0.08796296296296297,
           "reference_units": 1944
         },
-        "word_accuracy": 0.9058641975308642
+        "word_accuracy": 0.912037037037037
       },
       "per_language": {
         "en": {
@@ -2469,21 +2469,21 @@
         },
         "ko": {
           "cer": {
-            "candidate_units": 1190,
-            "edits": 140,
-            "rate": 0.1076923076923077,
+            "candidate_units": 1223,
+            "edits": 107,
+            "rate": 0.0823076923076923,
             "reference_units": 1300
           },
-          "character_accuracy": 0.8923076923076922,
+          "character_accuracy": 0.9176923076923077,
           "target_passed": false,
           "target_word_accuracy": 0.9,
           "wer": {
-            "candidate_units": 384,
-            "edits": 64,
-            "rate": 0.15647921760391198,
+            "candidate_units": 396,
+            "edits": 52,
+            "rate": 0.1271393643031785,
             "reference_units": 409
           },
-          "word_accuracy": 0.843520782396088
+          "word_accuracy": 0.8728606356968215
         },
         "ro": {
           "cer": {
@@ -2523,21 +2523,21 @@
         }
       },
       "quality_diagnostics": {
-        "configured_maximum_temperature": 0.0,
-        "fallback_used_count": 0,
-        "fallback_used_ids": [],
+        "configured_maximum_temperature": 0.6,
+        "fallback_used_count": 1,
+        "fallback_used_ids": [
+          "fleurs-ko_kr-validation-000021-1551"
+        ],
         "issues": {
           "adjacent_duplicate_segments": [],
-          "blank_hypotheses": [
-            "fleurs-ko_kr-validation-000021-1551"
-          ],
+          "blank_hypotheses": [],
           "fallback_exhausted": [],
           "malformed_timestamps": [],
           "repeated_token_runs": []
         },
         "maximum_compression_ratio": 1.8506493506493507,
-        "maximum_used_temperature": 0.0,
-        "quality_gate_passed": false,
+        "maximum_used_temperature": 0.2,
+        "quality_gate_passed": true,
         "selected_candidate_count": 100
       },
       "spans": [
@@ -4751,26 +4751,26 @@
         },
         {
           "beam_size": 5,
-          "candidate": "",
+          "candidate": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "cer": {
-            "candidate_units": 0,
-            "edits": 33,
-            "rate": 1.0,
+            "candidate_units": 33,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 33
           },
-          "character_accuracy": 0.0,
+          "character_accuracy": 1.0,
           "detected_language": "ko",
           "forced_language": null,
           "id": "fleurs-ko_kr-validation-000021-1551",
           "language": "ko",
           "reference": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "wer": {
-            "candidate_units": 0,
-            "edits": 12,
-            "rate": 1.0,
+            "candidate_units": 12,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 12
           },
-          "word_accuracy": 0.0
+          "word_accuracy": 1.0
         },
         {
           "beam_size": 5,
@@ -4849,21 +4849,21 @@
       "metrics": {
         "all_language_targets_passed": false,
         "cer": {
-          "candidate_units": 9134,
-          "edits": 377,
-          "rate": 0.040372670807453416,
+          "candidate_units": 9167,
+          "edits": 344,
+          "rate": 0.03683872349539516,
           "reference_units": 9338
         },
-        "character_accuracy": 0.9596273291925466,
+        "character_accuracy": 0.9631612765046048,
         "target_passed": true,
         "target_word_accuracy": 0.9,
         "wer": {
-          "candidate_units": 1912,
-          "edits": 183,
-          "rate": 0.0941358024691358,
+          "candidate_units": 1924,
+          "edits": 171,
+          "rate": 0.08796296296296297,
           "reference_units": 1944
         },
-        "word_accuracy": 0.9058641975308642
+        "word_accuracy": 0.912037037037037
       },
       "per_language": {
         "en": {
@@ -4886,21 +4886,21 @@
         },
         "ko": {
           "cer": {
-            "candidate_units": 1190,
-            "edits": 140,
-            "rate": 0.1076923076923077,
+            "candidate_units": 1223,
+            "edits": 107,
+            "rate": 0.0823076923076923,
             "reference_units": 1300
           },
-          "character_accuracy": 0.8923076923076922,
+          "character_accuracy": 0.9176923076923077,
           "target_passed": false,
           "target_word_accuracy": 0.9,
           "wer": {
-            "candidate_units": 384,
-            "edits": 64,
-            "rate": 0.15647921760391198,
+            "candidate_units": 396,
+            "edits": 52,
+            "rate": 0.1271393643031785,
             "reference_units": 409
           },
-          "word_accuracy": 0.843520782396088
+          "word_accuracy": 0.8728606356968215
         },
         "ro": {
           "cer": {
@@ -4940,21 +4940,21 @@
         }
       },
       "quality_diagnostics": {
-        "configured_maximum_temperature": 0.0,
-        "fallback_used_count": 0,
-        "fallback_used_ids": [],
+        "configured_maximum_temperature": 0.6,
+        "fallback_used_count": 1,
+        "fallback_used_ids": [
+          "fleurs-ko_kr-validation-000021-1551"
+        ],
         "issues": {
           "adjacent_duplicate_segments": [],
-          "blank_hypotheses": [
-            "fleurs-ko_kr-validation-000021-1551"
-          ],
+          "blank_hypotheses": [],
           "fallback_exhausted": [],
           "malformed_timestamps": [],
           "repeated_token_runs": []
         },
         "maximum_compression_ratio": 1.8506493506493507,
-        "maximum_used_temperature": 0.0,
-        "quality_gate_passed": false,
+        "maximum_used_temperature": 0.2,
+        "quality_gate_passed": true,
         "selected_candidate_count": 100
       },
       "spans": [
@@ -7168,26 +7168,26 @@
         },
         {
           "beam_size": 5,
-          "candidate": "",
+          "candidate": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "cer": {
-            "candidate_units": 0,
-            "edits": 33,
-            "rate": 1.0,
+            "candidate_units": 33,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 33
           },
-          "character_accuracy": 0.0,
+          "character_accuracy": 1.0,
           "detected_language": "ko",
           "forced_language": null,
           "id": "fleurs-ko_kr-validation-000021-1551",
           "language": "ko",
           "reference": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "wer": {
-            "candidate_units": 0,
-            "edits": 12,
-            "rate": 1.0,
+            "candidate_units": 12,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 12
           },
-          "word_accuracy": 0.0
+          "word_accuracy": 1.0
         },
         {
           "beam_size": 5,
@@ -7266,21 +7266,21 @@
       "metrics": {
         "all_language_targets_passed": false,
         "cer": {
-          "candidate_units": 9134,
-          "edits": 377,
-          "rate": 0.040372670807453416,
+          "candidate_units": 9167,
+          "edits": 344,
+          "rate": 0.03683872349539516,
           "reference_units": 9338
         },
-        "character_accuracy": 0.9596273291925466,
+        "character_accuracy": 0.9631612765046048,
         "target_passed": true,
         "target_word_accuracy": 0.9,
         "wer": {
-          "candidate_units": 1912,
-          "edits": 183,
-          "rate": 0.0941358024691358,
+          "candidate_units": 1924,
+          "edits": 171,
+          "rate": 0.08796296296296297,
           "reference_units": 1944
         },
-        "word_accuracy": 0.9058641975308642
+        "word_accuracy": 0.912037037037037
       },
       "per_language": {
         "en": {
@@ -7303,21 +7303,21 @@
         },
         "ko": {
           "cer": {
-            "candidate_units": 1190,
-            "edits": 140,
-            "rate": 0.1076923076923077,
+            "candidate_units": 1223,
+            "edits": 107,
+            "rate": 0.0823076923076923,
             "reference_units": 1300
           },
-          "character_accuracy": 0.8923076923076922,
+          "character_accuracy": 0.9176923076923077,
           "target_passed": false,
           "target_word_accuracy": 0.9,
           "wer": {
-            "candidate_units": 384,
-            "edits": 64,
-            "rate": 0.15647921760391198,
+            "candidate_units": 396,
+            "edits": 52,
+            "rate": 0.1271393643031785,
             "reference_units": 409
           },
-          "word_accuracy": 0.843520782396088
+          "word_accuracy": 0.8728606356968215
         },
         "ro": {
           "cer": {
@@ -7357,21 +7357,21 @@
         }
       },
       "quality_diagnostics": {
-        "configured_maximum_temperature": 0.0,
-        "fallback_used_count": 0,
-        "fallback_used_ids": [],
+        "configured_maximum_temperature": 0.6,
+        "fallback_used_count": 1,
+        "fallback_used_ids": [
+          "fleurs-ko_kr-validation-000021-1551"
+        ],
         "issues": {
           "adjacent_duplicate_segments": [],
-          "blank_hypotheses": [
-            "fleurs-ko_kr-validation-000021-1551"
-          ],
+          "blank_hypotheses": [],
           "fallback_exhausted": [],
           "malformed_timestamps": [],
           "repeated_token_runs": []
         },
         "maximum_compression_ratio": 1.8506493506493507,
-        "maximum_used_temperature": 0.0,
-        "quality_gate_passed": false,
+        "maximum_used_temperature": 0.2,
+        "quality_gate_passed": true,
         "selected_candidate_count": 100
       },
       "spans": [
@@ -9585,26 +9585,26 @@
         },
         {
           "beam_size": 5,
-          "candidate": "",
+          "candidate": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "cer": {
-            "candidate_units": 0,
-            "edits": 33,
-            "rate": 1.0,
+            "candidate_units": 33,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 33
           },
-          "character_accuracy": 0.0,
+          "character_accuracy": 1.0,
           "detected_language": "ko",
           "forced_language": null,
           "id": "fleurs-ko_kr-validation-000021-1551",
           "language": "ko",
           "reference": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "wer": {
-            "candidate_units": 0,
-            "edits": 12,
-            "rate": 1.0,
+            "candidate_units": 12,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 12
           },
-          "word_accuracy": 0.0
+          "word_accuracy": 1.0
         },
         {
           "beam_size": 5,
@@ -9683,21 +9683,21 @@
       "metrics": {
         "all_language_targets_passed": false,
         "cer": {
-          "candidate_units": 9134,
-          "edits": 377,
-          "rate": 0.040372670807453416,
+          "candidate_units": 9167,
+          "edits": 344,
+          "rate": 0.03683872349539516,
           "reference_units": 9338
         },
-        "character_accuracy": 0.9596273291925466,
+        "character_accuracy": 0.9631612765046048,
         "target_passed": true,
         "target_word_accuracy": 0.9,
         "wer": {
-          "candidate_units": 1912,
-          "edits": 183,
-          "rate": 0.0941358024691358,
+          "candidate_units": 1924,
+          "edits": 171,
+          "rate": 0.08796296296296297,
           "reference_units": 1944
         },
-        "word_accuracy": 0.9058641975308642
+        "word_accuracy": 0.912037037037037
       },
       "per_language": {
         "en": {
@@ -9720,21 +9720,21 @@
         },
         "ko": {
           "cer": {
-            "candidate_units": 1190,
-            "edits": 140,
-            "rate": 0.1076923076923077,
+            "candidate_units": 1223,
+            "edits": 107,
+            "rate": 0.0823076923076923,
             "reference_units": 1300
           },
-          "character_accuracy": 0.8923076923076922,
+          "character_accuracy": 0.9176923076923077,
           "target_passed": false,
           "target_word_accuracy": 0.9,
           "wer": {
-            "candidate_units": 384,
-            "edits": 64,
-            "rate": 0.15647921760391198,
+            "candidate_units": 396,
+            "edits": 52,
+            "rate": 0.1271393643031785,
             "reference_units": 409
           },
-          "word_accuracy": 0.843520782396088
+          "word_accuracy": 0.8728606356968215
         },
         "ro": {
           "cer": {
@@ -9774,21 +9774,21 @@
         }
       },
       "quality_diagnostics": {
-        "configured_maximum_temperature": 0.0,
-        "fallback_used_count": 0,
-        "fallback_used_ids": [],
+        "configured_maximum_temperature": 0.6,
+        "fallback_used_count": 1,
+        "fallback_used_ids": [
+          "fleurs-ko_kr-validation-000021-1551"
+        ],
         "issues": {
           "adjacent_duplicate_segments": [],
-          "blank_hypotheses": [
-            "fleurs-ko_kr-validation-000021-1551"
-          ],
+          "blank_hypotheses": [],
           "fallback_exhausted": [],
           "malformed_timestamps": [],
           "repeated_token_runs": []
         },
         "maximum_compression_ratio": 1.8506493506493507,
-        "maximum_used_temperature": 0.0,
-        "quality_gate_passed": false,
+        "maximum_used_temperature": 0.2,
+        "quality_gate_passed": true,
         "selected_candidate_count": 100
       },
       "spans": [
@@ -12002,26 +12002,26 @@
         },
         {
           "beam_size": 5,
-          "candidate": "",
+          "candidate": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "cer": {
-            "candidate_units": 0,
-            "edits": 33,
-            "rate": 1.0,
+            "candidate_units": 33,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 33
           },
-          "character_accuracy": 0.0,
+          "character_accuracy": 1.0,
           "detected_language": "ko",
           "forced_language": null,
           "id": "fleurs-ko_kr-validation-000021-1551",
           "language": "ko",
           "reference": "그들은 여전히 충돌의 크기와 지구가 어떤 영향을 받을 것인지에 대해 연구 중이다",
           "wer": {
-            "candidate_units": 0,
-            "edits": 12,
-            "rate": 1.0,
+            "candidate_units": 12,
+            "edits": 0,
+            "rate": 0.0,
             "reference_units": 12
           },
-          "word_accuracy": 0.0
+          "word_accuracy": 1.0
         },
         {
           "beam_size": 5,
@@ -12099,11 +12099,11 @@
   "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
   "promotion_passed": false,
   "promotion_reason": "No tested deployable selector reached 90% overall and in every covered language; oracle/reference-informed methods cannot be promoted.",
-  "runtime_seconds": 106.437,
+  "runtime_seconds": 107.484,
   "schema_version": "dubbing.faster-whisper-language-sweep-evaluation.v1",
   "source_sha256": "9a46879d4f0c80e63d478ccbb2ed2c9c6d5c6e94b762e7cdf942572323e53e59",
-  "sweep_sha256": "b5cbd6691263dd537d5c43daba5888f5762dc892c138602c38bfc9f00541af35",
+  "sweep_sha256": "c5790b8ef57062856e64dbcf81df3f9c6cad1d2e9d0ca07de77ab25500c00dc2",
   "timing_policy": "full_clip",
-  "word_timestamp_gate_passed": true,
-  "word_timestamps": true
+  "word_timestamp_gate_passed": false,
+  "word_timestamps": false
 }

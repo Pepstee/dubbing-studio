@@ -23,7 +23,7 @@
   "selected_experiment": {
     "name": "automatic beam 5 with capped fallback temperatures 0,0.2,0.4,0.6",
     "sweep_sha256": "a4168e776f1c304920646fb6de2c254427a14aa13671f16e775b31b830cd6c9c",
-    "report_sha256": "df901ff315a4c47adc33f27b53e50c02e499f1dd7dc28a2d5b32ce0bf2f6712e",
+    "report_sha256": "95b8a862ebe0e7d60bd4793972aa35028a6a8a32141e91cfe8b4d05897e5bf89",
     "runtime_seconds": 110.047,
     "reference_words": 1944,
     "edits": 171,
@@ -53,7 +53,7 @@
     {
       "name": "automatic beam 5 temperature 0",
       "sweep_sha256": "b5cbd6691263dd537d5c43daba5888f5762dc892c138602c38bfc9f00541af35",
-      "report_sha256": "9a562ffffeb691294cbf7728591ba746847b961307958c3473dc486038043fc0",
+      "report_sha256": "fdf04974190d0085325f07ccdbe1f0247917db7b830f826090347556fe2c239f",
       "word_accuracy": 0.9058641975308642,
       "quality_gate_passed": false,
       "failure": "one non-speech-labelled Korean clip produced a blank hypothesis"
@@ -61,10 +61,21 @@
     {
       "name": "automatic beam 5 temperature 0 with multilingual disabled",
       "sweep_sha256": "0d40f508b3dd5c948d63ca63b14e3fab8ec1119a9fce23e1fa318cfcd3e1f3cb",
-      "report_sha256": "2a590ba4bead36f6853c820331f5430a26f00b9472f72cd134fb7690071a3ba1",
+      "report_sha256": "42285df8da8dd2d6a8c0858896714bd1dbdf366f429925346ea9826f75b4ea20",
       "word_accuracy": 0.9058641975308642,
       "quality_gate_passed": false,
       "failure": "no accuracy change and the same Korean blank hypothesis"
+    },
+    {
+      "name": "automatic beam 5 with capped fallback and word timestamps disabled",
+      "sweep_sha256": "c5790b8ef57062856e64dbcf81df3f9c6cad1d2e9d0ca07de77ab25500c00dc2",
+      "report_sha256": "3fe6d7a731d38f25c7cb88813fb4c6cae91b79f8479e0afa0c40d95cc7975525",
+      "runtime_seconds": 107.484,
+      "word_accuracy": 0.912037037037037,
+      "cer": 0.03683872349539516,
+      "quality_gate_passed": true,
+      "word_timestamp_gate_passed": false,
+      "failure": "identical text accuracy; removes required word timestamps for only a 2.563-second runtime reduction"
     }
   ],
   "scope": {

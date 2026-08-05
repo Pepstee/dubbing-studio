@@ -216,6 +216,78 @@ def test_evaluate_language_sweep_quality_gate_fails_closed(tmp_path: Path) -> No
     assert report["giga_admission_emitted"] is False
 
 
+def test_evaluate_language_sweep_does_not_certify_text_only_decode(tmp_path: Path) -> None:
+    fixture_path = tmp_path / "fixture.json"
+    fixture = {
+        "source": {"sha256": "source"},
+        "coverage_gaps": [],
+        "selection_policy": {"accuracy_certification_eligible": True},
+        "spans": [
+            {
+                "id": "one",
+                "text": "perfect text",
+                "language": "en",
+                "no_speech": False,
+                "start_ms": 0,
+                "end_ms": 1000,
+                "segment_start_ms": 0,
+                "segment_end_ms": 1000,
+            }
+        ],
+    }
+    _write(fixture_path, fixture)
+    sweep_path = tmp_path / "sweep.json"
+    _write(
+        sweep_path,
+        {
+            "source_sha256": "source",
+            "fixture_sha256": _hash(fixture_path),
+            "model": "model",
+            "model_bin_sha256": "model-hash",
+            "compute_type": "int8_float16",
+            "runtime_seconds": 1.0,
+            "beam_sizes": [1],
+            "temperatures": [0.0],
+            "word_timestamps": False,
+            "spans": [
+                {
+                    "id": "one",
+                    "declared_reference_language": "en",
+                    "candidates": [
+                        {
+                            "forced_language": None,
+                            "detected_language": "en",
+                            "beam_size": 1,
+                            "avg_log_probability": -0.1,
+                            "text": "perfect text",
+                            "decode_temperatures": [0.0],
+                            "segments": [
+                                {
+                                    "start_ms": 0,
+                                    "end_ms": 1000,
+                                    "text": "perfect text",
+                                    "words": [],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    report = evaluate_language_sweep(
+        fixture_path, sweep_path, tmp_path / "report.json", timing_policy="full_clip"
+    )
+    assert report["methods"]["automatic_minimum_beam"]["metrics"]["target_passed"]
+    assert report["methods"]["automatic_minimum_beam"]["quality_diagnostics"][
+        "quality_gate_passed"
+    ]
+    assert report["word_timestamp_gate_passed"] is False
+    assert report["fixture_gate_passed"] is False
+    assert report["giga_admission_emitted"] is False
+
+
 def test_evaluate_language_sweep_rejects_fixture_hash_mismatch(tmp_path: Path) -> None:
     fixture_path = tmp_path / "fixture.json"
     _write(fixture_path, {"source": {"sha256": "source"}, "coverage_gaps": [], "spans": []})

@@ -48,7 +48,9 @@ fallbacks. CER is micro-averaged across utterances; it is diagnostic and does no
 weaken the explicit WER gate. The exact machine-readable verdict is in
 `benchmarks/fixtures/fleurs-validation-25x4/verdict.json`. Temperature-zero and monolingual
 controls both scored 90.59% aggregate but left one Korean clip blank; disabling multilingual
-mode made no accuracy difference.
+mode made no accuracy difference. Disabling word timestamps produced byte-for-byte identical
+recognized text and the same WER/CER, reducing runtime only from 110.047 to 107.484 seconds;
+it is rejected because it removes required timing evidence without improving accuracy.
 
 ## Human evidence discovered
 
