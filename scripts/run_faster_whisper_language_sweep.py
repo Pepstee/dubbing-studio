@@ -64,6 +64,9 @@ def main() -> None:
         default=False,
     )
     parser.add_argument("--vad-filter", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--vad-threshold", type=float, default=0.5)
+    parser.add_argument("--vad-speech-pad-ms", type=int, default=400)
+    parser.add_argument("--vad-min-silence-duration-ms", type=int, default=2000)
     parser.add_argument("--temperatures", default="0")
     parser.add_argument("--initial-prompt")
     parser.add_argument("--context-transcript")
@@ -89,6 +92,10 @@ def main() -> None:
         raise SystemExit("context bounds must be positive")
     if args.patience <= 0 or args.length_penalty <= 0:
         raise SystemExit("beam-search controls must be positive")
+    if not 0 < args.vad_threshold < 1:
+        raise SystemExit("VAD threshold must be between 0 and 1")
+    if args.vad_speech_pad_ms < 0 or args.vad_min_silence_duration_ms < 0:
+        raise SystemExit("VAD durations cannot be negative")
     temperatures = tuple(float(value) for value in args.temperatures.split(","))
     if not temperatures or any(value < 0 or value > 1 for value in temperatures):
         raise SystemExit("temperatures must be between 0 and 1")
@@ -147,6 +154,15 @@ def main() -> None:
                     temperature=decode_temperatures,
                     word_timestamps=args.word_timestamps,
                     vad_filter=args.vad_filter,
+                    vad_parameters=(
+                        {
+                            "threshold": args.vad_threshold,
+                            "speech_pad_ms": args.vad_speech_pad_ms,
+                            "min_silence_duration_ms": args.vad_min_silence_duration_ms,
+                        }
+                        if args.vad_filter
+                        else None
+                    ),
                     condition_on_previous_text=args.condition_on_previous_text,
                     initial_prompt=span_prompt,
                 )
@@ -224,6 +240,11 @@ def main() -> None:
         "word_timestamps": args.word_timestamps,
         "condition_on_previous_text": args.condition_on_previous_text,
         "vad_filter": args.vad_filter,
+        "vad_threshold": args.vad_threshold if args.vad_filter else None,
+        "vad_speech_pad_ms": args.vad_speech_pad_ms if args.vad_filter else None,
+        "vad_min_silence_duration_ms": (
+            args.vad_min_silence_duration_ms if args.vad_filter else None
+        ),
         "temperatures": list(temperatures),
         "forced_languages": ["auto" if value is None else value for value in languages],
         "model_load_seconds": round(model_load_seconds, 6),

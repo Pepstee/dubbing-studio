@@ -22,6 +22,9 @@
       0.0
     ],
     "vad_filter": false,
+    "vad_min_silence_duration_ms": null,
+    "vad_speech_pad_ms": null,
+    "vad_threshold": null,
     "word_timestamps": true
   },
   "fixture_gate_passed": false,
@@ -158,6 +161,7 @@
           "id": "fleurs-en_us-validation-000000-1548",
           "language": "en",
           "reference": "when you call someone who is thousands of miles away you are using a satellite",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -181,6 +185,7 @@
           "id": "fleurs-en_us-validation-000001-1620",
           "language": "en",
           "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 5,
@@ -204,6 +209,7 @@
           "id": "fleurs-en_us-validation-000002-1510",
           "language": "en",
           "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -227,6 +233,7 @@
           "id": "fleurs-en_us-validation-000003-1578",
           "language": "en",
           "reference": "then lakkha singh took the lead in singing the bhajans",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 5,
@@ -250,6 +257,7 @@
           "id": "fleurs-en_us-validation-000004-1652",
           "language": "en",
           "reference": "the major religion in moldova is orthodox christian",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 0,
@@ -273,6 +281,7 @@
           "id": "fleurs-en_us-validation-000005-1531",
           "language": "en",
           "reference": "the east african islands are in the indian ocean off the eastern coast of africa",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -296,6 +305,7 @@
           "id": "fleurs-en_us-validation-000006-1528",
           "language": "en",
           "reference": "some festivals have special camping areas for families with young children",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -319,6 +329,7 @@
           "id": "fleurs-en_us-validation-000007-1595",
           "language": "en",
           "reference": "the tibetan buddhism is based on the teachings of buddha but were extended by the mahayana path of love and by a lot of techniques from indian yoga",
+          "variant_id": null,
           "wer": {
             "candidate_units": 28,
             "edits": 1,
@@ -342,6 +353,7 @@
           "id": "fleurs-en_us-validation-000008-1559",
           "language": "en",
           "reference": "pronunciation is relatively easy in italian since most words are pronounced exactly how they are written",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -365,6 +377,7 @@
           "id": "fleurs-en_us-validation-000009-1633",
           "language": "en",
           "reference": "in this dynamic transport shuttle everyone is somehow connected with and supporting a transport system based on private cars",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 1,
@@ -388,6 +401,7 @@
           "id": "fleurs-ru_ru-validation-000000-1614",
           "language": "ru",
           "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 0,
@@ -411,6 +425,7 @@
           "id": "fleurs-ru_ru-validation-000001-1554",
           "language": "ru",
           "reference": "он сказал что создал дверной звонок работающий от wifi",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 2,
@@ -434,6 +449,7 @@
           "id": "fleurs-ru_ru-validation-000002-1634",
           "language": "ru",
           "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 2,
@@ -457,6 +473,7 @@
           "id": "fleurs-ru_ru-validation-000003-1615",
           "language": "ru",
           "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+          "variant_id": null,
           "wer": {
             "candidate_units": 14,
             "edits": 1,
@@ -480,6 +497,7 @@
           "id": "fleurs-ru_ru-validation-000004-1609",
           "language": "ru",
           "reference": "робин утхаппа набрал рекордное количество очков в иннинге 70 ранов за всего 41 подачу отбил 11 четвёрок и 2 шестёрки",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -503,6 +521,7 @@
           "id": "fleurs-ru_ru-validation-000005-1549",
           "language": "ru",
           "reference": "эти теории предполагают что у людей есть определённые потребности и/или желания которые накапливаются внутри в процессе взросления",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 2,
@@ -526,6 +545,7 @@
           "id": "fleurs-ru_ru-validation-000006-1587",
           "language": "ru",
           "reference": "о первых случаях заболевания в этом сезоне было сообщено в июле",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -549,6 +569,7 @@
           "id": "fleurs-ru_ru-validation-000007-1618",
           "language": "ru",
           "reference": "в северной части то есть на хребте сентинел находятся самые высокие горы антарктиды массив винсон самая высшая точка которого достигает 4892 м и называется пик винсон",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 2,
@@ -572,6 +593,7 @@
           "id": "fleurs-ru_ru-validation-000008-1651",
           "language": "ru",
           "reference": "вариант становящийся всё более популярным для тех кто планирует взять академический год это путешествовать и учиться",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -595,6 +617,7 @@
           "id": "fleurs-ru_ru-validation-000009-1647",
           "language": "ru",
           "reference": "изложенные мнения часто поверхностны расплывчаты и чрезмерно упрощены по сравнению с повсеместно доступной более подробной информацией",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -618,6 +641,7 @@
           "id": "fleurs-ro_ro-validation-000000-1598",
           "language": "ro",
           "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -641,6 +665,7 @@
           "id": "fleurs-ro_ro-validation-000001-1576",
           "language": "ro",
           "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 0,
@@ -664,6 +689,7 @@
           "id": "fleurs-ro_ro-validation-000002-1655",
           "language": "ro",
           "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 0,
@@ -687,6 +713,7 @@
           "id": "fleurs-ro_ro-validation-000003-1584",
           "language": "ro",
           "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -710,6 +737,7 @@
           "id": "fleurs-ro_ro-validation-000004-1524",
           "language": "ro",
           "reference": "a avut multe efecte sociale și politice precum adoptarea sistemului metric trecerea de la un sistem absolutist la unul republican naționalistl și convingerea că țara aparține poporului nu unui singur conducător",
+          "variant_id": null,
           "wer": {
             "candidate_units": 31,
             "edits": 2,
@@ -733,6 +761,7 @@
           "id": "fleurs-ro_ro-validation-000005-1594",
           "language": "ro",
           "reference": "unele animale cum ar fi elefanții sau girafele tind să se apropie de mașini iar echipamentul standard va permite o bună vizualizare a lor",
+          "variant_id": null,
           "wer": {
             "candidate_units": 24,
             "edits": 5,
@@ -756,6 +785,7 @@
           "id": "fleurs-ro_ro-validation-000006-1637",
           "language": "ro",
           "reference": "la 6 octombrie 1789 înspăimântatul rege ludovic al xvi-lea regina maria antoaneta cei doi copii ai lor marie thérèse de 11 ani și louis-charles de patru ani și sora regelui madame élisabeth au fost forțați de către o mulțime formată din negustorese să se întoarcă de la versailles la paris",
+          "variant_id": null,
           "wer": {
             "candidate_units": 51,
             "edits": 4,
@@ -779,6 +809,7 @@
           "id": "fleurs-ro_ro-validation-000007-1553",
           "language": "ro",
           "reference": "crăciunul este una dintre cele mai importante sărbători ale creștinismului și este celebrat ca ziua de naștere a lui isus",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 0,
@@ -802,6 +833,7 @@
           "id": "fleurs-ro_ro-validation-000008-1578",
           "language": "ro",
           "reference": "lakkha singh a luat apoi inițiativa cântând bhajanuri",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 3,
@@ -825,6 +857,7 @@
           "id": "fleurs-ro_ro-validation-000009-1626",
           "language": "ro",
           "reference": "medaliatul cu aur la olimpiadă urma să înoate la jocurile commonwealth-ului în probele de 100 m și 200 m liber precum și în trei probe de ștafetă însă condiția sa fizică a fost pusă sub semnul întrebării din cauza plângerilor sale",
+          "variant_id": null,
           "wer": {
             "candidate_units": 42,
             "edits": 12,
@@ -848,6 +881,7 @@
           "id": "fleurs-ko_kr-validation-000000-1616",
           "language": "ko",
           "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 1,
@@ -871,6 +905,7 @@
           "id": "fleurs-ko_kr-validation-000001-1648",
           "language": "ko",
           "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 2,
@@ -894,6 +929,7 @@
           "id": "fleurs-ko_kr-validation-000002-1631",
           "language": "ko",
           "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -917,6 +953,7 @@
           "id": "fleurs-ko_kr-validation-000003-1525",
           "language": "ko",
           "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 2,
@@ -940,6 +977,7 @@
           "id": "fleurs-ko_kr-validation-000004-1527",
           "language": "ko",
           "reference": "폴란드 남자 시각 장애인 스키 선수 마키 크레젤maciej krezel과 가이드 안나 오가진스카anna ogarzynska가 슈퍼대회전super g에서 13위로 경기를 마쳤다. 한국의 박종석은 남자 좌식스키 슈퍼대회전super g에서 24위를 차지했다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 10,
@@ -963,6 +1001,7 @@
           "id": "fleurs-ko_kr-validation-000005-1623",
           "language": "ko",
           "reference": "이 조항들은 모든 주에서 만장일치의 동의를 얻어야만 수정이 가능했으며 중앙 정부를 무시한 주 대표들은 대부분 회의에 불참석했습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 3,
@@ -986,6 +1025,7 @@
           "id": "fleurs-ko_kr-validation-000006-1550",
           "language": "ko",
           "reference": "\"스키여행은 스키광\"\"ski bums\"\"이라고 불리는 애호가들이 즐기는 여행 방식이다. 그 사람들은 휴가 일정을 어느 한 특정 장소에서 줄곧 스키를 타는 시간으로 계획한다.",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 5,
@@ -1009,6 +1049,7 @@
           "id": "fleurs-ko_kr-validation-000007-1537",
           "language": "ko",
           "reference": "어둠 속에서 피라미드를 볼 수 있고 쇼가 시작하기 전에 고요 속에서 피라미드를 볼 수 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -1032,6 +1073,7 @@
           "id": "fleurs-ko_kr-validation-000008-1563",
           "language": "ko",
           "reference": "이것은 젊은 공룡의 꼬리이지만 샘플을 보면 어린 개체의 솜털이 아닌 성체의 깃털임을 알 수 있다고 연구진은 말합니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 0,
@@ -1055,6 +1097,7 @@
           "id": "fleurs-ko_kr-validation-000009-1577",
           "language": "ko",
           "reference": "그게 저에겐 말이 안 되는 것 같았습니다 확실히 공평하지 않았어요",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 0,
@@ -1193,6 +1236,7 @@
           "id": "fleurs-en_us-validation-000000-1548",
           "language": "en",
           "reference": "when you call someone who is thousands of miles away you are using a satellite",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -1216,6 +1260,7 @@
           "id": "fleurs-en_us-validation-000001-1620",
           "language": "en",
           "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 5,
@@ -1239,6 +1284,7 @@
           "id": "fleurs-en_us-validation-000002-1510",
           "language": "en",
           "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -1262,6 +1308,7 @@
           "id": "fleurs-en_us-validation-000003-1578",
           "language": "en",
           "reference": "then lakkha singh took the lead in singing the bhajans",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 5,
@@ -1285,6 +1332,7 @@
           "id": "fleurs-en_us-validation-000004-1652",
           "language": "en",
           "reference": "the major religion in moldova is orthodox christian",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 0,
@@ -1308,6 +1356,7 @@
           "id": "fleurs-en_us-validation-000005-1531",
           "language": "en",
           "reference": "the east african islands are in the indian ocean off the eastern coast of africa",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -1331,6 +1380,7 @@
           "id": "fleurs-en_us-validation-000006-1528",
           "language": "en",
           "reference": "some festivals have special camping areas for families with young children",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -1354,6 +1404,7 @@
           "id": "fleurs-en_us-validation-000007-1595",
           "language": "en",
           "reference": "the tibetan buddhism is based on the teachings of buddha but were extended by the mahayana path of love and by a lot of techniques from indian yoga",
+          "variant_id": null,
           "wer": {
             "candidate_units": 28,
             "edits": 1,
@@ -1377,6 +1428,7 @@
           "id": "fleurs-en_us-validation-000008-1559",
           "language": "en",
           "reference": "pronunciation is relatively easy in italian since most words are pronounced exactly how they are written",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -1400,6 +1452,7 @@
           "id": "fleurs-en_us-validation-000009-1633",
           "language": "en",
           "reference": "in this dynamic transport shuttle everyone is somehow connected with and supporting a transport system based on private cars",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 1,
@@ -1423,6 +1476,7 @@
           "id": "fleurs-ru_ru-validation-000000-1614",
           "language": "ru",
           "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 0,
@@ -1446,6 +1500,7 @@
           "id": "fleurs-ru_ru-validation-000001-1554",
           "language": "ru",
           "reference": "он сказал что создал дверной звонок работающий от wifi",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 2,
@@ -1469,6 +1524,7 @@
           "id": "fleurs-ru_ru-validation-000002-1634",
           "language": "ru",
           "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 2,
@@ -1492,6 +1548,7 @@
           "id": "fleurs-ru_ru-validation-000003-1615",
           "language": "ru",
           "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+          "variant_id": null,
           "wer": {
             "candidate_units": 14,
             "edits": 1,
@@ -1515,6 +1572,7 @@
           "id": "fleurs-ru_ru-validation-000004-1609",
           "language": "ru",
           "reference": "робин утхаппа набрал рекордное количество очков в иннинге 70 ранов за всего 41 подачу отбил 11 четвёрок и 2 шестёрки",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -1538,6 +1596,7 @@
           "id": "fleurs-ru_ru-validation-000005-1549",
           "language": "ru",
           "reference": "эти теории предполагают что у людей есть определённые потребности и/или желания которые накапливаются внутри в процессе взросления",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 2,
@@ -1561,6 +1620,7 @@
           "id": "fleurs-ru_ru-validation-000006-1587",
           "language": "ru",
           "reference": "о первых случаях заболевания в этом сезоне было сообщено в июле",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -1584,6 +1644,7 @@
           "id": "fleurs-ru_ru-validation-000007-1618",
           "language": "ru",
           "reference": "в северной части то есть на хребте сентинел находятся самые высокие горы антарктиды массив винсон самая высшая точка которого достигает 4892 м и называется пик винсон",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 2,
@@ -1607,6 +1668,7 @@
           "id": "fleurs-ru_ru-validation-000008-1651",
           "language": "ru",
           "reference": "вариант становящийся всё более популярным для тех кто планирует взять академический год это путешествовать и учиться",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -1630,6 +1692,7 @@
           "id": "fleurs-ru_ru-validation-000009-1647",
           "language": "ru",
           "reference": "изложенные мнения часто поверхностны расплывчаты и чрезмерно упрощены по сравнению с повсеместно доступной более подробной информацией",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -1653,6 +1716,7 @@
           "id": "fleurs-ro_ro-validation-000000-1598",
           "language": "ro",
           "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -1676,6 +1740,7 @@
           "id": "fleurs-ro_ro-validation-000001-1576",
           "language": "ro",
           "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 0,
@@ -1699,6 +1764,7 @@
           "id": "fleurs-ro_ro-validation-000002-1655",
           "language": "ro",
           "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 0,
@@ -1722,6 +1788,7 @@
           "id": "fleurs-ro_ro-validation-000003-1584",
           "language": "ro",
           "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -1745,6 +1812,7 @@
           "id": "fleurs-ro_ro-validation-000004-1524",
           "language": "ro",
           "reference": "a avut multe efecte sociale și politice precum adoptarea sistemului metric trecerea de la un sistem absolutist la unul republican naționalistl și convingerea că țara aparține poporului nu unui singur conducător",
+          "variant_id": null,
           "wer": {
             "candidate_units": 31,
             "edits": 2,
@@ -1768,6 +1836,7 @@
           "id": "fleurs-ro_ro-validation-000005-1594",
           "language": "ro",
           "reference": "unele animale cum ar fi elefanții sau girafele tind să se apropie de mașini iar echipamentul standard va permite o bună vizualizare a lor",
+          "variant_id": null,
           "wer": {
             "candidate_units": 24,
             "edits": 5,
@@ -1791,6 +1860,7 @@
           "id": "fleurs-ro_ro-validation-000006-1637",
           "language": "ro",
           "reference": "la 6 octombrie 1789 înspăimântatul rege ludovic al xvi-lea regina maria antoaneta cei doi copii ai lor marie thérèse de 11 ani și louis-charles de patru ani și sora regelui madame élisabeth au fost forțați de către o mulțime formată din negustorese să se întoarcă de la versailles la paris",
+          "variant_id": null,
           "wer": {
             "candidate_units": 51,
             "edits": 4,
@@ -1814,6 +1884,7 @@
           "id": "fleurs-ro_ro-validation-000007-1553",
           "language": "ro",
           "reference": "crăciunul este una dintre cele mai importante sărbători ale creștinismului și este celebrat ca ziua de naștere a lui isus",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 0,
@@ -1837,6 +1908,7 @@
           "id": "fleurs-ro_ro-validation-000008-1578",
           "language": "ro",
           "reference": "lakkha singh a luat apoi inițiativa cântând bhajanuri",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 3,
@@ -1860,6 +1932,7 @@
           "id": "fleurs-ro_ro-validation-000009-1626",
           "language": "ro",
           "reference": "medaliatul cu aur la olimpiadă urma să înoate la jocurile commonwealth-ului în probele de 100 m și 200 m liber precum și în trei probe de ștafetă însă condiția sa fizică a fost pusă sub semnul întrebării din cauza plângerilor sale",
+          "variant_id": null,
           "wer": {
             "candidate_units": 42,
             "edits": 12,
@@ -1883,6 +1956,7 @@
           "id": "fleurs-ko_kr-validation-000000-1616",
           "language": "ko",
           "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 1,
@@ -1906,6 +1980,7 @@
           "id": "fleurs-ko_kr-validation-000001-1648",
           "language": "ko",
           "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 2,
@@ -1929,6 +2004,7 @@
           "id": "fleurs-ko_kr-validation-000002-1631",
           "language": "ko",
           "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -1952,6 +2028,7 @@
           "id": "fleurs-ko_kr-validation-000003-1525",
           "language": "ko",
           "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 2,
@@ -1975,6 +2052,7 @@
           "id": "fleurs-ko_kr-validation-000004-1527",
           "language": "ko",
           "reference": "폴란드 남자 시각 장애인 스키 선수 마키 크레젤maciej krezel과 가이드 안나 오가진스카anna ogarzynska가 슈퍼대회전super g에서 13위로 경기를 마쳤다. 한국의 박종석은 남자 좌식스키 슈퍼대회전super g에서 24위를 차지했다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 10,
@@ -1998,6 +2076,7 @@
           "id": "fleurs-ko_kr-validation-000005-1623",
           "language": "ko",
           "reference": "이 조항들은 모든 주에서 만장일치의 동의를 얻어야만 수정이 가능했으며 중앙 정부를 무시한 주 대표들은 대부분 회의에 불참석했습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 3,
@@ -2021,6 +2100,7 @@
           "id": "fleurs-ko_kr-validation-000006-1550",
           "language": "ko",
           "reference": "\"스키여행은 스키광\"\"ski bums\"\"이라고 불리는 애호가들이 즐기는 여행 방식이다. 그 사람들은 휴가 일정을 어느 한 특정 장소에서 줄곧 스키를 타는 시간으로 계획한다.",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 5,
@@ -2044,6 +2124,7 @@
           "id": "fleurs-ko_kr-validation-000007-1537",
           "language": "ko",
           "reference": "어둠 속에서 피라미드를 볼 수 있고 쇼가 시작하기 전에 고요 속에서 피라미드를 볼 수 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -2067,6 +2148,7 @@
           "id": "fleurs-ko_kr-validation-000008-1563",
           "language": "ko",
           "reference": "이것은 젊은 공룡의 꼬리이지만 샘플을 보면 어린 개체의 솜털이 아닌 성체의 깃털임을 알 수 있다고 연구진은 말합니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 0,
@@ -2090,6 +2172,7 @@
           "id": "fleurs-ko_kr-validation-000009-1577",
           "language": "ko",
           "reference": "그게 저에겐 말이 안 되는 것 같았습니다 확실히 공평하지 않았어요",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 0,
@@ -2228,6 +2311,7 @@
           "id": "fleurs-en_us-validation-000000-1548",
           "language": "en",
           "reference": "when you call someone who is thousands of miles away you are using a satellite",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -2251,6 +2335,7 @@
           "id": "fleurs-en_us-validation-000001-1620",
           "language": "en",
           "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 5,
@@ -2274,6 +2359,7 @@
           "id": "fleurs-en_us-validation-000002-1510",
           "language": "en",
           "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -2297,6 +2383,7 @@
           "id": "fleurs-en_us-validation-000003-1578",
           "language": "en",
           "reference": "then lakkha singh took the lead in singing the bhajans",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 5,
@@ -2320,6 +2407,7 @@
           "id": "fleurs-en_us-validation-000004-1652",
           "language": "en",
           "reference": "the major religion in moldova is orthodox christian",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 0,
@@ -2343,6 +2431,7 @@
           "id": "fleurs-en_us-validation-000005-1531",
           "language": "en",
           "reference": "the east african islands are in the indian ocean off the eastern coast of africa",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -2366,6 +2455,7 @@
           "id": "fleurs-en_us-validation-000006-1528",
           "language": "en",
           "reference": "some festivals have special camping areas for families with young children",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -2389,6 +2479,7 @@
           "id": "fleurs-en_us-validation-000007-1595",
           "language": "en",
           "reference": "the tibetan buddhism is based on the teachings of buddha but were extended by the mahayana path of love and by a lot of techniques from indian yoga",
+          "variant_id": null,
           "wer": {
             "candidate_units": 28,
             "edits": 1,
@@ -2412,6 +2503,7 @@
           "id": "fleurs-en_us-validation-000008-1559",
           "language": "en",
           "reference": "pronunciation is relatively easy in italian since most words are pronounced exactly how they are written",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -2435,6 +2527,7 @@
           "id": "fleurs-en_us-validation-000009-1633",
           "language": "en",
           "reference": "in this dynamic transport shuttle everyone is somehow connected with and supporting a transport system based on private cars",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 1,
@@ -2458,6 +2551,7 @@
           "id": "fleurs-ru_ru-validation-000000-1614",
           "language": "ru",
           "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 0,
@@ -2481,6 +2575,7 @@
           "id": "fleurs-ru_ru-validation-000001-1554",
           "language": "ru",
           "reference": "он сказал что создал дверной звонок работающий от wifi",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 2,
@@ -2504,6 +2599,7 @@
           "id": "fleurs-ru_ru-validation-000002-1634",
           "language": "ru",
           "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 2,
@@ -2527,6 +2623,7 @@
           "id": "fleurs-ru_ru-validation-000003-1615",
           "language": "ru",
           "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+          "variant_id": null,
           "wer": {
             "candidate_units": 14,
             "edits": 1,
@@ -2550,6 +2647,7 @@
           "id": "fleurs-ru_ru-validation-000004-1609",
           "language": "ru",
           "reference": "робин утхаппа набрал рекордное количество очков в иннинге 70 ранов за всего 41 подачу отбил 11 четвёрок и 2 шестёрки",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -2573,6 +2671,7 @@
           "id": "fleurs-ru_ru-validation-000005-1549",
           "language": "ru",
           "reference": "эти теории предполагают что у людей есть определённые потребности и/или желания которые накапливаются внутри в процессе взросления",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 2,
@@ -2596,6 +2695,7 @@
           "id": "fleurs-ru_ru-validation-000006-1587",
           "language": "ru",
           "reference": "о первых случаях заболевания в этом сезоне было сообщено в июле",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -2619,6 +2719,7 @@
           "id": "fleurs-ru_ru-validation-000007-1618",
           "language": "ru",
           "reference": "в северной части то есть на хребте сентинел находятся самые высокие горы антарктиды массив винсон самая высшая точка которого достигает 4892 м и называется пик винсон",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 2,
@@ -2642,6 +2743,7 @@
           "id": "fleurs-ru_ru-validation-000008-1651",
           "language": "ru",
           "reference": "вариант становящийся всё более популярным для тех кто планирует взять академический год это путешествовать и учиться",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -2665,6 +2767,7 @@
           "id": "fleurs-ru_ru-validation-000009-1647",
           "language": "ru",
           "reference": "изложенные мнения часто поверхностны расплывчаты и чрезмерно упрощены по сравнению с повсеместно доступной более подробной информацией",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -2688,6 +2791,7 @@
           "id": "fleurs-ro_ro-validation-000000-1598",
           "language": "ro",
           "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -2711,6 +2815,7 @@
           "id": "fleurs-ro_ro-validation-000001-1576",
           "language": "ro",
           "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 0,
@@ -2734,6 +2839,7 @@
           "id": "fleurs-ro_ro-validation-000002-1655",
           "language": "ro",
           "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 0,
@@ -2757,6 +2863,7 @@
           "id": "fleurs-ro_ro-validation-000003-1584",
           "language": "ro",
           "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -2780,6 +2887,7 @@
           "id": "fleurs-ro_ro-validation-000004-1524",
           "language": "ro",
           "reference": "a avut multe efecte sociale și politice precum adoptarea sistemului metric trecerea de la un sistem absolutist la unul republican naționalistl și convingerea că țara aparține poporului nu unui singur conducător",
+          "variant_id": null,
           "wer": {
             "candidate_units": 31,
             "edits": 2,
@@ -2803,6 +2911,7 @@
           "id": "fleurs-ro_ro-validation-000005-1594",
           "language": "ro",
           "reference": "unele animale cum ar fi elefanții sau girafele tind să se apropie de mașini iar echipamentul standard va permite o bună vizualizare a lor",
+          "variant_id": null,
           "wer": {
             "candidate_units": 24,
             "edits": 5,
@@ -2826,6 +2935,7 @@
           "id": "fleurs-ro_ro-validation-000006-1637",
           "language": "ro",
           "reference": "la 6 octombrie 1789 înspăimântatul rege ludovic al xvi-lea regina maria antoaneta cei doi copii ai lor marie thérèse de 11 ani și louis-charles de patru ani și sora regelui madame élisabeth au fost forțați de către o mulțime formată din negustorese să se întoarcă de la versailles la paris",
+          "variant_id": null,
           "wer": {
             "candidate_units": 51,
             "edits": 4,
@@ -2849,6 +2959,7 @@
           "id": "fleurs-ro_ro-validation-000007-1553",
           "language": "ro",
           "reference": "crăciunul este una dintre cele mai importante sărbători ale creștinismului și este celebrat ca ziua de naștere a lui isus",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 0,
@@ -2872,6 +2983,7 @@
           "id": "fleurs-ro_ro-validation-000008-1578",
           "language": "ro",
           "reference": "lakkha singh a luat apoi inițiativa cântând bhajanuri",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 3,
@@ -2895,6 +3007,7 @@
           "id": "fleurs-ro_ro-validation-000009-1626",
           "language": "ro",
           "reference": "medaliatul cu aur la olimpiadă urma să înoate la jocurile commonwealth-ului în probele de 100 m și 200 m liber precum și în trei probe de ștafetă însă condiția sa fizică a fost pusă sub semnul întrebării din cauza plângerilor sale",
+          "variant_id": null,
           "wer": {
             "candidate_units": 42,
             "edits": 12,
@@ -2918,6 +3031,7 @@
           "id": "fleurs-ko_kr-validation-000000-1616",
           "language": "ko",
           "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 1,
@@ -2941,6 +3055,7 @@
           "id": "fleurs-ko_kr-validation-000001-1648",
           "language": "ko",
           "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 2,
@@ -2964,6 +3079,7 @@
           "id": "fleurs-ko_kr-validation-000002-1631",
           "language": "ko",
           "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -2987,6 +3103,7 @@
           "id": "fleurs-ko_kr-validation-000003-1525",
           "language": "ko",
           "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 2,
@@ -3010,6 +3127,7 @@
           "id": "fleurs-ko_kr-validation-000004-1527",
           "language": "ko",
           "reference": "폴란드 남자 시각 장애인 스키 선수 마키 크레젤maciej krezel과 가이드 안나 오가진스카anna ogarzynska가 슈퍼대회전super g에서 13위로 경기를 마쳤다. 한국의 박종석은 남자 좌식스키 슈퍼대회전super g에서 24위를 차지했다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 10,
@@ -3033,6 +3151,7 @@
           "id": "fleurs-ko_kr-validation-000005-1623",
           "language": "ko",
           "reference": "이 조항들은 모든 주에서 만장일치의 동의를 얻어야만 수정이 가능했으며 중앙 정부를 무시한 주 대표들은 대부분 회의에 불참석했습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 3,
@@ -3056,6 +3175,7 @@
           "id": "fleurs-ko_kr-validation-000006-1550",
           "language": "ko",
           "reference": "\"스키여행은 스키광\"\"ski bums\"\"이라고 불리는 애호가들이 즐기는 여행 방식이다. 그 사람들은 휴가 일정을 어느 한 특정 장소에서 줄곧 스키를 타는 시간으로 계획한다.",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 5,
@@ -3079,6 +3199,7 @@
           "id": "fleurs-ko_kr-validation-000007-1537",
           "language": "ko",
           "reference": "어둠 속에서 피라미드를 볼 수 있고 쇼가 시작하기 전에 고요 속에서 피라미드를 볼 수 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -3102,6 +3223,7 @@
           "id": "fleurs-ko_kr-validation-000008-1563",
           "language": "ko",
           "reference": "이것은 젊은 공룡의 꼬리이지만 샘플을 보면 어린 개체의 솜털이 아닌 성체의 깃털임을 알 수 있다고 연구진은 말합니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 0,
@@ -3125,6 +3247,7 @@
           "id": "fleurs-ko_kr-validation-000009-1577",
           "language": "ko",
           "reference": "그게 저에겐 말이 안 되는 것 같았습니다 확실히 공평하지 않았어요",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 0,
@@ -3263,6 +3386,7 @@
           "id": "fleurs-en_us-validation-000000-1548",
           "language": "en",
           "reference": "when you call someone who is thousands of miles away you are using a satellite",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -3286,6 +3410,7 @@
           "id": "fleurs-en_us-validation-000001-1620",
           "language": "en",
           "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 5,
@@ -3309,6 +3434,7 @@
           "id": "fleurs-en_us-validation-000002-1510",
           "language": "en",
           "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -3332,6 +3458,7 @@
           "id": "fleurs-en_us-validation-000003-1578",
           "language": "en",
           "reference": "then lakkha singh took the lead in singing the bhajans",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 5,
@@ -3355,6 +3482,7 @@
           "id": "fleurs-en_us-validation-000004-1652",
           "language": "en",
           "reference": "the major religion in moldova is orthodox christian",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 0,
@@ -3378,6 +3506,7 @@
           "id": "fleurs-en_us-validation-000005-1531",
           "language": "en",
           "reference": "the east african islands are in the indian ocean off the eastern coast of africa",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -3401,6 +3530,7 @@
           "id": "fleurs-en_us-validation-000006-1528",
           "language": "en",
           "reference": "some festivals have special camping areas for families with young children",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -3424,6 +3554,7 @@
           "id": "fleurs-en_us-validation-000007-1595",
           "language": "en",
           "reference": "the tibetan buddhism is based on the teachings of buddha but were extended by the mahayana path of love and by a lot of techniques from indian yoga",
+          "variant_id": null,
           "wer": {
             "candidate_units": 28,
             "edits": 1,
@@ -3447,6 +3578,7 @@
           "id": "fleurs-en_us-validation-000008-1559",
           "language": "en",
           "reference": "pronunciation is relatively easy in italian since most words are pronounced exactly how they are written",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -3470,6 +3602,7 @@
           "id": "fleurs-en_us-validation-000009-1633",
           "language": "en",
           "reference": "in this dynamic transport shuttle everyone is somehow connected with and supporting a transport system based on private cars",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 1,
@@ -3493,6 +3626,7 @@
           "id": "fleurs-ru_ru-validation-000000-1614",
           "language": "ru",
           "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 0,
@@ -3516,6 +3650,7 @@
           "id": "fleurs-ru_ru-validation-000001-1554",
           "language": "ru",
           "reference": "он сказал что создал дверной звонок работающий от wifi",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 2,
@@ -3539,6 +3674,7 @@
           "id": "fleurs-ru_ru-validation-000002-1634",
           "language": "ru",
           "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 2,
@@ -3562,6 +3698,7 @@
           "id": "fleurs-ru_ru-validation-000003-1615",
           "language": "ru",
           "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+          "variant_id": null,
           "wer": {
             "candidate_units": 14,
             "edits": 1,
@@ -3585,6 +3722,7 @@
           "id": "fleurs-ru_ru-validation-000004-1609",
           "language": "ru",
           "reference": "робин утхаппа набрал рекордное количество очков в иннинге 70 ранов за всего 41 подачу отбил 11 четвёрок и 2 шестёрки",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -3608,6 +3746,7 @@
           "id": "fleurs-ru_ru-validation-000005-1549",
           "language": "ru",
           "reference": "эти теории предполагают что у людей есть определённые потребности и/или желания которые накапливаются внутри в процессе взросления",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 2,
@@ -3631,6 +3770,7 @@
           "id": "fleurs-ru_ru-validation-000006-1587",
           "language": "ru",
           "reference": "о первых случаях заболевания в этом сезоне было сообщено в июле",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -3654,6 +3794,7 @@
           "id": "fleurs-ru_ru-validation-000007-1618",
           "language": "ru",
           "reference": "в северной части то есть на хребте сентинел находятся самые высокие горы антарктиды массив винсон самая высшая точка которого достигает 4892 м и называется пик винсон",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 2,
@@ -3677,6 +3818,7 @@
           "id": "fleurs-ru_ru-validation-000008-1651",
           "language": "ru",
           "reference": "вариант становящийся всё более популярным для тех кто планирует взять академический год это путешествовать и учиться",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -3700,6 +3842,7 @@
           "id": "fleurs-ru_ru-validation-000009-1647",
           "language": "ru",
           "reference": "изложенные мнения часто поверхностны расплывчаты и чрезмерно упрощены по сравнению с повсеместно доступной более подробной информацией",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -3723,6 +3866,7 @@
           "id": "fleurs-ro_ro-validation-000000-1598",
           "language": "ro",
           "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -3746,6 +3890,7 @@
           "id": "fleurs-ro_ro-validation-000001-1576",
           "language": "ro",
           "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 0,
@@ -3769,6 +3914,7 @@
           "id": "fleurs-ro_ro-validation-000002-1655",
           "language": "ro",
           "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 0,
@@ -3792,6 +3938,7 @@
           "id": "fleurs-ro_ro-validation-000003-1584",
           "language": "ro",
           "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -3815,6 +3962,7 @@
           "id": "fleurs-ro_ro-validation-000004-1524",
           "language": "ro",
           "reference": "a avut multe efecte sociale și politice precum adoptarea sistemului metric trecerea de la un sistem absolutist la unul republican naționalistl și convingerea că țara aparține poporului nu unui singur conducător",
+          "variant_id": null,
           "wer": {
             "candidate_units": 31,
             "edits": 2,
@@ -3838,6 +3986,7 @@
           "id": "fleurs-ro_ro-validation-000005-1594",
           "language": "ro",
           "reference": "unele animale cum ar fi elefanții sau girafele tind să se apropie de mașini iar echipamentul standard va permite o bună vizualizare a lor",
+          "variant_id": null,
           "wer": {
             "candidate_units": 24,
             "edits": 5,
@@ -3861,6 +4010,7 @@
           "id": "fleurs-ro_ro-validation-000006-1637",
           "language": "ro",
           "reference": "la 6 octombrie 1789 înspăimântatul rege ludovic al xvi-lea regina maria antoaneta cei doi copii ai lor marie thérèse de 11 ani și louis-charles de patru ani și sora regelui madame élisabeth au fost forțați de către o mulțime formată din negustorese să se întoarcă de la versailles la paris",
+          "variant_id": null,
           "wer": {
             "candidate_units": 51,
             "edits": 4,
@@ -3884,6 +4034,7 @@
           "id": "fleurs-ro_ro-validation-000007-1553",
           "language": "ro",
           "reference": "crăciunul este una dintre cele mai importante sărbători ale creștinismului și este celebrat ca ziua de naștere a lui isus",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 0,
@@ -3907,6 +4058,7 @@
           "id": "fleurs-ro_ro-validation-000008-1578",
           "language": "ro",
           "reference": "lakkha singh a luat apoi inițiativa cântând bhajanuri",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 3,
@@ -3930,6 +4082,7 @@
           "id": "fleurs-ro_ro-validation-000009-1626",
           "language": "ro",
           "reference": "medaliatul cu aur la olimpiadă urma să înoate la jocurile commonwealth-ului în probele de 100 m și 200 m liber precum și în trei probe de ștafetă însă condiția sa fizică a fost pusă sub semnul întrebării din cauza plângerilor sale",
+          "variant_id": null,
           "wer": {
             "candidate_units": 42,
             "edits": 12,
@@ -3953,6 +4106,7 @@
           "id": "fleurs-ko_kr-validation-000000-1616",
           "language": "ko",
           "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 1,
@@ -3976,6 +4130,7 @@
           "id": "fleurs-ko_kr-validation-000001-1648",
           "language": "ko",
           "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 2,
@@ -3999,6 +4154,7 @@
           "id": "fleurs-ko_kr-validation-000002-1631",
           "language": "ko",
           "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -4022,6 +4178,7 @@
           "id": "fleurs-ko_kr-validation-000003-1525",
           "language": "ko",
           "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 2,
@@ -4045,6 +4202,7 @@
           "id": "fleurs-ko_kr-validation-000004-1527",
           "language": "ko",
           "reference": "폴란드 남자 시각 장애인 스키 선수 마키 크레젤maciej krezel과 가이드 안나 오가진스카anna ogarzynska가 슈퍼대회전super g에서 13위로 경기를 마쳤다. 한국의 박종석은 남자 좌식스키 슈퍼대회전super g에서 24위를 차지했다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 10,
@@ -4068,6 +4226,7 @@
           "id": "fleurs-ko_kr-validation-000005-1623",
           "language": "ko",
           "reference": "이 조항들은 모든 주에서 만장일치의 동의를 얻어야만 수정이 가능했으며 중앙 정부를 무시한 주 대표들은 대부분 회의에 불참석했습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 3,
@@ -4091,6 +4250,7 @@
           "id": "fleurs-ko_kr-validation-000006-1550",
           "language": "ko",
           "reference": "\"스키여행은 스키광\"\"ski bums\"\"이라고 불리는 애호가들이 즐기는 여행 방식이다. 그 사람들은 휴가 일정을 어느 한 특정 장소에서 줄곧 스키를 타는 시간으로 계획한다.",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 5,
@@ -4114,6 +4274,7 @@
           "id": "fleurs-ko_kr-validation-000007-1537",
           "language": "ko",
           "reference": "어둠 속에서 피라미드를 볼 수 있고 쇼가 시작하기 전에 고요 속에서 피라미드를 볼 수 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -4137,6 +4298,7 @@
           "id": "fleurs-ko_kr-validation-000008-1563",
           "language": "ko",
           "reference": "이것은 젊은 공룡의 꼬리이지만 샘플을 보면 어린 개체의 솜털이 아닌 성체의 깃털임을 알 수 있다고 연구진은 말합니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 0,
@@ -4160,6 +4322,7 @@
           "id": "fleurs-ko_kr-validation-000009-1577",
           "language": "ko",
           "reference": "그게 저에겐 말이 안 되는 것 같았습니다 확실히 공평하지 않았어요",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 0,
@@ -4298,6 +4461,7 @@
           "id": "fleurs-en_us-validation-000000-1548",
           "language": "en",
           "reference": "when you call someone who is thousands of miles away you are using a satellite",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -4321,6 +4485,7 @@
           "id": "fleurs-en_us-validation-000001-1620",
           "language": "en",
           "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 5,
@@ -4344,6 +4509,7 @@
           "id": "fleurs-en_us-validation-000002-1510",
           "language": "en",
           "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -4367,6 +4533,7 @@
           "id": "fleurs-en_us-validation-000003-1578",
           "language": "en",
           "reference": "then lakkha singh took the lead in singing the bhajans",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 5,
@@ -4390,6 +4557,7 @@
           "id": "fleurs-en_us-validation-000004-1652",
           "language": "en",
           "reference": "the major religion in moldova is orthodox christian",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 0,
@@ -4413,6 +4581,7 @@
           "id": "fleurs-en_us-validation-000005-1531",
           "language": "en",
           "reference": "the east african islands are in the indian ocean off the eastern coast of africa",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -4436,6 +4605,7 @@
           "id": "fleurs-en_us-validation-000006-1528",
           "language": "en",
           "reference": "some festivals have special camping areas for families with young children",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -4459,6 +4629,7 @@
           "id": "fleurs-en_us-validation-000007-1595",
           "language": "en",
           "reference": "the tibetan buddhism is based on the teachings of buddha but were extended by the mahayana path of love and by a lot of techniques from indian yoga",
+          "variant_id": null,
           "wer": {
             "candidate_units": 28,
             "edits": 1,
@@ -4482,6 +4653,7 @@
           "id": "fleurs-en_us-validation-000008-1559",
           "language": "en",
           "reference": "pronunciation is relatively easy in italian since most words are pronounced exactly how they are written",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -4505,6 +4677,7 @@
           "id": "fleurs-en_us-validation-000009-1633",
           "language": "en",
           "reference": "in this dynamic transport shuttle everyone is somehow connected with and supporting a transport system based on private cars",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 1,
@@ -4528,6 +4701,7 @@
           "id": "fleurs-ru_ru-validation-000000-1614",
           "language": "ru",
           "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 0,
@@ -4551,6 +4725,7 @@
           "id": "fleurs-ru_ru-validation-000001-1554",
           "language": "ru",
           "reference": "он сказал что создал дверной звонок работающий от wifi",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 2,
@@ -4574,6 +4749,7 @@
           "id": "fleurs-ru_ru-validation-000002-1634",
           "language": "ru",
           "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 2,
@@ -4597,6 +4773,7 @@
           "id": "fleurs-ru_ru-validation-000003-1615",
           "language": "ru",
           "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+          "variant_id": null,
           "wer": {
             "candidate_units": 14,
             "edits": 1,
@@ -4620,6 +4797,7 @@
           "id": "fleurs-ru_ru-validation-000004-1609",
           "language": "ru",
           "reference": "робин утхаппа набрал рекордное количество очков в иннинге 70 ранов за всего 41 подачу отбил 11 четвёрок и 2 шестёрки",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -4643,6 +4821,7 @@
           "id": "fleurs-ru_ru-validation-000005-1549",
           "language": "ru",
           "reference": "эти теории предполагают что у людей есть определённые потребности и/или желания которые накапливаются внутри в процессе взросления",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 2,
@@ -4666,6 +4845,7 @@
           "id": "fleurs-ru_ru-validation-000006-1587",
           "language": "ru",
           "reference": "о первых случаях заболевания в этом сезоне было сообщено в июле",
+          "variant_id": null,
           "wer": {
             "candidate_units": 11,
             "edits": 0,
@@ -4689,6 +4869,7 @@
           "id": "fleurs-ru_ru-validation-000007-1618",
           "language": "ru",
           "reference": "в северной части то есть на хребте сентинел находятся самые высокие горы антарктиды массив винсон самая высшая точка которого достигает 4892 м и называется пик винсон",
+          "variant_id": null,
           "wer": {
             "candidate_units": 26,
             "edits": 2,
@@ -4712,6 +4893,7 @@
           "id": "fleurs-ru_ru-validation-000008-1651",
           "language": "ru",
           "reference": "вариант становящийся всё более популярным для тех кто планирует взять академический год это путешествовать и учиться",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -4735,6 +4917,7 @@
           "id": "fleurs-ru_ru-validation-000009-1647",
           "language": "ru",
           "reference": "изложенные мнения часто поверхностны расплывчаты и чрезмерно упрощены по сравнению с повсеместно доступной более подробной информацией",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 0,
@@ -4758,6 +4941,7 @@
           "id": "fleurs-ro_ro-validation-000000-1598",
           "language": "ro",
           "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 4,
@@ -4781,6 +4965,7 @@
           "id": "fleurs-ro_ro-validation-000001-1576",
           "language": "ro",
           "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+          "variant_id": null,
           "wer": {
             "candidate_units": 19,
             "edits": 0,
@@ -4804,6 +4989,7 @@
           "id": "fleurs-ro_ro-validation-000002-1655",
           "language": "ro",
           "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+          "variant_id": null,
           "wer": {
             "candidate_units": 18,
             "edits": 0,
@@ -4827,6 +5013,7 @@
           "id": "fleurs-ro_ro-validation-000003-1584",
           "language": "ro",
           "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 2,
@@ -4850,6 +5037,7 @@
           "id": "fleurs-ro_ro-validation-000004-1524",
           "language": "ro",
           "reference": "a avut multe efecte sociale și politice precum adoptarea sistemului metric trecerea de la un sistem absolutist la unul republican naționalistl și convingerea că țara aparține poporului nu unui singur conducător",
+          "variant_id": null,
           "wer": {
             "candidate_units": 31,
             "edits": 2,
@@ -4873,6 +5061,7 @@
           "id": "fleurs-ro_ro-validation-000005-1594",
           "language": "ro",
           "reference": "unele animale cum ar fi elefanții sau girafele tind să se apropie de mașini iar echipamentul standard va permite o bună vizualizare a lor",
+          "variant_id": null,
           "wer": {
             "candidate_units": 24,
             "edits": 5,
@@ -4896,6 +5085,7 @@
           "id": "fleurs-ro_ro-validation-000006-1637",
           "language": "ro",
           "reference": "la 6 octombrie 1789 înspăimântatul rege ludovic al xvi-lea regina maria antoaneta cei doi copii ai lor marie thérèse de 11 ani și louis-charles de patru ani și sora regelui madame élisabeth au fost forțați de către o mulțime formată din negustorese să se întoarcă de la versailles la paris",
+          "variant_id": null,
           "wer": {
             "candidate_units": 51,
             "edits": 4,
@@ -4919,6 +5109,7 @@
           "id": "fleurs-ro_ro-validation-000007-1553",
           "language": "ro",
           "reference": "crăciunul este una dintre cele mai importante sărbători ale creștinismului și este celebrat ca ziua de naștere a lui isus",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 0,
@@ -4942,6 +5133,7 @@
           "id": "fleurs-ro_ro-validation-000008-1578",
           "language": "ro",
           "reference": "lakkha singh a luat apoi inițiativa cântând bhajanuri",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 3,
@@ -4965,6 +5157,7 @@
           "id": "fleurs-ro_ro-validation-000009-1626",
           "language": "ro",
           "reference": "medaliatul cu aur la olimpiadă urma să înoate la jocurile commonwealth-ului în probele de 100 m și 200 m liber precum și în trei probe de ștafetă însă condiția sa fizică a fost pusă sub semnul întrebării din cauza plângerilor sale",
+          "variant_id": null,
           "wer": {
             "candidate_units": 42,
             "edits": 12,
@@ -4988,6 +5181,7 @@
           "id": "fleurs-ko_kr-validation-000000-1616",
           "language": "ko",
           "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 20,
             "edits": 1,
@@ -5011,6 +5205,7 @@
           "id": "fleurs-ko_kr-validation-000001-1648",
           "language": "ko",
           "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 8,
             "edits": 2,
@@ -5034,6 +5229,7 @@
           "id": "fleurs-ko_kr-validation-000002-1631",
           "language": "ko",
           "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 1,
@@ -5057,6 +5253,7 @@
           "id": "fleurs-ko_kr-validation-000003-1525",
           "language": "ko",
           "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 33,
             "edits": 2,
@@ -5080,6 +5277,7 @@
           "id": "fleurs-ko_kr-validation-000004-1527",
           "language": "ko",
           "reference": "폴란드 남자 시각 장애인 스키 선수 마키 크레젤maciej krezel과 가이드 안나 오가진스카anna ogarzynska가 슈퍼대회전super g에서 13위로 경기를 마쳤다. 한국의 박종석은 남자 좌식스키 슈퍼대회전super g에서 24위를 차지했다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 10,
@@ -5103,6 +5301,7 @@
           "id": "fleurs-ko_kr-validation-000005-1623",
           "language": "ko",
           "reference": "이 조항들은 모든 주에서 만장일치의 동의를 얻어야만 수정이 가능했으며 중앙 정부를 무시한 주 대표들은 대부분 회의에 불참석했습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 16,
             "edits": 3,
@@ -5126,6 +5325,7 @@
           "id": "fleurs-ko_kr-validation-000006-1550",
           "language": "ko",
           "reference": "\"스키여행은 스키광\"\"ski bums\"\"이라고 불리는 애호가들이 즐기는 여행 방식이다. 그 사람들은 휴가 일정을 어느 한 특정 장소에서 줄곧 스키를 타는 시간으로 계획한다.",
+          "variant_id": null,
           "wer": {
             "candidate_units": 22,
             "edits": 5,
@@ -5149,6 +5349,7 @@
           "id": "fleurs-ko_kr-validation-000007-1537",
           "language": "ko",
           "reference": "어둠 속에서 피라미드를 볼 수 있고 쇼가 시작하기 전에 고요 속에서 피라미드를 볼 수 있습니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 15,
             "edits": 0,
@@ -5172,6 +5373,7 @@
           "id": "fleurs-ko_kr-validation-000008-1563",
           "language": "ko",
           "reference": "이것은 젊은 공룡의 꼬리이지만 샘플을 보면 어린 개체의 솜털이 아닌 성체의 깃털임을 알 수 있다고 연구진은 말합니다",
+          "variant_id": null,
           "wer": {
             "candidate_units": 17,
             "edits": 0,
@@ -5195,6 +5397,7 @@
           "id": "fleurs-ko_kr-validation-000009-1577",
           "language": "ko",
           "reference": "그게 저에겐 말이 안 되는 것 같았습니다 확실히 공평하지 않았어요",
+          "variant_id": null,
           "wer": {
             "candidate_units": 10,
             "edits": 0,
@@ -5215,6 +5418,7 @@
   "source_sha256": "8b706ec8eb9ea47f827861132b9a0397efe467eae58a837fea3523c83b7b0573",
   "sweep_sha256": "18d1fb3e5a408734cdebdfc21eb3f602cb73ca49fd9b4341bac331923f06ee05",
   "timing_policy": "full_clip",
+  "variants": [],
   "word_timestamp_gate_passed": true,
   "word_timestamps": true
 }

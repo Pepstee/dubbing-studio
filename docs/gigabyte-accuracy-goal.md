@@ -32,17 +32,18 @@ long-form, noisy, conversational, or code-switched audio, so it cannot certify t
 pipeline by itself.
 
 The best installed-model result is automatic beam 5 with fallback capped at temperature
-0.6 and VAD enabled. No clip required a non-zero-temperature fallback:
+0.6, VAD threshold 0.5, and a frozen 200 ms speech pad. No clip required a
+non-zero-temperature fallback:
 
 | Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
 |---|---:|---:|---:|---:|---:|---|
-| English | 501 | 24 | 4.79% | 95.21% | 2.64% | PASS |
-| Russian | 455 | 25 | 5.49% | 94.51% | 1.28% | PASS |
-| Romanian | 579 | 67 | 11.57% | 88.43% | 4.68% | FAIL |
-| Korean | 409 | 50 | 12.22% | 87.78% | 8.08% | FAIL |
-| **Aggregate** | **1,944** | **166** | **8.54%** | **91.46%** | **3.65%** | **FAIL: not every language passes** |
+| English | 501 | 22 | 4.39% | 95.61% | 2.47% | PASS |
+| Russian | 455 | 24 | 5.27% | 94.73% | 1.24% | PASS |
+| Romanian | 579 | 58 | 10.02% | 89.98% | 4.51% | FAIL |
+| Korean | 409 | 43 | 10.51% | 89.49% | 7.85% | FAIL |
+| **Aggregate** | **1,944** | **147** | **7.56%** | **92.44%** | **3.51%** | **FAIL: not every language passes** |
 
-Runtime was 116.156 seconds. The selected candidates contain no blank hypotheses,
+Runtime was 117.641 seconds. The selected candidates contain no blank hypotheses,
 timestamp disorder, adjacent duplicate segments, four-token repetition runs, or exhausted
 fallbacks. CER is micro-averaged across utterances; it is diagnostic and does not replace or
 weaken the explicit WER gate. The exact machine-readable verdict is in
@@ -53,10 +54,14 @@ recognized text and the same WER/CER, reducing runtime only from 110.047 to 107.
 it is rejected because it removes required timing evidence without improving accuracy.
 Enabling previous-text conditioning also produced identical recognized text and WER/CER
 (107.0 seconds, no repetition issues), so decoder context within these complete utterances is
-not the missing capacity either. VAD removed five aggregate word errors relative to the
-non-VAD control, but even a non-deployable per-clip oracle choosing between both candidates
-reaches only 89.29% Romanian and 89.98% Korean accuracy. A selector over these two outputs
-therefore cannot satisfy the strict gate.
+not the missing capacity either. A finite, predeclared VAD speech-pad study tested 100, 150,
+200, 250, and the default 400 ms; 200 ms was the clear validation optimum and is now frozen.
+It misses the Romanian gate by one edit and the Korean gate by three edits. A merged
+six-variant confidence selector reached 92.23% aggregate but still only 89.98% Romanian and
+89.00% Korean. The human-reference oracle reached 93.62% and passed all four languages, but
+it is explicitly non-deployable and is not treated as ground truth or promotion evidence.
+Any future passing configuration must be confirmed on an untouched holdout because this
+validation fixture has now been used for tuning.
 
 ## Human evidence discovered
 

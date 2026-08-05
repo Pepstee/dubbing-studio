@@ -323,6 +323,7 @@ def evaluate_language_sweep(
                     "forced_language": selected["forced_language"],
                     "detected_language": selected["detected_language"],
                     "beam_size": selected["beam_size"],
+                    "variant_id": selected.get("variant_id"),
                     **row_score,
                 }
             )
@@ -394,11 +395,15 @@ def evaluate_language_sweep(
             "word_timestamps": sweep.get("word_timestamps", True),
             "condition_on_previous_text": sweep.get("condition_on_previous_text", False),
             "vad_filter": sweep.get("vad_filter", False),
+            "vad_threshold": sweep.get("vad_threshold"),
+            "vad_speech_pad_ms": sweep.get("vad_speech_pad_ms"),
+            "vad_min_silence_duration_ms": sweep.get("vad_min_silence_duration_ms"),
             "initial_prompt": sweep.get("initial_prompt"),
             "context_transcript_sha256": sweep.get("context_transcript_sha256"),
             "context_seconds": sweep.get("context_seconds"),
             "context_max_chars": sweep.get("context_max_chars"),
         },
+        "variants": sweep.get("variants", []),
         "coverage_gaps": fixture["coverage_gaps"],
         "accuracy_certification_scope": fixture.get("selection_policy", {}).get(
             "scope_limitation", "fixture scope is not declared"
