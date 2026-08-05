@@ -67,3 +67,18 @@ errors. Both policies are retained and labelled; neither can be used for certifi
 3. Promote only a reference-independent selector. Oracle and declared-reference-language
    selection remain diagnostic upper bounds.
 4. Keep cloud disabled and GIGA admission false.
+
+## Next model-capacity gate
+
+No alternative Whisper checkpoint is already installed on the Gigabyte. The smallest
+credible capacity comparison is the official CTranslate2
+`Systran/faster-whisper-large-v3` repository pinned at
+`edaa852ec7e145841d8ffdb056a99866b5f0a478`. Its complete repository is 3,090,839,273
+bytes (2.88 GiB), including a 3,087,284,237-byte FP16 `model.bin`. It would be loaded with
+`int8_float16` compute.
+
+Published Faster-Whisper measurements report roughly 2,926 MB VRAM for non-batched INT8
+large-model inference. The Gigabyte had 3,320 MiB free at the preflight, leaving only about
+394 MiB of indicative headroom; actual fit must be measured and an out-of-memory result must
+fail safely. This download has not been authorized or started. The model is a capacity test,
+not a promised route to 90%.

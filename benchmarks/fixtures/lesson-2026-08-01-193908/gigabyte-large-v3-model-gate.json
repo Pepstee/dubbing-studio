@@ -1,0 +1,46 @@
+{
+  "schema_version": "dubbing.gigabyte-model-download-gate.v1",
+  "candidate": {
+    "repository": "Systran/faster-whisper-large-v3",
+    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+    "repository_url": "https://huggingface.co/Systran/faster-whisper-large-v3",
+    "total_download_bytes": 3090839273,
+    "total_download_gib": 2.878568389,
+    "model_bin_bytes": 3087284237,
+    "format": "CTranslate2",
+    "stored_weight_type": "float16",
+    "proposed_compute_type": "int8_float16"
+  },
+  "hardware_observation": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "total_vram_mib": 8188,
+    "observed_idle_used_vram_mib": 4637,
+    "observed_idle_free_vram_mib": 3320,
+    "published_faster_whisper_large_int8_vram_mib": 2926,
+    "estimated_free_headroom_mib": 394,
+    "fit_verdict": "PLAUSIBLE_BUT_TIGHT_REQUIRES_RUNTIME_PREFLIGHT"
+  },
+  "rationale": {
+    "installed_alternative_models_found": 0,
+    "installed_turbo_adjustments_exhausted": [
+      "beam size",
+      "forced language",
+      "FP16 compute",
+      "short and long context",
+      "generic multilingual prompting",
+      "independent preceding transcript context",
+      "FFT denoising",
+      "speech expansion",
+      "left/right channel selection"
+    ],
+    "expected_result": "A capacity comparison, not a guaranteed improvement",
+    "promotion_rule": "Keep only if a reference-independent policy improves accuracy and the quality contract passes"
+  },
+  "authorization": {
+    "download_authorized": false,
+    "download_started": false,
+    "operator_gate": "Authorize exactly 3,090,839,273 bytes for Systran/faster-whisper-large-v3 at the pinned revision"
+  },
+  "cloud_allowed": false,
+  "giga_admission_emitted": false
+}
