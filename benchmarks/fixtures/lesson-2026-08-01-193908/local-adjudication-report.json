@@ -1,6 +1,54 @@
 {
   "comparators": [
     {
+      "backend": "faster-whisper",
+      "label": "gigabyte-faster-whisper-full-v1",
+      "model": "faster-whisper-large-v3-turbo-ct2",
+      "path": "/Users/admin/Documents/dubbing-studio/output/gigabyte-faster-whisper-full-v1/result-fused.json",
+      "quality": {
+        "approval_allowed": false,
+        "issues": [],
+        "metrics": {
+          "adjacent_duplicate_segment_transitions": 10,
+          "covered_ms": 1944320,
+          "duration_ms": 4987833,
+          "explained_silence_gap_count": 1,
+          "explained_silence_gaps": [
+            {
+              "end_ms": 1061020,
+              "silence_ratio": 0.98426,
+              "start_ms": 905940
+            }
+          ],
+          "large_gap_count": 0,
+          "max_adjacent_duplicate_chain": 1,
+          "max_phrase_run": 5,
+          "max_token_run": 3,
+          "script_counts": {
+            "cyrillic": 1856,
+            "hangul": 82,
+            "latin": 11942,
+            "other": 42
+          },
+          "segment_count": 711,
+          "speech_coverage_ratio": 0.389813,
+          "timestamp_overlap_count": 0,
+          "token_count": 3698,
+          "tokens_per_second_of_segment_time": 1.902,
+          "uncertain_segment_count": 2
+        },
+        "policy_version": "dubbing.transcript-quality-policy.v1",
+        "schema_version": "dubbing.transcript-quality-report.v1",
+        "status": "PASS_WITH_UNCERTAIN_SPANS"
+      },
+      "quality_evidence": {
+        "path": null,
+        "recomputed_from_source_vad": true,
+        "sha256": null
+      },
+      "sha256": "d7d2650b9bd937fb8d7e8cf991024f25cd064b488d6a017f5fed38eb4227d92e"
+    },
+    {
       "backend": "whisperkit-local-server",
       "label": "control-plane-whisperkit-small-v3",
       "model": "whisperkit-local-server:small:http://127.0.0.1:50060",
@@ -146,7 +194,7 @@
       "sha256": "a42ccd85d0206493dadd78a989688bb1d1f5ebcb4623c745855c61dccb037fb9"
     }
   ],
-  "minimum_healthy_document_agreement": null,
+  "minimum_healthy_document_agreement": 0.662506,
   "policy": {
     "cloud_allowed": false,
     "consensus_is_ground_truth": false,
@@ -209,15 +257,20 @@
     "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
   },
   "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
-  "uncertain_window_count": 84,
+  "uncertain_window_count": 31,
   "verdict": {
     "accuracy_certified_against_ground_truth": false,
     "eligible_for_explicit_approval": false,
     "giga_admission_emitted": false,
-    "reason": "No comparator passed the semantic quality contract.",
-    "status": "INSUFFICIENT_HEALTHY_COMPARATORS"
+    "reason": "Healthy local models disagree beyond the promotion threshold.",
+    "status": "AUTOMATED_CONSENSUS_WITH_UNCERTAINTY"
   },
   "whole_document_comparisons": [
+    {
+      "agreement": 0.662506,
+      "candidate": "gigabyte-faster-whisper-full-v1",
+      "quality_status": "PASS_WITH_UNCERTAIN_SPANS"
+    },
     {
       "agreement": 0.476821,
       "candidate": "control-plane-whisperkit-small-v3",
@@ -233,6 +286,13 @@
     {
       "comparisons": [
         {
+          "agreement": 1.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 20,
+          "primary_token_count": 20,
+          "quality_eligible": true
+        },
+        {
           "agreement": 0.85,
           "candidate": "control-plane-whisperkit-small-v3",
           "candidate_token_count": 19,
@@ -247,13 +307,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 1.0,
       "end_ms": 60000,
       "start_ms": 0,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.878788,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 58,
+          "primary_token_count": 66,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.878788,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -269,13 +336,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.878788,
       "end_ms": 120000,
       "start_ms": 60000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.926829,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 41,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.804878,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -291,13 +365,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.926829,
       "end_ms": 180000,
       "start_ms": 120000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.55102,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 47,
+          "primary_token_count": 49,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.571429,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -313,13 +394,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.55102,
       "end_ms": 240000,
       "start_ms": 180000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.770492,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 53,
+          "primary_token_count": 61,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.83871,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -335,13 +423,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.770492,
       "end_ms": 300000,
       "start_ms": 240000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.615385,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 28,
+          "primary_token_count": 39,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.564103,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -357,13 +452,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.615385,
       "end_ms": 360000,
       "start_ms": 300000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.481481,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 54,
+          "primary_token_count": 30,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.682927,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -379,13 +481,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.481481,
       "end_ms": 420000,
       "start_ms": 360000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.372093,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 26,
+          "primary_token_count": 43,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.636364,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -401,13 +510,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.372093,
       "end_ms": 480000,
       "start_ms": 420000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.822581,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 62,
+          "primary_token_count": 55,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.913793,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -423,13 +539,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.822581,
       "end_ms": 540000,
       "start_ms": 480000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.666667,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 42,
+          "primary_token_count": 36,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.918919,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -445,13 +568,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.666667,
       "end_ms": 600000,
       "start_ms": 540000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.625,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 33,
+          "primary_token_count": 48,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.816327,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -467,13 +597,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.625,
       "end_ms": 660000,
       "start_ms": 600000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.405405,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 28,
+          "primary_token_count": 37,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.756757,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -489,13 +626,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.405405,
       "end_ms": 720000,
       "start_ms": 660000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.574468,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 37,
+          "primary_token_count": 47,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.574468,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -511,13 +655,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.574468,
       "end_ms": 780000,
       "start_ms": 720000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.727273,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 44,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.636364,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -533,13 +684,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.727273,
       "end_ms": 840000,
       "start_ms": 780000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.931818,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 43,
+          "primary_token_count": 44,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.863636,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -555,13 +713,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.931818,
       "end_ms": 900000,
       "start_ms": 840000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.888889,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 9,
+          "primary_token_count": 8,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.727273,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -577,13 +742,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.888889,
       "end_ms": 960000,
       "start_ms": 900000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 1.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 0,
+          "primary_token_count": 0,
+          "quality_eligible": true
+        },
         {
           "agreement": 1.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -599,13 +771,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 1.0,
       "end_ms": 1020000,
       "start_ms": 960000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.666667,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 2,
+          "primary_token_count": 3,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -621,13 +800,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.666667,
       "end_ms": 1080000,
       "start_ms": 1020000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.478261,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 12,
+          "primary_token_count": 23,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.913043,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -643,13 +829,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.478261,
       "end_ms": 1140000,
       "start_ms": 1080000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.730769,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 52,
+          "primary_token_count": 41,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.878049,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -665,13 +858,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.730769,
       "end_ms": 1200000,
       "start_ms": 1140000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.135135,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 31,
+          "primary_token_count": 37,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.396552,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -687,13 +887,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.135135,
       "end_ms": 1260000,
       "start_ms": 1200000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.861111,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 33,
+          "primary_token_count": 36,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.638889,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -709,13 +916,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.861111,
       "end_ms": 1320000,
       "start_ms": 1260000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.681818,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 44,
+          "primary_token_count": 42,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.722222,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -731,13 +945,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.681818,
       "end_ms": 1380000,
       "start_ms": 1320000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.872727,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 55,
+          "primary_token_count": 48,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.857143,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -753,13 +974,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.872727,
       "end_ms": 1440000,
       "start_ms": 1380000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.428571,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 29,
+          "primary_token_count": 49,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.306122,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -775,13 +1003,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.428571,
       "end_ms": 1500000,
       "start_ms": 1440000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.630435,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 36,
+          "primary_token_count": 46,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.782609,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -797,13 +1032,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.630435,
       "end_ms": 1560000,
       "start_ms": 1500000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.47619,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 42,
+          "primary_token_count": 31,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.870968,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -819,13 +1061,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.47619,
       "end_ms": 1620000,
       "start_ms": 1560000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.581818,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 38,
+          "primary_token_count": 55,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.781818,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -841,13 +1090,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.581818,
       "end_ms": 1680000,
       "start_ms": 1620000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.764706,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 29,
+          "primary_token_count": 34,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.756757,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -863,13 +1119,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.764706,
       "end_ms": 1740000,
       "start_ms": 1680000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.809524,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 40,
+          "primary_token_count": 42,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.761905,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -885,13 +1148,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.809524,
       "end_ms": 1800000,
       "start_ms": 1740000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.818182,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 33,
+          "primary_token_count": 32,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.90625,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -907,13 +1177,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.818182,
       "end_ms": 1860000,
       "start_ms": 1800000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.816327,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 41,
+          "primary_token_count": 49,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.877551,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -929,13 +1206,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.816327,
       "end_ms": 1920000,
       "start_ms": 1860000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.857143,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 51,
+          "primary_token_count": 56,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -951,13 +1235,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.857143,
       "end_ms": 1980000,
       "start_ms": 1920000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.853333,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 68,
+          "primary_token_count": 75,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -973,13 +1264,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.853333,
       "end_ms": 2040000,
       "start_ms": 1980000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.4,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 21,
+          "primary_token_count": 35,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -995,13 +1293,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.4,
       "end_ms": 2100000,
       "start_ms": 2040000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.304348,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 46,
+          "primary_token_count": 42,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1017,13 +1322,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.304348,
       "end_ms": 2160000,
       "start_ms": 2100000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.758621,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 29,
+          "primary_token_count": 28,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.933333,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1039,13 +1351,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.758621,
       "end_ms": 2220000,
       "start_ms": 2160000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.361111,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 36,
+          "primary_token_count": 24,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.157895,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1061,13 +1380,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.361111,
       "end_ms": 2280000,
       "start_ms": 2220000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.375,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 16,
+          "primary_token_count": 24,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.321429,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1083,13 +1409,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.375,
       "end_ms": 2340000,
       "start_ms": 2280000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.923077,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 38,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.8,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1105,13 +1438,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.923077,
       "end_ms": 2400000,
       "start_ms": 2340000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.72093,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 34,
+          "primary_token_count": 43,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.930233,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1127,13 +1467,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.72093,
       "end_ms": 2460000,
       "start_ms": 2400000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.378947,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 65,
+          "primary_token_count": 95,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.684211,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1149,13 +1496,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.378947,
       "end_ms": 2520000,
       "start_ms": 2460000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.391304,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 60,
+          "primary_token_count": 69,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.619565,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1171,13 +1525,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.391304,
       "end_ms": 2580000,
       "start_ms": 2520000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.392405,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 58,
+          "primary_token_count": 79,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.037975,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1193,13 +1554,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.392405,
       "end_ms": 2640000,
       "start_ms": 2580000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.484375,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 64,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.28125,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1215,13 +1583,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.484375,
       "end_ms": 2700000,
       "start_ms": 2640000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.794872,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 38,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.32,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1237,13 +1612,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.794872,
       "end_ms": 2760000,
       "start_ms": 2700000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.744681,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 47,
+          "primary_token_count": 45,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.193548,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1259,13 +1641,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.744681,
       "end_ms": 2820000,
       "start_ms": 2760000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.831579,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 93,
+          "primary_token_count": 95,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.136752,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1281,13 +1670,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.831579,
       "end_ms": 2880000,
       "start_ms": 2820000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.637681,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 59,
+          "primary_token_count": 69,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.325301,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1303,13 +1699,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.637681,
       "end_ms": 2940000,
       "start_ms": 2880000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.666667,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 39,
+          "primary_token_count": 51,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.588235,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1325,13 +1728,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.666667,
       "end_ms": 3000000,
       "start_ms": 2940000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.765432,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 70,
+          "primary_token_count": 81,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.62963,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1347,13 +1757,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.765432,
       "end_ms": 3060000,
       "start_ms": 3000000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.734375,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 62,
+          "primary_token_count": 64,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.265625,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1369,13 +1786,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.734375,
       "end_ms": 3120000,
       "start_ms": 3060000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.604651,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 43,
+          "primary_token_count": 40,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.5,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1391,13 +1815,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.604651,
       "end_ms": 3180000,
       "start_ms": 3120000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.777778,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 44,
+          "primary_token_count": 45,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.088889,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1413,13 +1844,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.777778,
       "end_ms": 3240000,
       "start_ms": 3180000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.779661,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 59,
+          "primary_token_count": 56,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.5625,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1435,13 +1873,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.779661,
       "end_ms": 3300000,
       "start_ms": 3240000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.65625,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 32,
+          "primary_token_count": 32,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.666667,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1457,13 +1902,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.65625,
       "end_ms": 3360000,
       "start_ms": 3300000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.769231,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 52,
+          "primary_token_count": 47,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.787234,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1479,13 +1931,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.769231,
       "end_ms": 3420000,
       "start_ms": 3360000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.163265,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 49,
+          "primary_token_count": 43,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.186047,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1501,13 +1960,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.163265,
       "end_ms": 3480000,
       "start_ms": 3420000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.402778,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 50,
+          "primary_token_count": 72,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.097222,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1523,13 +1989,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.402778,
       "end_ms": 3540000,
       "start_ms": 3480000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.676471,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 34,
+          "primary_token_count": 33,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.545455,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1545,13 +2018,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.676471,
       "end_ms": 3600000,
       "start_ms": 3540000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.48,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 18,
+          "primary_token_count": 25,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.52,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1567,13 +2047,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.48,
       "end_ms": 3660000,
       "start_ms": 3600000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.648148,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 54,
+          "primary_token_count": 54,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.57971,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1589,13 +2076,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.648148,
       "end_ms": 3720000,
       "start_ms": 3660000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.459016,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 50,
+          "primary_token_count": 61,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.606557,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1611,13 +2105,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.459016,
       "end_ms": 3780000,
       "start_ms": 3720000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.7875,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 80,
+          "primary_token_count": 80,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.675,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1633,13 +2134,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.7875,
       "end_ms": 3840000,
       "start_ms": 3780000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.67033,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 91,
+          "primary_token_count": 76,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.328947,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1655,13 +2163,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.67033,
       "end_ms": 3900000,
       "start_ms": 3840000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.674699,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 83,
+          "primary_token_count": 77,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.064935,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1677,13 +2192,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.674699,
       "end_ms": 3960000,
       "start_ms": 3900000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.504348,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 113,
+          "primary_token_count": 115,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.486957,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1699,13 +2221,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.504348,
       "end_ms": 4020000,
       "start_ms": 3960000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.382979,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 35,
+          "primary_token_count": 47,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.377049,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1721,13 +2250,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.382979,
       "end_ms": 4080000,
       "start_ms": 4020000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.469388,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 49,
+          "primary_token_count": 45,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.022222,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1743,13 +2279,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.469388,
       "end_ms": 4140000,
       "start_ms": 4080000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.811111,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 88,
+          "primary_token_count": 90,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.344444,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1765,13 +2308,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.811111,
       "end_ms": 4200000,
       "start_ms": 4140000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.706522,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 92,
+          "primary_token_count": 88,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.420455,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1787,13 +2337,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.706522,
       "end_ms": 4260000,
       "start_ms": 4200000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.77551,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 89,
+          "primary_token_count": 98,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.683673,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1809,13 +2366,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.77551,
       "end_ms": 4320000,
       "start_ms": 4260000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.537634,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 93,
+          "primary_token_count": 82,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.311111,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1831,13 +2395,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.537634,
       "end_ms": 4380000,
       "start_ms": 4320000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.555556,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 45,
+          "primary_token_count": 29,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.172414,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1853,13 +2424,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.555556,
       "end_ms": 4440000,
       "start_ms": 4380000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.25,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 36,
+          "primary_token_count": 13,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1875,13 +2453,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.25,
       "end_ms": 4500000,
       "start_ms": 4440000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.36,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 25,
+          "primary_token_count": 21,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1897,13 +2482,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.36,
       "end_ms": 4560000,
       "start_ms": 4500000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.777778,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 90,
+          "primary_token_count": 88,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1919,13 +2511,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.777778,
       "end_ms": 4620000,
       "start_ms": 4560000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.657143,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 35,
+          "primary_token_count": 33,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1941,13 +2540,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.657143,
       "end_ms": 4680000,
       "start_ms": 4620000,
-      "uncertain": true
+      "uncertain": false
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 2,
+          "primary_token_count": 1,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1963,13 +2569,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.0,
       "end_ms": 4740000,
       "start_ms": 4680000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 10,
+          "primary_token_count": 6,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -1985,13 +2598,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.0,
       "end_ms": 4800000,
       "start_ms": 4740000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.378378,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 17,
+          "primary_token_count": 37,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -2007,13 +2627,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.378378,
       "end_ms": 4860000,
       "start_ms": 4800000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.538462,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 31,
+          "primary_token_count": 39,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -2029,13 +2656,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.538462,
       "end_ms": 4920000,
       "start_ms": 4860000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 1,
+          "primary_token_count": 2,
+          "quality_eligible": true
+        },
         {
           "agreement": 0.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -2051,13 +2685,20 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.0,
       "end_ms": 4980000,
       "start_ms": 4920000,
       "uncertain": true
     },
     {
       "comparisons": [
+        {
+          "agreement": 0.0,
+          "candidate": "gigabyte-faster-whisper-full-v1",
+          "candidate_token_count": 2,
+          "primary_token_count": 0,
+          "quality_eligible": true
+        },
         {
           "agreement": 1.0,
           "candidate": "control-plane-whisperkit-small-v3",
@@ -2073,7 +2714,7 @@
           "quality_eligible": false
         }
       ],
-      "consensus_agreement": null,
+      "consensus_agreement": 0.0,
       "end_ms": 4987833,
       "start_ms": 4980000,
       "uncertain": true

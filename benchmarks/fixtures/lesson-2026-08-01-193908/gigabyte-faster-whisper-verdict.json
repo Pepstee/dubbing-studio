@@ -1,0 +1,73 @@
+{
+  "schema_version": "dubbing.gigabyte-faster-whisper-verdict.v1",
+  "fixture_id": "lesson-2026-08-01-193908",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "vram_total_mib": 8188,
+    "peak_observed_total_vram_used_mib": 5954,
+    "minimum_observed_free_vram_mib": 2003
+  },
+  "runtime": {
+    "faster_whisper_version": "1.2.1",
+    "ctranslate2_version": "4.8.1",
+    "compute_type": "int8_float16",
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_size_bytes": 1617884929,
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "cloud_allowed": false
+  },
+  "runs": {
+    "no_vad": {
+      "decode_seconds": 120.047,
+      "realtime_factor": 0.024068,
+      "wer_percent": 46.6224,
+      "cer_percent": 39.9853,
+      "quality_status": "REPROCESS_REQUIRED",
+      "failure": "Japanese phrase repeated 73 times; 60 adjacent duplicate transitions"
+    },
+    "vad": {
+      "decode_seconds": 81.687,
+      "realtime_factor": 0.016377,
+      "wer_percent": 66.4452,
+      "cer_percent": 62.1122,
+      "quality_status": "REPROCESS_REQUIRED",
+      "failure": "Quiet speech was removed; six large gaps and a smaller repetition loop remained"
+    },
+    "automatic_targeted_fusion": {
+      "segment_count": 711,
+      "uncertain_segment_count": 2,
+      "wer_percent": 42.3588,
+      "cer_percent": 35.8574,
+      "quality_status": "PASS_WITH_UNCERTAIN_SPANS",
+      "pathological_primary_segments_removed": 45,
+      "alternate_segments_admitted": 2,
+      "adjacent_duplicate_transitions": 10,
+      "max_phrase_run": 5,
+      "max_token_run": 3
+    }
+  },
+  "comparisons": {
+    "reviewed_whisperkit_large": {
+      "wer_percent": 43.6323,
+      "cer_percent": 38.9265,
+      "reference_is_human_ground_truth": false
+    },
+    "local_consensus": {
+      "agreement_with_reviewed_whisperkit_large": 0.662506,
+      "low_agreement_one_minute_windows": 31,
+      "required_document_agreement": 0.75,
+      "verdict": "AUTOMATED_CONSENSUS_WITH_UNCERTAINTY"
+    }
+  },
+  "verdict": {
+    "gpu_fit": "PASS",
+    "speed_fit": "PASS",
+    "semantic_quality_gate": "PASS_WITH_UNCERTAIN_SPANS",
+    "accuracy_certified_against_ground_truth": false,
+    "eligible_for_explicit_approval": false,
+    "giga_admission_emitted": false,
+    "promotion_state": "AUTOMATIC_COMPARATOR_AVAILABLE_NOT_PRODUCTION_CERTIFIED",
+    "next_smallest_automatic_gate": "Target only the 31 low-agreement one-minute windows with a third local decoder or improved language-aware retry; do not rerun the full recording."
+  }
+}

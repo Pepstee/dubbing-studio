@@ -34,6 +34,9 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 9. Automatic local multi-run adjudication was added as the default non-cloud accuracy-evidence
    path. Manual calibration remains available for formal human-ground-truth certification but is
    not required to operate the local consensus gate.
+10. A standalone source-bound faster-whisper GPU runner and pathology-targeted local fusion path
+    were added for the Gigabyte RTX 4060. The runner does not require deploying the full repository
+    to that laptop and never uploads audio to a cloud provider.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.

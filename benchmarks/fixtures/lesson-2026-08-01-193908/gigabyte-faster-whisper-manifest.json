@@ -1,0 +1,68 @@
+{
+  "schema_version": "dubbing.regression-fixture.v1",
+  "fixture_id": "lesson-2026-08-01-193908-gigabyte-faster-whisper-v1",
+  "description": "RTX 4060 faster-whisper large-v3-turbo deterministic local comparator",
+  "source": {
+    "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "duration_ms": 4987833,
+    "size_bytes": 3845699125
+  },
+  "source_audio_derivative": {
+    "path": "../../../output/gigabyte-faster-whisper-full-v1/source-audio.flac",
+    "sha256": "00b8153dc6c2627418b4d03f328648d4322b0841228cb0672efa787b1d98b8cf",
+    "codec": "flac",
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "lossless": true
+  },
+  "reference": {
+    "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-06.txt",
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "kind": "macwhisper-provisional-untimed-text",
+    "human_ground_truth": false,
+    "limitations": [
+      "not human corrected",
+      "no reference timestamps",
+      "no reference speaker labels",
+      "no reference turn-level language labels"
+    ]
+  },
+  "candidate": {
+    "path": "../../../output/gigabyte-faster-whisper-full-v1/result.json",
+    "sha256": "726fe7e3c0b72311404fd238ed9322f4dccbe376c90eb4e77eec74e60a0f0df6",
+    "kind": "dubbing-transcription-v1"
+  },
+  "backend": {
+    "provider": "faster-whisper",
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "configuration": {
+      "device": "cuda",
+      "compute_type": "int8_float16",
+      "temperatures": [0.0],
+      "beam_size": 1,
+      "condition_on_previous_text": false,
+      "word_timestamps": true,
+      "vad_filter": false,
+      "multilingual": true
+    },
+    "promotion_state": "evaluation-only"
+  },
+  "run_receipt": {
+    "path": "../../../output/gigabyte-faster-whisper-full-v1/run-receipt.json",
+    "sha256": "7fa69bb630a1f78815f9b34e585ae327667545c14b306ed7908549c9eb0dce40",
+    "cloud_allowed": false,
+    "giga_admission_emitted": false
+  },
+  "evaluation": {
+    "window_ms": 300000,
+    "known_silence_intervals": [
+      {
+        "start_ms": 955118,
+        "end_ms": 1034499,
+        "source": "local-ffmpeg-silencedetect"
+      }
+    ]
+  }
+}

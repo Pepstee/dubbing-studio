@@ -1,0 +1,60 @@
+{
+  "schema_version": "dubbing.regression-fixture.v1",
+  "fixture_id": "lesson-2026-08-01-193908-gigabyte-faster-whisper-fused-v1",
+  "description": "Automatic pathology-targeted fusion of RTX 4060 faster-whisper candidates",
+  "source": {
+    "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+    "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "duration_ms": 4987833,
+    "size_bytes": 3845699125
+  },
+  "reference": {
+    "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-06.txt",
+    "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+    "kind": "macwhisper-provisional-untimed-text",
+    "human_ground_truth": false,
+    "limitations": [
+      "not human corrected",
+      "no reference timestamps",
+      "no reference speaker labels",
+      "no reference turn-level language labels"
+    ]
+  },
+  "candidate": {
+    "path": "../../../output/gigabyte-faster-whisper-full-v1/result-fused.json",
+    "sha256": "d7d2650b9bd937fb8d7e8cf991024f25cd064b488d6a017f5fed38eb4227d92e",
+    "kind": "dubbing-transcription-v1"
+  },
+  "backend": {
+    "provider": "faster-whisper",
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "configuration": {
+      "device": "cuda",
+      "compute_type": "int8_float16",
+      "temperatures": [0.0],
+      "primary_vad_filter": false,
+      "alternate_vad_filter": true,
+      "fusion_policy": "dubbing.local-pathology-fusion.v1"
+    },
+    "promotion_state": "evaluation-only"
+  },
+  "fusion_receipt": {
+    "path": "../../../output/gigabyte-faster-whisper-full-v1/result-fused-fusion-receipt.json",
+    "sha256": "775c3a340dff0d8cd0bc3e85866ca6540c9b114afc99610d738ee379ade383ae",
+    "giga_admission_emitted": false
+  },
+  "evaluation": {
+    "window_ms": 300000,
+    "known_silence_intervals": [
+      {"start_ms": 904724, "end_ms": 961715, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 961735, "end_ms": 963064, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 963084, "end_ms": 1019110, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 1019623, "end_ms": 1022101, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 1023308, "end_ms": 1024306, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 1024327, "end_ms": 1025491, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 1026130, "end_ms": 1030598, "source": "local-ffmpeg-silencedetect"},
+      {"start_ms": 1030619, "end_ms": 1062421, "source": "local-ffmpeg-silencedetect"}
+    ]
+  }
+}

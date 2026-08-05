@@ -18,6 +18,7 @@ dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:m
 dubbing-long-transcribe = "dubbing.control_plane.cli:main"
 dubbing-evaluate-transcript = "dubbing.evaluation.cli:main"
 dubbing-adjudicate-local = "dubbing.evaluation.adjudication_cli:main"
+dubbing-fuse-local-transcripts = "dubbing.evaluation.local_fusion:main"
 dubbing-transcript-review-package = "dubbing.apps.transcript_review.package:main"
 dubbing-transcript-review = "dubbing.apps.transcript_review.app:main"
 dubbing-calibration-package = "dubbing.apps.transcript_review.calibration:main"

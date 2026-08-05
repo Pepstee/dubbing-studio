@@ -184,6 +184,19 @@ dubbing-long-transcribe "/path/to/source.mov" \
   --mlx-temperature 0
 ```
 
+For an isolated NVIDIA/Windows comparator, `scripts/run_faster_whisper_gpu.py` loads one local
+CTranslate2 model persistently, binds an audio derivative to the original media SHA-256, records
+GPU/runtime provenance and emits `dubbing.transcription.v1`. Use temperature 0 and evaluate both
+VAD-on and VAD-off candidates; neither is eligible until the pathology gate passes. If their
+failure modes are complementary, `dubbing-fuse-local-transcripts` replaces only detected
+pathological intervals, marks admitted alternate spans uncertain and records hash lineage.
+
+The 83-minute RTX 4060 fixture established that whole-file speed is not quality: the no-VAD run
+decoded in 120 seconds but looped a Japanese phrase 73 times, while VAD removed too much quiet
+speech. Targeted fusion produced `PASS_WITH_UNCERTAIN_SPANS` in 711 segments with two uncertain
+spans. Model agreement remains evidence, not ground truth, and no command in this workflow emits
+a GIGA event.
+
 ## Optional human-ground-truth calibration
 
 For a formal accuracy certificate, build a deterministic 8–12 minute
