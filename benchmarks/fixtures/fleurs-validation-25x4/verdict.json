@@ -1,0 +1,91 @@
+{
+  "schema_version": "dubbing.fleurs-gigabyte-verdict.v1",
+  "dataset": {
+    "name": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "license": "CC-BY-4.0",
+    "split": "validation"
+  },
+  "fixture": {
+    "manifest_sha256": "4852a0e88b06fe7bec33e062ef10d07f3203f2b6dd04e0c484e97b4a9343c614",
+    "source_sha256": "9a46879d4f0c80e63d478ccbb2ed2c9c6d5c6e94b762e7cdf942572323e53e59",
+    "clips": 100,
+    "clips_per_language": 25,
+    "audio_bytes": 68801960,
+    "timestamp_basis": "complete human-transcribed dataset utterance WAV"
+  },
+  "model": {
+    "name": "faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "compute_type": "int8_float16",
+    "hardware": "NVIDIA GeForce RTX 4060 Laptop GPU"
+  },
+  "selected_experiment": {
+    "name": "automatic beam 5 with capped fallback temperatures 0,0.2,0.4,0.6",
+    "sweep_sha256": "a4168e776f1c304920646fb6de2c254427a14aa13671f16e775b31b830cd6c9c",
+    "report_sha256": "df901ff315a4c47adc33f27b53e50c02e499f1dd7dc28a2d5b32ce0bf2f6712e",
+    "runtime_seconds": 110.047,
+    "reference_words": 1944,
+    "edits": 171,
+    "wer": 0.08796296296296297,
+    "word_accuracy": 0.912037037037037,
+    "character_edits": 344,
+    "cer": 0.03683872349539516,
+    "character_accuracy": 0.9631612765046048,
+    "per_language": {
+      "en": {"reference_words": 501, "edits": 20, "wer": 0.03992015968063872, "word_accuracy": 0.9600798403193613, "cer": 0.021013597033374538, "character_accuracy": 0.9789864029666254, "passed": true},
+      "ru": {"reference_words": 455, "edits": 30, "wer": 0.06593406593406594, "word_accuracy": 0.9340659340659341, "cer": 0.0150093808630394, "character_accuracy": 0.9849906191369606, "passed": true},
+      "ro": {"reference_words": 579, "edits": 69, "wer": 0.11917098445595854, "word_accuracy": 0.8808290155440415, "cer": 0.04955872369314324, "character_accuracy": 0.9504412763068567, "passed": false},
+      "ko": {"reference_words": 409, "edits": 52, "wer": 0.1271393643031785, "word_accuracy": 0.8728606356968215, "cer": 0.0823076923076923, "character_accuracy": 0.9176923076923077, "passed": false}
+    },
+    "quality": {
+      "quality_gate_passed": true,
+      "maximum_used_temperature": 0.2,
+      "fallback_used_count": 1,
+      "blank_hypotheses": 0,
+      "malformed_timestamps": 0,
+      "adjacent_duplicate_segments": 0,
+      "repeated_token_runs": 0,
+      "fallback_exhausted": 0
+    }
+  },
+  "negative_controls": [
+    {
+      "name": "automatic beam 5 temperature 0",
+      "sweep_sha256": "b5cbd6691263dd537d5c43daba5888f5762dc892c138602c38bfc9f00541af35",
+      "report_sha256": "9a562ffffeb691294cbf7728591ba746847b961307958c3473dc486038043fc0",
+      "word_accuracy": 0.9058641975308642,
+      "quality_gate_passed": false,
+      "failure": "one non-speech-labelled Korean clip produced a blank hypothesis"
+    },
+    {
+      "name": "automatic beam 5 temperature 0 with multilingual disabled",
+      "sweep_sha256": "0d40f508b3dd5c948d63ca63b14e3fab8ec1119a9fce23e1fa318cfcd3e1f3cb",
+      "report_sha256": "2a590ba4bead36f6853c820331f5430a26f00b9472f72cd134fb7690071a3ba1",
+      "word_accuracy": 0.9058641975308642,
+      "quality_gate_passed": false,
+      "failure": "no accuracy change and the same Korean blank hypothesis"
+    }
+  ],
+  "scope": {
+    "clean_read_speech": true,
+    "noisy": false,
+    "code_switched": false,
+    "long_form": false
+  },
+  "gates": {
+    "aggregate_accuracy_at_least_90_percent": true,
+    "every_language_accuracy_at_least_90_percent": false,
+    "production_scope_certified": false,
+    "promotion_passed": false,
+    "giga_admission_emitted": false
+  },
+  "verdict": "The installed turbo model clears the aggregate clean-speech threshold but fails Romanian, Korean, and all production-scope gates. It must not be promoted or admitted to GIGA.",
+  "next_operator_gate": {
+    "action": "authorize the pinned full large-v3 capacity comparison",
+    "repository": "Systran/faster-whisper-large-v3",
+    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+    "download_bytes": 3090839273,
+    "reason": "decoder, quantization, context, language forcing, beam, channel, trim, conditioning, and normalization variants have not closed the Romanian and Korean capacity gap"
+  }
+}

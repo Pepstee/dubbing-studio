@@ -60,10 +60,12 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
                             "text": "hello there",
                             "segments": [
                                 {
+                                    "start_ms": 0,
+                                    "end_ms": 1000,
                                     "words": [
                                         {"start_ms": 0, "end_ms": 500, "text": "hello"},
                                         {"start_ms": 500, "end_ms": 1000, "text": "there"},
-                                    ]
+                                    ],
                                 }
                             ],
                         },
@@ -75,10 +77,12 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
                             "text": "hello world",
                             "segments": [
                                 {
+                                    "start_ms": 0,
+                                    "end_ms": 1000,
                                     "words": [
                                         {"start_ms": 0, "end_ms": 500, "text": "hello"},
                                         {"start_ms": 500, "end_ms": 1000, "text": "world"},
-                                    ]
+                                    ],
                                 }
                             ],
                         },
@@ -89,10 +93,126 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
     )
     report = evaluate_language_sweep(fixture_path, sweep_path, tmp_path / "report.json")
     assert report["methods"]["automatic_minimum_beam"]["metrics"]["word_accuracy"] == 0.5
+    assert report["methods"]["automatic_minimum_beam"]["metrics"]["cer"]["edits"] == 5
     assert report["methods"]["maximum_average_log_probability"]["metrics"]["word_accuracy"] == 0.5
+    assert report["methods"]["detected_language_retry"]["metrics"]["word_accuracy"] == 1.0
+    assert report["methods"]["detected_language_retry"]["deployable"] is True
     assert report["methods"]["oracle_minimum_edits"]["metrics"]["word_accuracy"] == 1.0
     assert report["methods"]["oracle_minimum_edits"]["deployable"] is False
+    assert (
+        report["methods"]["automatic_minimum_beam"]["metrics"]["all_language_targets_passed"]
+        is False
+    )
+    assert report["fixture_gate_passed"] is False
+    assert report["methods"]["automatic_minimum_beam"]["quality_diagnostics"] == {
+        "selected_candidate_count": 1,
+        "maximum_compression_ratio": None,
+        "configured_maximum_temperature": 0.0,
+        "maximum_used_temperature": 0.0,
+        "fallback_used_count": 0,
+        "fallback_used_ids": [],
+        "issues": {
+            "blank_hypotheses": [],
+            "malformed_timestamps": [],
+            "adjacent_duplicate_segments": [],
+            "repeated_token_runs": [],
+            "fallback_exhausted": [],
+        },
+        "quality_gate_passed": True,
+    }
     assert report["promotion_passed"] is False
+    assert report["giga_admission_emitted"] is False
+
+
+def test_evaluate_language_sweep_quality_gate_fails_closed(tmp_path: Path) -> None:
+    fixture_path = tmp_path / "fixture.json"
+    fixture = {
+        "source": {"sha256": "source"},
+        "coverage_gaps": [],
+        "selection_policy": {"accuracy_certification_eligible": True},
+        "spans": [
+            {
+                "id": "blank",
+                "text": "spoken words",
+                "language": "en",
+                "no_speech": False,
+                "start_ms": 0,
+                "end_ms": 1000,
+                "segment_start_ms": 0,
+                "segment_end_ms": 1000,
+            },
+            {
+                "id": "loop",
+                "text": "loop loop loop loop",
+                "language": "en",
+                "no_speech": False,
+                "start_ms": 0,
+                "end_ms": 1000,
+                "segment_start_ms": 0,
+                "segment_end_ms": 1000,
+            },
+        ],
+    }
+    _write(fixture_path, fixture)
+    sweep_path = tmp_path / "sweep.json"
+    candidates = {
+        "blank": {"text": "", "segments": [], "decode_temperatures": [0.0]},
+        "loop": {
+            "text": "loop loop loop loop",
+            "decode_temperatures": [0.6],
+            "segments": [
+                {
+                    "start_ms": 100,
+                    "end_ms": 50,
+                    "text": "loop loop loop loop",
+                    "compression_ratio": 3.0,
+                    "temperature": 0.6,
+                    "words": [],
+                }
+            ],
+        },
+    }
+    _write(
+        sweep_path,
+        {
+            "source_sha256": "source",
+            "fixture_sha256": _hash(fixture_path),
+            "model": "model",
+            "model_bin_sha256": "model-hash",
+            "compute_type": "int8_float16",
+            "runtime_seconds": 1.0,
+            "beam_sizes": [1],
+            "temperatures": [0.0, 0.6],
+            "spans": [
+                {
+                    "id": identifier,
+                    "declared_reference_language": "en",
+                    "candidates": [
+                        {
+                            "forced_language": None,
+                            "detected_language": "en",
+                            "beam_size": 1,
+                            "avg_log_probability": -0.1,
+                            **candidate,
+                        }
+                    ],
+                }
+                for identifier, candidate in candidates.items()
+            ],
+        },
+    )
+
+    report = evaluate_language_sweep(fixture_path, sweep_path, tmp_path / "report.json")
+    diagnostics = report["methods"]["automatic_minimum_beam"]["quality_diagnostics"]
+    assert diagnostics["quality_gate_passed"] is False
+    assert diagnostics["issues"] == {
+        "blank_hypotheses": ["blank"],
+        "malformed_timestamps": ["loop"],
+        "adjacent_duplicate_segments": [],
+        "repeated_token_runs": ["loop"],
+        "fallback_exhausted": ["loop"],
+    }
+    assert report["fixture_gate_passed"] is False
     assert report["giga_admission_emitted"] is False
 
 

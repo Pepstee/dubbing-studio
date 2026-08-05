@@ -16,7 +16,39 @@ admission event until the gate passes.
 - Full-recording INT8 runtime: 120.047 seconds for 4,987.796 seconds of audio (RTF
   0.024068) without VAD; 81.687 seconds (RTF 0.016377) with VAD.
 
-The hardware and speed gates pass. The accuracy gate does not.
+The hardware and speed gates pass. The strict per-language and production accuracy gates
+do not.
+
+## Human-ground-truth language fixture
+
+A pinned `google/fleurs` validation fixture now supplies 100 complete, human-transcribed
+utterances: 25 each in English, Russian, Romanian, and Korean. The dataset revision is
+`70bb2e84b976b7e960aa89f1c648e09c59f894dd`; every WAV has an individual SHA-256 and
+exact sample-count timestamp, and the complete source binding is
+`9a46879d4f0c80e63d478ccbb2ed2c9c6d5c6e94b762e7cdf942572323e53e59`.
+
+This is defensible evidence for clean read-speech language coverage. It does not represent
+long-form, noisy, conversational, or code-switched audio, so it cannot certify the production
+pipeline by itself.
+
+The best installed-model result is automatic beam 5 with fallback capped at temperature
+0.6. Only one clip actually used a fallback, at temperature 0.2:
+
+| Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| English | 501 | 20 | 3.99% | 96.01% | 2.10% | PASS |
+| Russian | 455 | 30 | 6.59% | 93.41% | 1.50% | PASS |
+| Romanian | 579 | 69 | 11.92% | 88.08% | 4.96% | FAIL |
+| Korean | 409 | 52 | 12.71% | 87.29% | 8.23% | FAIL |
+| **Aggregate** | **1,944** | **171** | **8.80%** | **91.20%** | **3.68%** | **FAIL: not every language passes** |
+
+Runtime was 110.047 seconds. The selected candidates contain no blank hypotheses,
+timestamp disorder, adjacent duplicate segments, four-token repetition runs, or exhausted
+fallbacks. CER is micro-averaged across utterances; it is diagnostic and does not replace or
+weaken the explicit WER gate. The exact machine-readable verdict is in
+`benchmarks/fixtures/fleurs-validation-25x4/verdict.json`. Temperature-zero and monolingual
+controls both scored 90.59% aggregate but left one Korean clip blank; disabling multilingual
+mode made no accuracy difference.
 
 ## Human evidence discovered
 
@@ -58,12 +90,12 @@ errors. Both policies are retained and labelled; neither can be used for certifi
 
 ## Next gates
 
-1. Produce a small, timestamp-exact, stratified human reference set with full-clip text
-   for all four languages. This is the minimum external evidence needed for a defensible
-   90% claim.
-2. Continue no-download work on deterministic speech enhancement and target-aware
-   segmentation, evaluated as development signals until the exact fixture exists. The two
-   initial speech-conditioning variants were rejected; do not promote them.
+1. Compare the installed turbo checkpoint with the pinned full `large-v3` checkpoint if the
+   operator authorizes its 2.88 GiB download. Current deterministic decoding and audio
+   conditioning variants have not closed the Romanian and Korean gap.
+2. Build or acquire a timestamp-exact, human-ground-truth noisy conversational/code-switched
+   fixture after the clean per-language capacity gate passes. Clean FLEURS speech is not a
+   production proxy.
 3. Promote only a reference-independent selector. Oracle and declared-reference-language
    selection remain diagnostic upper bounds.
 4. Keep cloud disabled and GIGA admission false.
