@@ -21,7 +21,7 @@ def _sha256(name: str) -> str:
 
 def test_fleurs_verdict_is_hash_bound_and_oracle_is_reproducible() -> None:
     verdict = _load("verdict.json")
-    selected_name = "auto-beam5-fallback06-vad-pad200-report.json"
+    selected_name = "language-conditioned-global-confidence-report.json"
     selected = _load(selected_name)
 
     assert _sha256("manifest.json") == verdict["fixture"]["manifest_sha256"]
@@ -31,7 +31,8 @@ def test_fleurs_verdict_is_hash_bound_and_oracle_is_reproducible() -> None:
     assert selected["sweep_sha256"] == verdict["selected_experiment"]["sweep_sha256"]
     assert selected["source_sha256"] == verdict["fixture"]["source_sha256"]
     assert selected["giga_admission_emitted"] is False
-    assert selected["fixture_gate_passed"] is False
+    assert selected["fixture_gate_passed"] is True
+    assert selected["fixture_gate_passed_methods"] == ["language_conditioned_retry"]
     assert selected["promotion_passed"] is False
 
     control_files = {
@@ -60,7 +61,7 @@ def test_fleurs_verdict_is_hash_bound_and_oracle_is_reproducible() -> None:
         assert report["sweep_sha256"] == item["sweep_sha256"]
         assert report["giga_admission_emitted"] is False
 
-    selected_metrics = selected["methods"]["automatic_minimum_beam"]["metrics"]
+    selected_metrics = selected["methods"]["language_conditioned_retry"]["metrics"]
     assert selected_metrics["word_accuracy"] == pytest.approx(
         verdict["selected_experiment"]["word_accuracy"]
     )
@@ -88,5 +89,16 @@ def test_fleurs_verdict_is_hash_bound_and_oracle_is_reproducible() -> None:
     )
     assert oracle["metrics"]["all_language_targets_passed"] is True
 
-    assert verdict["gates"]["every_language_accuracy_at_least_90_percent"] is False
+    frozen_policy = verdict["frozen_policy"]
+    assert _sha256(frozen_policy["path"]) == frozen_policy["sha256"]
+    policy = _load(frozen_policy["path"])
+    assert policy["frozen_before_holdout_access"] is True
+    assert policy["holdout_contract"]["status_at_freeze"] == "NOT_ACCESSED_OR_EVALUATED"
+    assert policy["giga_admission_emitted"] is False
+    assert policy["validation_receipt"]["report_sha256"] == _sha256(selected_name)
+    assert policy["validation_receipt"]["merged_sweep_sha256"] == selected["sweep_sha256"]
+
+    assert verdict["gates"]["every_language_accuracy_at_least_90_percent"] is True
+    assert verdict["gates"]["clean_validation_fixture_passed"] is True
+    assert verdict["gates"]["untouched_holdout_passed"] is False
     assert verdict["gates"]["giga_admission_emitted"] is False

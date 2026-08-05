@@ -26,9 +26,22 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def merge_variant_sweeps(variants: dict[str, str | Path], output_path: str | Path) -> dict:
+def merge_variant_sweeps(
+    variants: dict[str, str | Path],
+    output_path: str | Path,
+    *,
+    language_retry_policy: dict[str, str] | None = None,
+) -> dict:
     if len(variants) < 2:
         raise ValueError("at least two uniquely named variants are required")
+    retry_policy = language_retry_policy or {}
+    if any(
+        mode not in {"always", "confidence", "global_confidence"}
+        for mode in retry_policy.values()
+    ):
+        raise ValueError(
+            "language retry policy must use always, confidence, or global_confidence"
+        )
     loaded: list[tuple[str, Path, dict]] = []
     for variant_id, source in variants.items():
         if not variant_id or any(character.isspace() for character in variant_id):
@@ -82,6 +95,7 @@ def merge_variant_sweeps(variants: dict[str, str | Path], output_path: str | Pat
         "word_timestamps": all(
             document.get("word_timestamps", True) for _, _, document in loaded
         ),
+        "language_retry_policy": dict(sorted(retry_policy.items())),
         "variants": [
             {
                 "variant_id": variant_id,
@@ -123,6 +137,9 @@ def merge_variant_sweeps(variants: dict[str, str | Path], output_path: str | Pat
 def main() -> None:
     parser = argparse.ArgumentParser(description="Merge hash-bound ASR variant sweeps")
     parser.add_argument("--variant", action="append", required=True, metavar="ID=PATH")
+    parser.add_argument(
+        "--retry-policy", action="append", default=[], metavar="LANG=MODE"
+    )
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     variants = {}
@@ -133,7 +150,17 @@ def main() -> None:
         if variant_id in variants:
             raise SystemExit(f"duplicate variant: {variant_id}")
         variants[variant_id] = path
-    merged = merge_variant_sweeps(variants, args.output)
+    retry_policy = {}
+    for value in args.retry_policy:
+        if "=" not in value:
+            raise SystemExit("retry policies must use LANG=MODE")
+        language, mode = value.split("=", 1)
+        if language in retry_policy:
+            raise SystemExit(f"duplicate retry policy: {language}")
+        retry_policy[language] = mode
+    merged = merge_variant_sweeps(
+        variants, args.output, language_retry_policy=retry_policy
+    )
     print(
         json.dumps(
             {

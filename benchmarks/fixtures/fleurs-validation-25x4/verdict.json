@@ -21,22 +21,22 @@
     "hardware": "NVIDIA GeForce RTX 4060 Laptop GPU"
   },
   "selected_experiment": {
-    "name": "automatic beam 5 with capped fallback, VAD threshold 0.5 and frozen 200 ms speech pad",
-    "sweep_sha256": "934cb2ab007f5a401bfa3682743eb7ab95b4749ed1b14f8d40f4a0aa7f3fa939",
-    "report_sha256": "883fea34ef8cb009a265391c6832127e6d5c9896b81d8c09dea8cf1f5d3ff92d",
-    "runtime_seconds": 117.641,
+    "name": "frozen detected-language retry policy with Korean always-retry and Romanian global-confidence routing",
+    "sweep_sha256": "fde796e403b3cdea705f00bf46317fefe4af117d3d36761c651d65d24da585b6",
+    "report_sha256": "5342688f1d75c4a9f13601cbc06b280749a03b8990191253862ca31cb7dd97b9",
+    "runtime_seconds": 426.36,
     "reference_words": 1944,
-    "edits": 147,
-    "wer": 0.07561728395061729,
-    "word_accuracy": 0.9243827160493827,
-    "character_edits": 328,
-    "cer": 0.03512529449560934,
-    "character_accuracy": 0.9648747055043907,
+    "edits": 142,
+    "wer": 0.07304526748971193,
+    "word_accuracy": 0.926954732510288,
+    "character_edits": 317,
+    "cer": 0.03394731205825659,
+    "character_accuracy": 0.9660526879417434,
     "per_language": {
       "en": {"reference_words": 501, "edits": 22, "wer": 0.043912175648702596, "word_accuracy": 0.9560878243512974, "cer": 0.024721878862793572, "character_accuracy": 0.9752781211372065, "passed": true},
       "ru": {"reference_words": 455, "edits": 24, "wer": 0.05274725274725275, "word_accuracy": 0.9472527472527472, "cer": 0.012382739212007506, "character_accuracy": 0.9876172607879925, "passed": true},
-      "ro": {"reference_words": 579, "edits": 58, "wer": 0.1001727115716753, "word_accuracy": 0.8998272884283247, "cer": 0.045145960624575696, "character_accuracy": 0.9548540393754243, "passed": false},
-      "ko": {"reference_words": 409, "edits": 43, "wer": 0.10513447432762836, "word_accuracy": 0.8948655256723717, "cer": 0.07846153846153846, "character_accuracy": 0.9215384615384615, "passed": false}
+      "ro": {"reference_words": 579, "edits": 56, "wer": 0.09671848013816926, "word_accuracy": 0.9032815198618307, "cer": 0.04175152749490835, "character_accuracy": 0.9582484725050917, "passed": true},
+      "ko": {"reference_words": 409, "edits": 40, "wer": 0.097799511002445, "word_accuracy": 0.902200488997555, "cer": 0.07769230769230769, "character_accuracy": 0.9223076923076923, "passed": true}
     },
     "quality": {
       "quality_gate_passed": true,
@@ -48,6 +48,11 @@
       "repeated_token_runs": 0,
       "fallback_exhausted": 0
     }
+  },
+  "frozen_policy": {
+    "path": "frozen-language-retry-policy.json",
+    "sha256": "9ea5027dd00c38ab6b0746bb8b7a92761acafa19f8341e58320097b355c0e01e",
+    "frozen_before_holdout_access": true
   },
   "negative_controls": [
     {
@@ -164,17 +169,19 @@
   },
   "gates": {
     "aggregate_accuracy_at_least_90_percent": true,
-    "every_language_accuracy_at_least_90_percent": false,
+    "every_language_accuracy_at_least_90_percent": true,
+    "clean_validation_fixture_passed": true,
+    "untouched_holdout_passed": false,
     "production_scope_certified": false,
     "promotion_passed": false,
     "giga_admission_emitted": false
   },
-  "verdict": "The installed turbo model clears the aggregate clean-speech threshold but fails Romanian, Korean, and all production-scope gates. It must not be promoted or admitted to GIGA.",
+  "verdict": "The frozen reference-independent policy passes all four clean validation language gates, but holdout and production scopes remain unverified. It must not be promoted or admitted to GIGA.",
   "next_operator_gate": {
-    "action": "authorize the pinned full large-v3 capacity comparison",
-    "repository": "Systran/faster-whisper-large-v3",
-    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
-    "download_bytes": 3090839273,
-    "reason": "decoder, quantization, context, language forcing, beam, channel, trim, conditioning, and normalization variants have not closed the Romanian and Korean capacity gap"
+    "action": "evaluate the frozen policy unchanged on the untouched pinned FLEURS test holdout",
+    "dataset": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "split": "test",
+    "reason": "the validation fixture was used for policy tuning and cannot provide an unbiased final clean-speech estimate"
   }
 }

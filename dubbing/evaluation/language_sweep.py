@@ -230,6 +230,38 @@ def evaluate_language_sweep(
             ),
         )
 
+    def language_conditioned_retry(row: dict, reference: list[str], span: dict) -> dict:
+        automatic = auto(row, reference, span)
+        mode = sweep.get("language_retry_policy", {}).get(
+            automatic["detected_language"]
+        )
+        eligible = [
+            candidate
+            for candidate in row["candidates"]
+            if candidate["forced_language"] == automatic["detected_language"]
+        ]
+        if not mode:
+            return automatic
+        if mode == "global_confidence":
+            candidates = row["candidates"]
+        elif not eligible:
+            return automatic
+        elif mode == "always":
+            candidates = eligible
+        elif mode == "confidence":
+            candidates = [automatic, *eligible]
+        else:
+            raise ValueError(f"unknown language retry policy: {mode}")
+        return max(
+            candidates,
+            key=lambda candidate: (
+                candidate["avg_log_probability"]
+                if candidate["avg_log_probability"] is not None
+                else float("-inf"),
+                candidate["variant_id"] if candidate.get("variant_id") else "",
+            ),
+        )
+
     def declared_language(row: dict, _: list[str], span: dict) -> dict:
         language = row["declared_reference_language"]
         eligible = [
@@ -271,6 +303,11 @@ def evaluate_language_sweep(
             detected_language_retry,
             True,
             "Retry forced under the language detected by the automatic first pass.",
+        ),
+        "language_conditioned_retry": (
+            language_conditioned_retry,
+            True,
+            "Per-language retry policy using only automatic language detection and decoder confidence.",
         ),
         "declared_reference_language": (
             declared_language,
@@ -404,6 +441,7 @@ def evaluate_language_sweep(
             "context_max_chars": sweep.get("context_max_chars"),
         },
         "variants": sweep.get("variants", []),
+        "language_retry_policy": sweep.get("language_retry_policy", {}),
         "coverage_gaps": fixture["coverage_gaps"],
         "accuracy_certification_scope": fixture.get("selection_policy", {}).get(
             "scope_limitation", "fixture scope is not declared"

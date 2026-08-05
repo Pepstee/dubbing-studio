@@ -48,7 +48,9 @@ def test_merge_variant_sweeps_preserves_candidates_and_hashes(tmp_path) -> None:
     second.write_text(json.dumps(_sweep("second")), encoding="utf-8")
 
     merged = merge_variant_sweeps(
-        {"base": first, "vad": second}, tmp_path / "merged.json"
+        {"base": first, "vad": second},
+        tmp_path / "merged.json",
+        language_retry_policy={"ko": "always", "ro": "confidence"},
     )
     assert [item["variant_id"] for item in merged["variants"]] == ["base", "vad"]
     assert [item["variant_id"] for item in merged["spans"][0]["candidates"]] == [
@@ -58,6 +60,7 @@ def test_merge_variant_sweeps_preserves_candidates_and_hashes(tmp_path) -> None:
     assert all(len(item["sweep_sha256"]) == 64 for item in merged["variants"])
     assert merged["runtime_seconds"] == 2.0
     assert merged["giga_admission_emitted"] is False
+    assert merged["language_retry_policy"] == {"ko": "always", "ro": "confidence"}
 
 
 def test_merge_variant_sweeps_rejects_source_mismatch(tmp_path) -> None:
@@ -68,3 +71,17 @@ def test_merge_variant_sweeps_rejects_source_mismatch(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="source_sha256"):
         merge_variant_sweeps({"base": first, "vad": second}, tmp_path / "merged.json")
+
+
+def test_merge_variant_sweeps_rejects_unknown_retry_policy(tmp_path) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(_sweep("first")), encoding="utf-8")
+    second.write_text(json.dumps(_sweep("second")), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="always, confidence, or global_confidence"):
+        merge_variant_sweeps(
+            {"base": first, "vad": second},
+            tmp_path / "merged.json",
+            language_retry_policy={"ko": "oracle"},
+        )

@@ -31,20 +31,22 @@ This is defensible evidence for clean read-speech language coverage. It does not
 long-form, noisy, conversational, or code-switched audio, so it cannot certify the production
 pipeline by itself.
 
-The best installed-model result is automatic beam 5 with fallback capped at temperature
-0.6, VAD threshold 0.5, and a frozen 200 ms speech pad. No clip required a
-non-zero-temperature fallback:
+The best installed-model result is a frozen, reference-independent routing policy. It uses
+the 200 ms VAD candidate by default, always retries detected Korean at threshold 0.35, and
+uses maximum decoder log probability across the bounded candidate set for detected Romanian.
+No selected clip required a non-zero-temperature fallback:
 
 | Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
 |---|---:|---:|---:|---:|---:|---|
 | English | 501 | 22 | 4.39% | 95.61% | 2.47% | PASS |
 | Russian | 455 | 24 | 5.27% | 94.73% | 1.24% | PASS |
-| Romanian | 579 | 58 | 10.02% | 89.98% | 4.51% | FAIL |
-| Korean | 409 | 43 | 10.51% | 89.49% | 7.85% | FAIL |
-| **Aggregate** | **1,944** | **147** | **7.56%** | **92.44%** | **3.51%** | **FAIL: not every language passes** |
+| Romanian | 579 | 56 | 9.67% | 90.33% | 4.18% | PASS |
+| Korean | 409 | 40 | 9.78% | 90.22% | 7.77% | PASS |
+| **Aggregate** | **1,944** | **142** | **7.30%** | **92.70%** | **3.39%** | **PASS: clean validation only** |
 
-Runtime was 117.641 seconds. The selected candidates contain no blank hypotheses,
-timestamp disorder, adjacent duplicate segments, four-token repetition runs, or exhausted
+The four complete candidate passes took 426.36 seconds. The selected candidates contain no
+blank hypotheses, timestamp disorder, adjacent duplicate segments, four-token repetition
+runs, or exhausted
 fallbacks. CER is micro-averaged across utterances; it is diagnostic and does not replace or
 weaken the explicit WER gate. The exact machine-readable verdict is in
 `benchmarks/fixtures/fleurs-validation-25x4/verdict.json`. Temperature-zero and monolingual
@@ -55,13 +57,16 @@ it is rejected because it removes required timing evidence without improving acc
 Enabling previous-text conditioning also produced identical recognized text and WER/CER
 (107.0 seconds, no repetition issues), so decoder context within these complete utterances is
 not the missing capacity either. A finite, predeclared VAD speech-pad study tested 100, 150,
-200, 250, and the default 400 ms; 200 ms was the clear validation optimum and is now frozen.
-It misses the Romanian gate by one edit and the Korean gate by three edits. A merged
+200, 250, and the default 400 ms; 200 ms was the clear single-candidate optimum and is now
+frozen. That candidate misses the Romanian gate by one edit and the Korean gate by three
+edits. A merged
 six-variant confidence selector reached 92.23% aggregate but still only 89.98% Romanian and
 89.00% Korean. The human-reference oracle reached 93.62% and passed all four languages, but
 it is explicitly non-deployable and is not treated as ground truth or promotion evidence.
-Any future passing configuration must be confirmed on an untouched holdout because this
-validation fixture has now been used for tuning.
+The final language-conditioned policy passes all validation language gates without reference
+access. Its exact policy and candidate hashes were frozen in
+`frozen-language-retry-policy.json` before holdout access. It must now pass the untouched
+FLEURS test slice unchanged. Validation success is not production certification.
 
 ## Human evidence discovered
 
@@ -103,9 +108,8 @@ errors. Both policies are retained and labelled; neither can be used for certifi
 
 ## Next gates
 
-1. Compare the installed turbo checkpoint with the pinned full `large-v3` checkpoint if the
-   operator authorizes its 2.88 GiB download. Current deterministic decoding and audio
-   conditioning variants have not closed the Romanian and Korean gap.
+1. Evaluate the frozen language-retry policy unchanged on the first 25 test rows per language
+   from the same pinned FLEURS revision. No policy tuning is allowed after holdout access.
 2. Build or acquire a timestamp-exact, human-ground-truth noisy conversational/code-switched
    fixture after the clean per-language capacity gate passes. Clean FLEURS speech is not a
    production proxy.

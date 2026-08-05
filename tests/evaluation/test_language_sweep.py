@@ -47,6 +47,7 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
             "compute_type": "int8_float16",
             "runtime_seconds": 1.0,
             "beam_sizes": [1],
+            "language_retry_policy": {"en": "always"},
             "spans": [
                 {
                     "id": "one",
@@ -96,6 +97,7 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
     assert report["methods"]["automatic_minimum_beam"]["metrics"]["cer"]["edits"] == 5
     assert report["methods"]["maximum_average_log_probability"]["metrics"]["word_accuracy"] == 0.5
     assert report["methods"]["detected_language_retry"]["metrics"]["word_accuracy"] == 1.0
+    assert report["methods"]["language_conditioned_retry"]["metrics"]["word_accuracy"] == 1.0
     assert report["methods"]["detected_language_retry"]["deployable"] is True
     assert report["methods"]["oracle_minimum_edits"]["metrics"]["word_accuracy"] == 1.0
     assert report["methods"]["oracle_minimum_edits"]["deployable"] is False

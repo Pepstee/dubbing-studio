@@ -1,0 +1,80 @@
+{
+  "schema_version": "dubbing.frozen-language-retry-policy.v1",
+  "policy_id": "fleurs-v3-turbo-vad200-language-retry-v1",
+  "frozen_before_holdout_access": true,
+  "model": {
+    "name": "faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "compute_type": "int8_float16"
+  },
+  "validation_fixture": {
+    "dataset": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "split": "validation",
+    "manifest_sha256": "4852a0e88b06fe7bec33e062ef10d07f3203f2b6dd04e0c484e97b4a9343c614",
+    "source_sha256": "9a46879d4f0c80e63d478ccbb2ed2c9c6d5c6e94b762e7cdf942572323e53e59"
+  },
+  "candidate_variants": {
+    "auto_t05": {
+      "sweep_sha256": "934cb2ab007f5a401bfa3682743eb7ab95b4749ed1b14f8d40f4a0aa7f3fa939",
+      "language": "auto",
+      "vad_threshold": 0.5,
+      "vad_speech_pad_ms": 200
+    },
+    "auto_t035": {
+      "sweep_sha256": "12c9741265bad7573b3f26b6169af9b99c8d49b53fedda9127f55de3db52596e",
+      "language": "auto",
+      "vad_threshold": 0.35,
+      "vad_speech_pad_ms": 200
+    },
+    "forced_ro": {
+      "sweep_sha256": "321e3785b106d642b8ddae2ae4fc8c5d2d167efb70e977865d5a97eedd8a0fbf",
+      "language": "ro",
+      "vad_threshold": 0.5,
+      "vad_speech_pad_ms": 200
+    },
+    "forced_ko": {
+      "sweep_sha256": "50ae6b0eeafd077e180061ed8f5e9aebda8e34a47e4e32357ebbeac164545ed5",
+      "language": "ko",
+      "vad_threshold": 0.35,
+      "vad_speech_pad_ms": 200
+    }
+  },
+  "routing": {
+    "default": {"mode": "fixed", "variant": "auto_t05"},
+    "ko": {"mode": "always", "variant": "forced_ko"},
+    "ro": {
+      "mode": "global_confidence",
+      "variants": ["auto_t05", "auto_t035", "forced_ro", "forced_ko"],
+      "score": "maximum_average_log_probability"
+    }
+  },
+  "validation_receipt": {
+    "merged_sweep_sha256": "fde796e403b3cdea705f00bf46317fefe4af117d3d36761c651d65d24da585b6",
+    "report_sha256": "5342688f1d75c4a9f13601cbc06b280749a03b8990191253862ca31cb7dd97b9",
+    "method": "language_conditioned_retry",
+    "runtime_seconds": 426.36,
+    "word_accuracy": 0.926954732510288,
+    "wer": 0.07304526748971193,
+    "per_language_word_accuracy": {
+      "en": 0.9560878243512974,
+      "ru": 0.9472527472527472,
+      "ro": 0.9032815198618307,
+      "ko": 0.902200488997555
+    },
+    "all_language_targets_passed": true,
+    "quality_gate_passed": true,
+    "word_timestamp_gate_passed": true
+  },
+  "holdout_contract": {
+    "dataset": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "split": "test",
+    "selection": "first 25 rows from en_us, ru_ru, ro_ro, and ko_kr",
+    "policy_changes_after_access_forbidden": true,
+    "status_at_freeze": "NOT_ACCESSED_OR_EVALUATED"
+  },
+  "promotion_passed": false,
+  "production_scope_certified": false,
+  "giga_admission_emitted": false
+}
