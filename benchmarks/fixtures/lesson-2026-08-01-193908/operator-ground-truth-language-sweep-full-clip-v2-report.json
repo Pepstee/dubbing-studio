@@ -1,0 +1,1942 @@
+{
+  "accuracy_certification_eligible": false,
+  "accuracy_certification_scope": "operator-reviewed uncertain clips only",
+  "compute_type": "int8_float16",
+  "coverage_gaps": [
+    "ro"
+  ],
+  "fixture_sha256": "6cd6156505123fa01b143847c8f4c9c04f6d8118a87cb69978b541cabfd6ae6f",
+  "full_recording_accuracy_certified": false,
+  "giga_admission_emitted": false,
+  "methods": {
+    "automatic_minimum_beam": {
+      "deployable": true,
+      "description": "Automatic language detection at the minimum tested beam size.",
+      "metrics": {
+        "target_passed": false,
+        "target_word_accuracy": 0.9,
+        "wer": {
+          "candidate_units": 81,
+          "edits": 45,
+          "rate": 0.45454545454545453,
+          "reference_units": 99
+        },
+        "word_accuracy": 0.5454545454545454
+      },
+      "per_language": {
+        "en": {
+          "wer": {
+            "candidate_units": 13,
+            "edits": 6,
+            "rate": 0.375,
+            "reference_units": 16
+          },
+          "word_accuracy": 0.625
+        },
+        "ko": {
+          "wer": {
+            "candidate_units": 9,
+            "edits": 6,
+            "rate": 1.0,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.0
+        },
+        "mixed": {
+          "wer": {
+            "candidate_units": 22,
+            "edits": 20,
+            "rate": 0.5263157894736842,
+            "reference_units": 38
+          },
+          "word_accuracy": 0.4736842105263158
+        },
+        "ru": {
+          "wer": {
+            "candidate_units": 36,
+            "edits": 18,
+            "rate": 0.46153846153846156,
+            "reference_units": 39
+          },
+          "word_accuracy": 0.5384615384615384
+        },
+        "unknown": {
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        }
+      },
+      "spans": [
+        {
+          "beam_size": 1,
+          "candidate": "на этом дереве да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000095-3968ff76cd",
+          "language": "mixed",
+          "reference": "you say \"На этом дереве, да?\" – on this tree",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 5,
+            "rate": 0.5555555555555556,
+            "reference_units": 9
+          },
+          "word_accuracy": 0.4444444444444444
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не цели",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000246-75f969871d",
+          "language": "ru",
+          "reference": "Не цели, а",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 1,
+            "rate": 0.3333333333333333,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.6666666666666667
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не возможности а свойства",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000249-747d5ce7b5",
+          "language": "ru",
+          "reference": "... не возможности, a свойства, вот, свойства",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "травы это не обязательно листья",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000279-bdad7609bc",
+          "language": "mixed",
+          "reference": "plants like травы. Травы это не обязательно листья.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 3,
+            "rate": 0.375,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.625
+        },
+        {
+          "beam_size": 1,
+          "candidate": "ромашка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000282-956177d0d6",
+          "language": "ru",
+          "reference": "ромашка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "99 последняя сон",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000305-94a16b9c57",
+          "language": "ru",
+          "reference": "99% и вот последнее слово",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 4,
+            "rate": 0.8,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.19999999999999996
+        },
+        {
+          "beam_size": 1,
+          "candidate": "изобилие",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000307-31b7da4c73",
+          "language": "ru",
+          "reference": "изобилие",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "дворик монокрестмистор квот да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000331-46659de20b",
+          "language": "mixed",
+          "reference": "двор, дворик, много смыслов – court yes yes",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 6,
+            "rate": 0.8571428571428571,
+            "reference_units": 7
+          },
+          "word_accuracy": 0.1428571428571429
+        },
+        {
+          "beam_size": 1,
+          "candidate": "дворы ничего",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000347-0f057aec54",
+          "language": "ru",
+          "reference": "Дворы чего?",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 1,
+            "rate": 0.5,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "колодцы",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000348-899c8f38b7",
+          "language": "ru",
+          "reference": "Колодцы?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "хотя возможно может быть но",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000354-6a51dbefb8",
+          "language": "ru",
+          "reference": "Хотя, возможно, Может быть, но",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 5
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "выйдем во двор",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000357-23bc7b7b63",
+          "language": "ru",
+          "reference": "Выйдем во двор.",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 3
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "это как раз таки есть корт",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000369-78acd6c0a8",
+          "language": "ru",
+          "reference": "курданьер это как раз таки и есть корт",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 1,
+          "candidate": "we came from",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000415-7c48a2f5a5",
+          "language": "mixed",
+          "reference": "we came from. Как будет лоза?",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "because because you drop the e",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000426-474e06191a",
+          "language": "en",
+          "reference": "Because you drop the e.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 1,
+          "candidate": "wine",
+          "detected_language": "de",
+          "forced_language": null,
+          "id": "u-000431-0fc8175576",
+          "language": "mixed",
+          "reference": "это vine",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 1.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "веревка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000445-6fc41cc75a",
+          "language": "ru",
+          "reference": "веревка, вот, веревка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 0.6666666666666666,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.33333333333333337
+        },
+        {
+          "beam_size": 1,
+          "candidate": "so that s that s a vineyard",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000452-80c02536cd",
+          "language": "ru",
+          "reference": "Всё.",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 7,
+            "rate": 7.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "so that s that s a vignette",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000453-32611fb196",
+          "language": "en",
+          "reference": "So that's, that's a vinyard, that's a vinyard",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 5,
+            "rate": 0.45454545454545453,
+            "reference_units": 11
+          },
+          "word_accuracy": 0.5454545454545454
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не нужен нужен другой субъект",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000475-b0216d2cf5",
+          "language": "mixed",
+          "reference": "an не нужен, Нужен другой субъект.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 1,
+            "rate": 0.16666666666666666,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.8333333333333334
+        },
+        {
+          "beam_size": 1,
+          "candidate": "азки",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000496-b7ddd9875e",
+          "language": "unknown",
+          "reference": "",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "응",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000554-2519c6a247",
+          "language": "ko",
+          "reference": "어?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "응 응 응",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000555-0283c181b1",
+          "language": "ko",
+          "reference": "응 응",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 1,
+            "rate": 0.5,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "um",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000556-40a57f887c",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "oh",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000557-c6a9472ba0",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "죽을래 죽을래 죽을래",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000558-8cd2fe7879",
+          "language": "ko",
+          "reference": "시크요",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 3.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        }
+      ]
+    },
+    "declared_reference_language": {
+      "deployable": false,
+      "description": "Diagnostic upper bound using the human reference language label.",
+      "metrics": {
+        "target_passed": false,
+        "target_word_accuracy": 0.9,
+        "wer": {
+          "candidate_units": 83,
+          "edits": 44,
+          "rate": 0.4444444444444444,
+          "reference_units": 99
+        },
+        "word_accuracy": 0.5555555555555556
+      },
+      "per_language": {
+        "en": {
+          "wer": {
+            "candidate_units": 13,
+            "edits": 6,
+            "rate": 0.375,
+            "reference_units": 16
+          },
+          "word_accuracy": 0.625
+        },
+        "ko": {
+          "wer": {
+            "candidate_units": 10,
+            "edits": 6,
+            "rate": 1.0,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.0
+        },
+        "mixed": {
+          "wer": {
+            "candidate_units": 22,
+            "edits": 20,
+            "rate": 0.5263157894736842,
+            "reference_units": 38
+          },
+          "word_accuracy": 0.4736842105263158
+        },
+        "ru": {
+          "wer": {
+            "candidate_units": 37,
+            "edits": 16,
+            "rate": 0.41025641025641024,
+            "reference_units": 39
+          },
+          "word_accuracy": 0.5897435897435898
+        },
+        "unknown": {
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        }
+      },
+      "spans": [
+        {
+          "beam_size": 1,
+          "candidate": "на этом дереве да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000095-3968ff76cd",
+          "language": "mixed",
+          "reference": "you say \"На этом дереве, да?\" – on this tree",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 5,
+            "rate": 0.5555555555555556,
+            "reference_units": 9
+          },
+          "word_accuracy": 0.4444444444444444
+        },
+        {
+          "beam_size": 5,
+          "candidate": "не цели",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000246-75f969871d",
+          "language": "ru",
+          "reference": "Не цели, а",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 1,
+            "rate": 0.3333333333333333,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.6666666666666667
+        },
+        {
+          "beam_size": 5,
+          "candidate": "не возможности а свойства",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000249-747d5ce7b5",
+          "language": "ru",
+          "reference": "... не возможности, a свойства, вот, свойства",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "травы это не обязательно листья",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000279-bdad7609bc",
+          "language": "mixed",
+          "reference": "plants like травы. Травы это не обязательно листья.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 3,
+            "rate": 0.375,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.625
+        },
+        {
+          "beam_size": 5,
+          "candidate": "ромашка",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000282-956177d0d6",
+          "language": "ru",
+          "reference": "ромашка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "99 и вот последняя сон",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000305-94a16b9c57",
+          "language": "ru",
+          "reference": "99% и вот последнее слово",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 2,
+            "rate": 0.4,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.6
+        },
+        {
+          "beam_size": 5,
+          "candidate": "изобилие",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000307-31b7da4c73",
+          "language": "ru",
+          "reference": "изобилие",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "дворик монокрестмистор квот да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000331-46659de20b",
+          "language": "mixed",
+          "reference": "двор, дворик, много смыслов – court yes yes",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 6,
+            "rate": 0.8571428571428571,
+            "reference_units": 7
+          },
+          "word_accuracy": 0.1428571428571429
+        },
+        {
+          "beam_size": 5,
+          "candidate": "дворы чего",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000347-0f057aec54",
+          "language": "ru",
+          "reference": "Дворы чего?",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "колодцы",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000348-899c8f38b7",
+          "language": "ru",
+          "reference": "Колодцы?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "хотя возможно может быть",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000354-6a51dbefb8",
+          "language": "ru",
+          "reference": "Хотя, возможно, Может быть, но",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 5,
+          "candidate": "выйдем во двор",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000357-23bc7b7b63",
+          "language": "ru",
+          "reference": "Выйдем во двор.",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 3
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "это как раз таки есть корт",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000369-78acd6c0a8",
+          "language": "ru",
+          "reference": "курданьер это как раз таки и есть корт",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 1,
+          "candidate": "we came from",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000415-7c48a2f5a5",
+          "language": "mixed",
+          "reference": "we came from. Как будет лоза?",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 5,
+          "candidate": "because because you drop the e",
+          "detected_language": "en",
+          "forced_language": "en",
+          "id": "u-000426-474e06191a",
+          "language": "en",
+          "reference": "Because you drop the e.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 1,
+          "candidate": "wine",
+          "detected_language": "de",
+          "forced_language": null,
+          "id": "u-000431-0fc8175576",
+          "language": "mixed",
+          "reference": "это vine",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 1.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "веревка",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000445-6fc41cc75a",
+          "language": "ru",
+          "reference": "веревка, вот, веревка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 0.6666666666666666,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.33333333333333337
+        },
+        {
+          "beam_size": 5,
+          "candidate": "so that s that s a vineyard",
+          "detected_language": "ru",
+          "forced_language": "ru",
+          "id": "u-000452-80c02536cd",
+          "language": "ru",
+          "reference": "Всё.",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 7,
+            "rate": 7.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "so that s that s a vignette",
+          "detected_language": "en",
+          "forced_language": "en",
+          "id": "u-000453-32611fb196",
+          "language": "en",
+          "reference": "So that's, that's a vinyard, that's a vinyard",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 5,
+            "rate": 0.45454545454545453,
+            "reference_units": 11
+          },
+          "word_accuracy": 0.5454545454545454
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не нужен нужен другой субъект",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000475-b0216d2cf5",
+          "language": "mixed",
+          "reference": "an не нужен, Нужен другой субъект.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 1,
+            "rate": 0.16666666666666666,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.8333333333333334
+        },
+        {
+          "beam_size": 1,
+          "candidate": "азки",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000496-b7ddd9875e",
+          "language": "unknown",
+          "reference": "",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "응",
+          "detected_language": "ko",
+          "forced_language": "ko",
+          "id": "u-000554-2519c6a247",
+          "language": "ko",
+          "reference": "어?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "응 응 응",
+          "detected_language": "ko",
+          "forced_language": "ko",
+          "id": "u-000555-0283c181b1",
+          "language": "ko",
+          "reference": "응 응",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 1,
+            "rate": 0.5,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 5,
+          "candidate": "mm hmm",
+          "detected_language": "ko",
+          "forced_language": "ko",
+          "id": "u-000556-40a57f887c",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 2,
+            "rate": 2.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "oh",
+          "detected_language": "ko",
+          "forced_language": "ko",
+          "id": "u-000557-c6a9472ba0",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "죽을래 응 죽을래",
+          "detected_language": "ko",
+          "forced_language": "ko",
+          "id": "u-000558-8cd2fe7879",
+          "language": "ko",
+          "reference": "시크요",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 3.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        }
+      ]
+    },
+    "maximum_average_log_probability": {
+      "deployable": true,
+      "description": "Highest decoder average log probability; does not inspect reference text.",
+      "metrics": {
+        "target_passed": false,
+        "target_word_accuracy": 0.9,
+        "wer": {
+          "candidate_units": 87,
+          "edits": 44,
+          "rate": 0.4444444444444444,
+          "reference_units": 99
+        },
+        "word_accuracy": 0.5555555555555556
+      },
+      "per_language": {
+        "en": {
+          "wer": {
+            "candidate_units": 13,
+            "edits": 6,
+            "rate": 0.375,
+            "reference_units": 16
+          },
+          "word_accuracy": 0.625
+        },
+        "ko": {
+          "wer": {
+            "candidate_units": 10,
+            "edits": 7,
+            "rate": 1.1666666666666667,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.0
+        },
+        "mixed": {
+          "wer": {
+            "candidate_units": 24,
+            "edits": 18,
+            "rate": 0.47368421052631576,
+            "reference_units": 38
+          },
+          "word_accuracy": 0.5263157894736843
+        },
+        "ru": {
+          "wer": {
+            "candidate_units": 37,
+            "edits": 16,
+            "rate": 0.41025641025641024,
+            "reference_units": 39
+          },
+          "word_accuracy": 0.5897435897435898
+        },
+        "unknown": {
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        }
+      },
+      "spans": [
+        {
+          "beam_size": 1,
+          "candidate": "на этом дереве да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000095-3968ff76cd",
+          "language": "mixed",
+          "reference": "you say \"На этом дереве, да?\" – on this tree",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 5,
+            "rate": 0.5555555555555556,
+            "reference_units": 9
+          },
+          "word_accuracy": 0.4444444444444444
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не цели",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000246-75f969871d",
+          "language": "ru",
+          "reference": "Не цели, а",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 1,
+            "rate": 0.3333333333333333,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.6666666666666667
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не возможности а свойства",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000249-747d5ce7b5",
+          "language": "ru",
+          "reference": "... не возможности, a свойства, вот, свойства",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 5,
+          "candidate": "травы травы это не обязательно листья",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000279-bdad7609bc",
+          "language": "mixed",
+          "reference": "plants like травы. Травы это не обязательно листья.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 5,
+          "candidate": "ромашка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000282-956177d0d6",
+          "language": "ru",
+          "reference": "ромашка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "99 и вот последняя сон",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000305-94a16b9c57",
+          "language": "ru",
+          "reference": "99% и вот последнее слово",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 2,
+            "rate": 0.4,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.6
+        },
+        {
+          "beam_size": 5,
+          "candidate": "изобилие",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000307-31b7da4c73",
+          "language": "ru",
+          "reference": "изобилие",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "двор дворик монокрисмистер квот да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000331-46659de20b",
+          "language": "mixed",
+          "reference": "двор, дворик, много смыслов – court yes yes",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 5,
+            "rate": 0.7142857142857143,
+            "reference_units": 7
+          },
+          "word_accuracy": 0.2857142857142857
+        },
+        {
+          "beam_size": 5,
+          "candidate": "дворы чего",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000347-0f057aec54",
+          "language": "ru",
+          "reference": "Дворы чего?",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "колодцы",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000348-899c8f38b7",
+          "language": "ru",
+          "reference": "Колодцы?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "хотя возможно может быть",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000354-6a51dbefb8",
+          "language": "ru",
+          "reference": "Хотя, возможно, Может быть, но",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 5,
+          "candidate": "выйдем во двор",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000357-23bc7b7b63",
+          "language": "ru",
+          "reference": "Выйдем во двор.",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 3
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "это как раз таки есть корт",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000369-78acd6c0a8",
+          "language": "ru",
+          "reference": "курданьер это как раз таки и есть корт",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 5,
+          "candidate": "we came from",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000415-7c48a2f5a5",
+          "language": "mixed",
+          "reference": "we came from. Как будет лоза?",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "because because you drop the e",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000426-474e06191a",
+          "language": "en",
+          "reference": "Because you drop the e.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 5,
+          "candidate": "wine",
+          "detected_language": "de",
+          "forced_language": null,
+          "id": "u-000431-0fc8175576",
+          "language": "mixed",
+          "reference": "это vine",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 1.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "веревка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000445-6fc41cc75a",
+          "language": "ru",
+          "reference": "веревка, вот, веревка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 0.6666666666666666,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.33333333333333337
+        },
+        {
+          "beam_size": 1,
+          "candidate": "so that s that s a vineyard",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000452-80c02536cd",
+          "language": "ru",
+          "reference": "Всё.",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 7,
+            "rate": 7.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "so that s that s a vignette",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000453-32611fb196",
+          "language": "en",
+          "reference": "So that's, that's a vinyard, that's a vinyard",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 5,
+            "rate": 0.45454545454545453,
+            "reference_units": 11
+          },
+          "word_accuracy": 0.5454545454545454
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не нужен нужен другой субъект",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000475-b0216d2cf5",
+          "language": "mixed",
+          "reference": "an не нужен, Нужен другой субъект.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 1,
+            "rate": 0.16666666666666666,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.8333333333333334
+        },
+        {
+          "beam_size": 5,
+          "candidate": "субтитры делал dimatorzok",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000496-b7ddd9875e",
+          "language": "unknown",
+          "reference": "",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "응",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000554-2519c6a247",
+          "language": "ko",
+          "reference": "어?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "응 응 응",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000555-0283c181b1",
+          "language": "ko",
+          "reference": "응 응",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 1,
+            "rate": 0.5,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 5,
+          "candidate": "mm hmm",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000556-40a57f887c",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 2,
+            "rate": 2.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "oh",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000557-c6a9472ba0",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "죽을래 죽을래 죽을래",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000558-8cd2fe7879",
+          "language": "ko",
+          "reference": "시크요",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 3.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        }
+      ]
+    },
+    "oracle_minimum_edits": {
+      "deployable": false,
+      "description": "Non-deployable capacity ceiling selected using human reference text.",
+      "metrics": {
+        "target_passed": false,
+        "target_word_accuracy": 0.9,
+        "wer": {
+          "candidate_units": 85,
+          "edits": 40,
+          "rate": 0.40404040404040403,
+          "reference_units": 99
+        },
+        "word_accuracy": 0.595959595959596
+      },
+      "per_language": {
+        "en": {
+          "wer": {
+            "candidate_units": 13,
+            "edits": 6,
+            "rate": 0.375,
+            "reference_units": 16
+          },
+          "word_accuracy": 0.625
+        },
+        "ko": {
+          "wer": {
+            "candidate_units": 9,
+            "edits": 6,
+            "rate": 1.0,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.0
+        },
+        "mixed": {
+          "wer": {
+            "candidate_units": 24,
+            "edits": 18,
+            "rate": 0.47368421052631576,
+            "reference_units": 38
+          },
+          "word_accuracy": 0.5263157894736843
+        },
+        "ru": {
+          "wer": {
+            "candidate_units": 38,
+            "edits": 15,
+            "rate": 0.38461538461538464,
+            "reference_units": 39
+          },
+          "word_accuracy": 0.6153846153846154
+        },
+        "unknown": {
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        }
+      },
+      "spans": [
+        {
+          "beam_size": 1,
+          "candidate": "на этом дереве да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000095-3968ff76cd",
+          "language": "mixed",
+          "reference": "you say \"На этом дереве, да?\" – on this tree",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 5,
+            "rate": 0.5555555555555556,
+            "reference_units": 9
+          },
+          "word_accuracy": 0.4444444444444444
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не цели",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000246-75f969871d",
+          "language": "ru",
+          "reference": "Не цели, а",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 1,
+            "rate": 0.3333333333333333,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.6666666666666667
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не возможности а свойства",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000249-747d5ce7b5",
+          "language": "ru",
+          "reference": "... не возможности, a свойства, вот, свойства",
+          "wer": {
+            "candidate_units": 4,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 5,
+          "candidate": "травы травы это не обязательно листья",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000279-bdad7609bc",
+          "language": "mixed",
+          "reference": "plants like травы. Травы это не обязательно листья.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 1,
+          "candidate": "ромашка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000282-956177d0d6",
+          "language": "ru",
+          "reference": "ромашка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "99 и вот последняя сон",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000305-94a16b9c57",
+          "language": "ru",
+          "reference": "99% и вот последнее слово",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 2,
+            "rate": 0.4,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.6
+        },
+        {
+          "beam_size": 1,
+          "candidate": "изобилие",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000307-31b7da4c73",
+          "language": "ru",
+          "reference": "изобилие",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 5,
+          "candidate": "двор дворик монокрисмистер квот да",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000331-46659de20b",
+          "language": "mixed",
+          "reference": "двор, дворик, много смыслов – court yes yes",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 5,
+            "rate": 0.7142857142857143,
+            "reference_units": 7
+          },
+          "word_accuracy": 0.2857142857142857
+        },
+        {
+          "beam_size": 5,
+          "candidate": "дворы чего",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000347-0f057aec54",
+          "language": "ru",
+          "reference": "Дворы чего?",
+          "wer": {
+            "candidate_units": 2,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "колодцы",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000348-899c8f38b7",
+          "language": "ru",
+          "reference": "Колодцы?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "хотя возможно может быть но",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000354-6a51dbefb8",
+          "language": "ru",
+          "reference": "Хотя, возможно, Может быть, но",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 5
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "выйдем во двор",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000357-23bc7b7b63",
+          "language": "ru",
+          "reference": "Выйдем во двор.",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 0,
+            "rate": 0.0,
+            "reference_units": 3
+          },
+          "word_accuracy": 1.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "это как раз таки есть корт",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000369-78acd6c0a8",
+          "language": "ru",
+          "reference": "курданьер это как раз таки и есть корт",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 2,
+            "rate": 0.25,
+            "reference_units": 8
+          },
+          "word_accuracy": 0.75
+        },
+        {
+          "beam_size": 1,
+          "candidate": "we came from",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000415-7c48a2f5a5",
+          "language": "mixed",
+          "reference": "we came from. Как будет лоза?",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 0.5,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "because because you drop the e",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000426-474e06191a",
+          "language": "en",
+          "reference": "Because you drop the e.",
+          "wer": {
+            "candidate_units": 6,
+            "edits": 1,
+            "rate": 0.2,
+            "reference_units": 5
+          },
+          "word_accuracy": 0.8
+        },
+        {
+          "beam_size": 1,
+          "candidate": "wine",
+          "detected_language": "de",
+          "forced_language": null,
+          "id": "u-000431-0fc8175576",
+          "language": "mixed",
+          "reference": "это vine",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 1.0,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "веревка",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000445-6fc41cc75a",
+          "language": "ru",
+          "reference": "веревка, вот, веревка",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 2,
+            "rate": 0.6666666666666666,
+            "reference_units": 3
+          },
+          "word_accuracy": 0.33333333333333337
+        },
+        {
+          "beam_size": 1,
+          "candidate": "so that s that s a vineyard",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000452-80c02536cd",
+          "language": "ru",
+          "reference": "Всё.",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 7,
+            "rate": 7.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "so that s that s a vignette",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000453-32611fb196",
+          "language": "en",
+          "reference": "So that's, that's a vinyard, that's a vinyard",
+          "wer": {
+            "candidate_units": 7,
+            "edits": 5,
+            "rate": 0.45454545454545453,
+            "reference_units": 11
+          },
+          "word_accuracy": 0.5454545454545454
+        },
+        {
+          "beam_size": 1,
+          "candidate": "не нужен нужен другой субъект",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000475-b0216d2cf5",
+          "language": "mixed",
+          "reference": "an не нужен, Нужен другой субъект.",
+          "wer": {
+            "candidate_units": 5,
+            "edits": 1,
+            "rate": 0.16666666666666666,
+            "reference_units": 6
+          },
+          "word_accuracy": 0.8333333333333334
+        },
+        {
+          "beam_size": 1,
+          "candidate": "азки",
+          "detected_language": "ru",
+          "forced_language": null,
+          "id": "u-000496-b7ddd9875e",
+          "language": "unknown",
+          "reference": "",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 0
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "응",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000554-2519c6a247",
+          "language": "ko",
+          "reference": "어?",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "응 응 응",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000555-0283c181b1",
+          "language": "ko",
+          "reference": "응 응",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 1,
+            "rate": 0.5,
+            "reference_units": 2
+          },
+          "word_accuracy": 0.5
+        },
+        {
+          "beam_size": 1,
+          "candidate": "um",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000556-40a57f887c",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "oh",
+          "detected_language": "en",
+          "forced_language": null,
+          "id": "u-000557-c6a9472ba0",
+          "language": "ko",
+          "reference": "응",
+          "wer": {
+            "candidate_units": 1,
+            "edits": 1,
+            "rate": 1.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        },
+        {
+          "beam_size": 1,
+          "candidate": "죽을래 죽을래 죽을래",
+          "detected_language": "ko",
+          "forced_language": null,
+          "id": "u-000558-8cd2fe7879",
+          "language": "ko",
+          "reference": "시크요",
+          "wer": {
+            "candidate_units": 3,
+            "edits": 3,
+            "rate": 3.0,
+            "reference_units": 1
+          },
+          "word_accuracy": 0.0
+        }
+      ]
+    }
+  },
+  "model": "faster-whisper-large-v3-turbo-ct2",
+  "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+  "promotion_passed": false,
+  "promotion_reason": "No tested deployable selector reached 90% word accuracy; oracle/reference-informed methods cannot be promoted.",
+  "runtime_seconds": 149.391,
+  "schema_version": "dubbing.faster-whisper-language-sweep-evaluation.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "sweep_sha256": "3bd34cf3a7400524c2f6f37016a2fb3669d8ef4e9ca882848988aee76e21fc37",
+  "timing_policy": "full_clip"
+}
