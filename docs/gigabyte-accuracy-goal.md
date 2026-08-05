@@ -32,17 +32,17 @@ long-form, noisy, conversational, or code-switched audio, so it cannot certify t
 pipeline by itself.
 
 The best installed-model result is automatic beam 5 with fallback capped at temperature
-0.6. Only one clip actually used a fallback, at temperature 0.2:
+0.6 and VAD enabled. No clip required a non-zero-temperature fallback:
 
 | Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
 |---|---:|---:|---:|---:|---:|---|
-| English | 501 | 20 | 3.99% | 96.01% | 2.10% | PASS |
-| Russian | 455 | 30 | 6.59% | 93.41% | 1.50% | PASS |
-| Romanian | 579 | 69 | 11.92% | 88.08% | 4.96% | FAIL |
-| Korean | 409 | 52 | 12.71% | 87.29% | 8.23% | FAIL |
-| **Aggregate** | **1,944** | **171** | **8.80%** | **91.20%** | **3.68%** | **FAIL: not every language passes** |
+| English | 501 | 24 | 4.79% | 95.21% | 2.64% | PASS |
+| Russian | 455 | 25 | 5.49% | 94.51% | 1.28% | PASS |
+| Romanian | 579 | 67 | 11.57% | 88.43% | 4.68% | FAIL |
+| Korean | 409 | 50 | 12.22% | 87.78% | 8.08% | FAIL |
+| **Aggregate** | **1,944** | **166** | **8.54%** | **91.46%** | **3.65%** | **FAIL: not every language passes** |
 
-Runtime was 110.047 seconds. The selected candidates contain no blank hypotheses,
+Runtime was 116.156 seconds. The selected candidates contain no blank hypotheses,
 timestamp disorder, adjacent duplicate segments, four-token repetition runs, or exhausted
 fallbacks. CER is micro-averaged across utterances; it is diagnostic and does not replace or
 weaken the explicit WER gate. The exact machine-readable verdict is in
@@ -53,7 +53,10 @@ recognized text and the same WER/CER, reducing runtime only from 110.047 to 107.
 it is rejected because it removes required timing evidence without improving accuracy.
 Enabling previous-text conditioning also produced identical recognized text and WER/CER
 (107.0 seconds, no repetition issues), so decoder context within these complete utterances is
-not the missing capacity either.
+not the missing capacity either. VAD removed five aggregate word errors relative to the
+non-VAD control, but even a non-deployable per-clip oracle choosing between both candidates
+reaches only 89.29% Romanian and 89.98% Korean accuracy. A selector over these two outputs
+therefore cannot satisfy the strict gate.
 
 ## Human evidence discovered
 

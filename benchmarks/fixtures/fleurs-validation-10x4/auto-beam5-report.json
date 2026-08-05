@@ -21,6 +21,7 @@
     "temperatures": [
       0.0
     ],
+    "vad_filter": false,
     "word_timestamps": true
   },
   "fixture_gate_passed": false,

@@ -21,27 +21,27 @@
     "hardware": "NVIDIA GeForce RTX 4060 Laptop GPU"
   },
   "selected_experiment": {
-    "name": "automatic beam 5 with capped fallback temperatures 0,0.2,0.4,0.6",
-    "sweep_sha256": "a4168e776f1c304920646fb6de2c254427a14aa13671f16e775b31b830cd6c9c",
-    "report_sha256": "03e52acfe07cc8d18b7fc1df556b01ad39fdc6ce89e77b6ac964835ff530eb9d",
-    "runtime_seconds": 110.047,
+    "name": "automatic beam 5 with capped fallback temperatures 0,0.2,0.4,0.6 and VAD",
+    "sweep_sha256": "f348aca24668f6d517a8ea56509c90b20852632e846e25f73dc35b63e161bf8f",
+    "report_sha256": "682bfc060ae6dae628d575fe9dbd0cd6bf112ecf088c0a985f4170add20b85ec",
+    "runtime_seconds": 116.156,
     "reference_words": 1944,
-    "edits": 171,
-    "wer": 0.08796296296296297,
-    "word_accuracy": 0.912037037037037,
-    "character_edits": 344,
-    "cer": 0.03683872349539516,
-    "character_accuracy": 0.9631612765046048,
+    "edits": 166,
+    "wer": 0.08539094650205761,
+    "word_accuracy": 0.9146090534979424,
+    "character_edits": 341,
+    "cer": 0.03651745555793532,
+    "character_accuracy": 0.9634825444420647,
     "per_language": {
-      "en": {"reference_words": 501, "edits": 20, "wer": 0.03992015968063872, "word_accuracy": 0.9600798403193613, "cer": 0.021013597033374538, "character_accuracy": 0.9789864029666254, "passed": true},
-      "ru": {"reference_words": 455, "edits": 30, "wer": 0.06593406593406594, "word_accuracy": 0.9340659340659341, "cer": 0.0150093808630394, "character_accuracy": 0.9849906191369606, "passed": true},
-      "ro": {"reference_words": 579, "edits": 69, "wer": 0.11917098445595854, "word_accuracy": 0.8808290155440415, "cer": 0.04955872369314324, "character_accuracy": 0.9504412763068567, "passed": false},
-      "ko": {"reference_words": 409, "edits": 52, "wer": 0.1271393643031785, "word_accuracy": 0.8728606356968215, "cer": 0.0823076923076923, "character_accuracy": 0.9176923076923077, "passed": false}
+      "en": {"reference_words": 501, "edits": 24, "wer": 0.04790419161676647, "word_accuracy": 0.9520958083832335, "cer": 0.026370004120313144, "character_accuracy": 0.9736299958796869, "passed": true},
+      "ru": {"reference_words": 455, "edits": 25, "wer": 0.054945054945054944, "word_accuracy": 0.945054945054945, "cer": 0.01275797373358349, "character_accuracy": 0.9872420262664166, "passed": true},
+      "ro": {"reference_words": 579, "edits": 67, "wer": 0.1157167530224525, "word_accuracy": 0.8842832469775475, "cer": 0.04684317718940937, "character_accuracy": 0.9531568228105907, "passed": false},
+      "ko": {"reference_words": 409, "edits": 50, "wer": 0.12224938875305623, "word_accuracy": 0.8777506112469438, "cer": 0.08076923076923077, "character_accuracy": 0.9192307692307692, "passed": false}
     },
     "quality": {
       "quality_gate_passed": true,
-      "maximum_used_temperature": 0.2,
-      "fallback_used_count": 1,
+      "maximum_used_temperature": 0.0,
+      "fallback_used_count": 0,
       "blank_hypotheses": 0,
       "malformed_timestamps": 0,
       "adjacent_duplicate_segments": 0,
@@ -53,7 +53,7 @@
     {
       "name": "automatic beam 5 temperature 0",
       "sweep_sha256": "b5cbd6691263dd537d5c43daba5888f5762dc892c138602c38bfc9f00541af35",
-      "report_sha256": "95eebfa06379d1324c7fa6db372f429fc95079adc7e184c6efffab22c57de14b",
+      "report_sha256": "08f75d3a53095ee1f9c350241e467cdc562d3f9f84913a2eac299f778fb033d0",
       "word_accuracy": 0.9058641975308642,
       "quality_gate_passed": false,
       "failure": "one non-speech-labelled Korean clip produced a blank hypothesis"
@@ -61,7 +61,7 @@
     {
       "name": "automatic beam 5 temperature 0 with multilingual disabled",
       "sweep_sha256": "0d40f508b3dd5c948d63ca63b14e3fab8ec1119a9fce23e1fa318cfcd3e1f3cb",
-      "report_sha256": "bf4bee52e398181e0cf9e5cdae8a42784afb3bcdc54c98d7047db60e50292f25",
+      "report_sha256": "64b079c93815d8a019513624ee51408bc4d5137baa4ae84310a830efca5dea5c",
       "word_accuracy": 0.9058641975308642,
       "quality_gate_passed": false,
       "failure": "no accuracy change and the same Korean blank hypothesis"
@@ -69,7 +69,7 @@
     {
       "name": "automatic beam 5 with capped fallback and word timestamps disabled",
       "sweep_sha256": "c5790b8ef57062856e64dbcf81df3f9c6cad1d2e9d0ca07de77ab25500c00dc2",
-      "report_sha256": "37f6be759cbd832ec6fa502c1d38c88fcf228be440622f78ca9d4861a9caceb2",
+      "report_sha256": "f30efbd4ac9dd9f123758643fe24aebbfebbbe339fbd59c49324f376a409d22c",
       "runtime_seconds": 107.484,
       "word_accuracy": 0.912037037037037,
       "cer": 0.03683872349539516,
@@ -80,15 +80,38 @@
     {
       "name": "automatic beam 5 with capped fallback and previous-text conditioning",
       "sweep_sha256": "7712f3ccf3c518c800035e7e8e66965389fcfe29ed69162f9912abfcb4a6ae9c",
-      "report_sha256": "f323e0bec7d42923771f7659ff4b08b97539b90c6b7480d8701269d3530596b7",
+      "report_sha256": "a3d26db2a25fee23fdd5c18536ad614741da6f427187d636e8a85bdce8bcbb1b",
       "runtime_seconds": 107.0,
       "word_accuracy": 0.912037037037037,
       "cer": 0.03683872349539516,
       "quality_gate_passed": true,
       "word_timestamp_gate_passed": true,
       "failure": "recognized text, WER, and CER are identical to the unconditioned control"
+    },
+    {
+      "name": "automatic beam 5 with capped fallback and VAD disabled",
+      "sweep_sha256": "a4168e776f1c304920646fb6de2c254427a14aa13671f16e775b31b830cd6c9c",
+      "report_sha256": "ce2572c982eea96386a8b0cf650d9b595bb0ab34d877c7c47fb54a5fbd7eb8a5",
+      "runtime_seconds": 110.047,
+      "word_accuracy": 0.912037037037037,
+      "cer": 0.03683872349539516,
+      "quality_gate_passed": true,
+      "word_timestamp_gate_passed": true,
+      "failure": "five more word edits than the VAD control, including two more each in Romanian and Korean"
     }
   ],
+  "paired_vad_oracle": {
+    "description": "Non-deployable per-clip minimum-edit ceiling across the VAD and non-VAD candidates; uses human references and cannot be promoted.",
+    "vad_sweep_sha256": "f348aca24668f6d517a8ea56509c90b20852632e846e25f73dc35b63e161bf8f",
+    "non_vad_sweep_sha256": "a4168e776f1c304920646fb6de2c254427a14aa13671f16e775b31b830cd6c9c",
+    "per_language": {
+      "en": {"reference_words": 501, "oracle_edits": 20, "oracle_word_accuracy": 0.9600798403193613, "vad_wins": 0, "non_vad_wins": 3, "ties": 22},
+      "ru": {"reference_words": 455, "oracle_edits": 25, "oracle_word_accuracy": 0.945054945054945, "vad_wins": 3, "non_vad_wins": 0, "ties": 22},
+      "ro": {"reference_words": 579, "oracle_edits": 62, "oracle_word_accuracy": 0.8929188255613126, "vad_wins": 2, "non_vad_wins": 5, "ties": 18},
+      "ko": {"reference_words": 409, "oracle_edits": 41, "oracle_word_accuracy": 0.8997555012224939, "vad_wins": 7, "non_vad_wins": 5, "ties": 13}
+    },
+    "all_language_targets_passed": false
+  },
   "scope": {
     "clean_read_speech": true,
     "noisy": false,

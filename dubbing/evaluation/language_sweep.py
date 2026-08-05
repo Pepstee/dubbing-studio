@@ -393,6 +393,7 @@ def evaluate_language_sweep(
             "multilingual": sweep.get("multilingual", True),
             "word_timestamps": sweep.get("word_timestamps", True),
             "condition_on_previous_text": sweep.get("condition_on_previous_text", False),
+            "vad_filter": sweep.get("vad_filter", False),
             "initial_prompt": sweep.get("initial_prompt"),
             "context_transcript_sha256": sweep.get("context_transcript_sha256"),
             "context_seconds": sweep.get("context_seconds"),

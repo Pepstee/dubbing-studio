@@ -63,6 +63,7 @@ def main() -> None:
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument("--vad-filter", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--temperatures", default="0")
     parser.add_argument("--initial-prompt")
     parser.add_argument("--context-transcript")
@@ -145,7 +146,7 @@ def main() -> None:
                     length_penalty=args.length_penalty,
                     temperature=decode_temperatures,
                     word_timestamps=args.word_timestamps,
-                    vad_filter=False,
+                    vad_filter=args.vad_filter,
                     condition_on_previous_text=args.condition_on_previous_text,
                     initial_prompt=span_prompt,
                 )
@@ -222,6 +223,7 @@ def main() -> None:
         "multilingual": args.multilingual,
         "word_timestamps": args.word_timestamps,
         "condition_on_previous_text": args.condition_on_previous_text,
+        "vad_filter": args.vad_filter,
         "temperatures": list(temperatures),
         "forced_languages": ["auto" if value is None else value for value in languages],
         "model_load_seconds": round(model_load_seconds, 6),
