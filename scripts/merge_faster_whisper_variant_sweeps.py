@@ -118,6 +118,7 @@ def merge_variant_sweeps(
                         "vad_min_silence_duration_ms",
                     )
                 },
+                "postprocessing": document.get("postprocessing"),
             }
             for variant_id, path, document in loaded
         ],
