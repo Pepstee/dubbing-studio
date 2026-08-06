@@ -1,4 +1,6 @@
 import json
+import wave
+from array import array
 from unittest.mock import patch
 
 from dubbing.transcription.adaptive import (
@@ -7,14 +9,50 @@ from dubbing.transcription.adaptive import (
     AdaptiveLongFormCoordinator,
     AudioStream,
     MediaProbe,
+    detect_silence_intervals,
+    probe_media,
     reconcile_chunks,
 )
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.models import (
+    DecodeDiagnostics,
     TranscriptSegment,
     TranscriptionOptions,
     TranscriptionResult,
 )
+
+
+
+def _pcm_wave(path, samples, sample_rate=16000):
+    with wave.open(str(path), "wb") as destination:
+        destination.setnchannels(1)
+        destination.setsampwidth(2)
+        destination.setframerate(sample_rate)
+        destination.writeframes(array("h", samples).tobytes())
+
+
+def test_native_pcm_wave_probe_silence_and_extraction_without_ffmpeg(tmp_path):
+    source = tmp_path / "source.wav"
+    _pcm_wave(source, [10000, -10000] * 4000 + [0] * 16000 + [10000, -10000] * 4000)
+
+    with patch("dubbing.transcription.adaptive.shutil.which", return_value=None), patch(
+        "dubbing.transcription.adaptive.ffmpeg_executable", return_value=None
+    ):
+        probe = probe_media(source)
+        silences = detect_silence_intervals(source)
+        output = tmp_path / "chunk.wav"
+        AdaptiveLongFormCoordinator._extract(
+            source,
+            probe.audio_streams[0],
+            AdaptiveChunk(0, 500, 1500, 500, 1500, "silence"),
+            output,
+        )
+
+    assert probe.duration_ms == 2000
+    assert probe.audio_streams[0].codec == "pcm_s16le"
+    assert silences == ((500, 1500),)
+    with wave.open(str(output), "rb") as extracted:
+        assert extracted.getnframes() == 16000
 
 
 class _RetryingBackend(TranscriptionBackend):
@@ -48,6 +86,115 @@ def test_planner_chooses_silence_near_target_and_bounds_chunks():
     assert [item.end_ms for item in chunks] == [110_000, 250_000, 400_000]
     assert all(item.end_ms - item.start_ms <= 180_000 for item in chunks)
     assert chunks[1].extract_start_ms == 108_000
+
+
+def test_planner_supports_utterance_scale_language_boundaries():
+    planner = AdaptiveChunkPlanner(
+        target_seconds=8, minimum_seconds=2, maximum_seconds=16, overlap_seconds=0.25
+    )
+    chunks = planner.plan(42_000, (7_000, 20_000, 28_000, 40_000))
+
+    assert [item.end_ms for item in chunks] == [7_000, 20_000, 28_000, 40_000, 42_000]
+    assert all(item.boundary_reason == "silence" for item in chunks[:-1])
+
+
+def test_planner_splits_multilingual_tail_near_target():
+    planner = AdaptiveChunkPlanner(
+        target_seconds=8, minimum_seconds=2, maximum_seconds=30, overlap_seconds=0.25
+    )
+    chunks = planner.plan(23_000, (10_000, 17_000))
+
+    assert [item.end_ms for item in chunks] == [10_000, 17_000, 23_000]
+    assert chunks[0].boundary_reason == "silence"
+    assert chunks[1].boundary_reason == "silence"
+
+
+def test_planner_prefers_long_inter_utterance_silence_over_nearby_short_pause():
+    planner = AdaptiveChunkPlanner(
+        target_seconds=8, minimum_seconds=2, maximum_seconds=30, overlap_seconds=0.25
+    )
+    intervals = (
+        (20_796, 21_358),
+        (22_600, 25_885),
+        (30_744, 32_571),
+    )
+    centres = tuple(round((start + end) / 2) for start, end in intervals)
+
+    chunks = planner.plan(
+        42_410,
+        centres,
+        silence_intervals=intervals,
+    )
+
+    assert chunks[0].end_ms == 24_242
+    assert chunks[0].extract_end_ms == 24_492
+    assert chunks[1].extract_start_ms == 23_992
+
+
+def test_planner_does_not_cross_a_second_long_silence():
+    planner = AdaptiveChunkPlanner(
+        target_seconds=8, minimum_seconds=2, maximum_seconds=30, overlap_seconds=0.25
+    )
+    intervals = (
+        (6_000, 8_000),
+        (13_000, 16_000),
+        (22_000, 24_000),
+    )
+    centres = tuple(round((start + end) / 2) for start, end in intervals)
+
+    chunks = planner.plan(
+        30_000,
+        centres,
+        silence_intervals=intervals,
+    )
+
+    assert [chunk.end_ms for chunk in chunks] == [7_000, 14_500, 23_000, 30_000]
+    assert all(chunk.boundary_reason == "long-silence" for chunk in chunks[:-1])
+
+
+def test_planner_treats_a_700ms_turn_pause_as_a_hard_boundary():
+    planner = AdaptiveChunkPlanner(
+        target_seconds=8, minimum_seconds=2, maximum_seconds=30, overlap_seconds=0.25
+    )
+    intervals = ((7_500, 8_300), (14_000, 14_600))
+    centres = tuple(round((start + end) / 2) for start, end in intervals)
+
+    chunks = planner.plan(
+        20_000,
+        centres,
+        silence_intervals=intervals,
+    )
+
+    assert chunks[0].end_ms == 7_900
+    assert chunks[0].boundary_reason == "long-silence"
+
+
+def test_nondefault_silence_policy_is_checkpoint_bound(tmp_path):
+    coordinator = AdaptiveLongFormCoordinator(
+        _RetryingBackend(), tmp_path, minimum_silence_seconds=0.5
+    )
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    probe = MediaProbe(10_000, 6, (AudioStream(0, "pcm", 1, 16_000),))
+    chunks = (AdaptiveChunk(0, 0, 10_000, 0, 10_000, "end-of-media"),)
+
+    manifest = coordinator._manifest(source, "0" * 64, probe, chunks)
+
+    assert manifest["silence_detection"]["minimum_silence_seconds"] == 0.5
+
+
+def test_language_retry_policy_is_checkpoint_bound(tmp_path):
+    coordinator = AdaptiveLongFormCoordinator(
+        _RetryingBackend(), tmp_path, language_retry_policy={"ko": "always"}
+    )
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    probe = MediaProbe(10_000, 6, (AudioStream(0, "pcm", 1, 16_000),))
+    chunks = (AdaptiveChunk(0, 0, 10_000, 0, 10_000, "end-of-media"),)
+
+    manifest = coordinator._manifest(source, "0" * 64, probe, chunks)
+
+    assert manifest["language_retry_policy"] == {"ko": "always"}
 
 
 def test_targeted_retry_spans_are_vad_bounded_between_20_and_60_seconds():
@@ -185,6 +332,59 @@ def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):
     assert backend.languages == [None, "ru"]
     assert result.segments[0].language == "ru"
     assert any(item.get("kind") == "turn-language-redecode" for item in receipt["attempts"])
+
+
+def test_detected_korean_chunk_uses_always_forced_retry(tmp_path):
+    class _KoreanBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:korean"
+
+        def transcribe(self, audio, options=None):
+            forced = options.language == "ko"
+            text = "강제 한국어" if forced else "자동 한국어"
+            return TranscriptionResult(
+                (
+                    TranscriptSegment(
+                        0,
+                        2000,
+                        text,
+                        language="ko",
+                        diagnostics=DecodeDiagnostics(
+                            avg_log_probability=-0.2 if forced else -0.1
+                        ),
+                    ),
+                ),
+                text,
+                "fixture",
+                "korean",
+                "test",
+                "ko",
+                2000,
+                False,
+            )
+
+    coordinator = AdaptiveLongFormCoordinator(
+        _KoreanBackend(),
+        tmp_path / "job",
+        language_retry_policy={"ko": "always"},
+    )
+    audio = tmp_path / "span.wav"
+    audio.write_bytes(b"span")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        AdaptiveChunk(0, 0, 2000, 0, 2000, "end-of-media"),
+        TranscriptionOptions(),
+    )
+
+    assert result.text == "강제 한국어"
+    retry = next(
+        item
+        for item in receipt["attempts"]
+        if item["kind"] == "detected-chunk-language-redecode"
+    )
+    assert retry["selected"] is True
 
 
 def test_unknown_latin_turn_stays_uncertain_instead_of_trying_every_language(tmp_path):

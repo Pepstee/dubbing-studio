@@ -15,6 +15,7 @@ from dubbing.transcription.models import (
     TranscriptionOptions,
     TranscriptionResult,
 )
+from dubbing.transcription.windows_cuda import configure_nvidia_dlls
 
 DEFAULT_FASTER_WHISPER_MODEL = "large-v3-turbo"
 
@@ -53,6 +54,8 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
         num_workers: int = 1,
         local_files_only: bool = False,
         model_revision: str | None = None,
+        multilingual: bool = True,
+        condition_on_previous_text: bool = False,
     ) -> None:
         if not model.strip():
             raise ValueError("model cannot be blank")
@@ -74,18 +77,33 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
         self.num_workers = num_workers
         self.local_files_only = local_files_only
         self.model_revision = model_revision
+        self.multilingual = multilingual
+        self.condition_on_previous_text = condition_on_previous_text
         self._model_instance = None
+        self._observed_model_sha256: str | None = None
+
+    def _model_sha256(self) -> str | None:
+        if self._observed_model_sha256 is not None:
+            return self._observed_model_sha256
+        model_bin = Path(self.model) / "model.bin"
+        if not model_bin.is_file():
+            return None
+        self._observed_model_sha256 = self._source_hash(model_bin)
+        return self._observed_model_sha256
 
     @property
     def identity(self) -> str:
+        model_fingerprint = self.model_revision or self._model_sha256() or "unversioned"
         return (
             f"faster-whisper:{self.model}:{self.device}:{self.compute_type}:"
             f"{self.temperature}:{self.cpu_threads}:{self.num_workers}:"
-            f"local={self.local_files_only}:revision={self.model_revision or 'unversioned'}"
+            f"local={self.local_files_only}:revision={model_fingerprint}:"
+            f"multilingual={self.multilingual}:condition_previous={self.condition_on_previous_text}"
         )
 
     @staticmethod
     def _dependency():
+        configure_nvidia_dlls()
         try:
             return importlib.import_module("faster_whisper")
         except ImportError as exc:
@@ -198,6 +216,8 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
             "task": options.task,
             "word_timestamps": options.word_timestamps,
             "temperature": self.temperature,
+            "multilingual": self.multilingual and options.language is None,
+            "condition_on_previous_text": self.condition_on_previous_text,
         }
         if options.language:
             kwargs["language"] = options.language
@@ -244,6 +264,9 @@ class FasterWhisperTranscriptionBackend(TranscriptionBackend):
                 "backend_identity": self.identity,
                 "persistent_model_instance": True,
                 "model_revision": self.model_revision,
+                "model_bin_sha256": self._model_sha256(),
                 "local_files_only": self.local_files_only,
+                "multilingual_segment_detection": kwargs["multilingual"],
+                "condition_on_previous_text": self.condition_on_previous_text,
             },
         )

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import wave
+from array import array
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -81,7 +84,9 @@ def probe_media(path: str | Path) -> MediaProbe:
     source = Path(path)
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
-        raise TranscriptionError("ffprobe is required for adaptive transcription")
+        if source.suffix.casefold() == ".wav":
+            return _probe_pcm_wave(source)
+        raise TranscriptionError("ffprobe is required for non-WAV adaptive transcription")
     try:
         process = subprocess.run(
             [
@@ -117,6 +122,25 @@ def probe_media(path: str | Path) -> MediaProbe:
     if duration_ms <= 0 or not streams:
         raise TranscriptionError("media must contain at least one positive-duration audio stream")
     return MediaProbe(duration_ms, size_bytes, streams)
+
+
+def _probe_pcm_wave(source: Path) -> MediaProbe:
+    try:
+        with wave.open(str(source), "rb") as audio:
+            if audio.getcomptype() != "NONE":
+                raise TranscriptionError("native WAV fallback requires uncompressed PCM")
+            duration_ms = round(audio.getnframes() * 1000 / audio.getframerate())
+            stream = AudioStream(
+                index=0,
+                codec=f"pcm_s{audio.getsampwidth() * 8}le",
+                channels=audio.getnchannels(),
+                sample_rate_hz=audio.getframerate(),
+            )
+    except (EOFError, wave.Error) as error:
+        raise TranscriptionError(f"could not probe WAV media: {source.name}") from error
+    if duration_ms <= 0:
+        raise TranscriptionError("media must have positive duration")
+    return MediaProbe(duration_ms, source.stat().st_size, (stream,))
 
 
 def detect_silence_centres(
@@ -159,7 +183,14 @@ def _detect_silence_seconds(
 ) -> tuple[tuple[float, float], ...]:
     ffmpeg = ffmpeg_executable()
     if ffmpeg is None:
-        raise TranscriptionError("ffmpeg is required for silence-aware chunking")
+        source = Path(path)
+        if source.suffix.casefold() == ".wav":
+            return _detect_pcm_wave_silence(
+                source,
+                minimum_silence_seconds=minimum_silence_seconds,
+                noise_db=noise_db,
+            )
+        raise TranscriptionError("ffmpeg is required for non-WAV silence-aware chunking")
     process = subprocess.run(
         [
             ffmpeg,
@@ -182,6 +213,58 @@ def _detect_silence_seconds(
     return tuple((start, end) for start, end in zip(starts, ends) if end > start)
 
 
+def _detect_pcm_wave_silence(
+    source: Path,
+    *,
+    minimum_silence_seconds: float,
+    noise_db: float,
+) -> tuple[tuple[float, float], ...]:
+    with wave.open(str(source), "rb") as audio:
+        if audio.getcomptype() != "NONE" or audio.getsampwidth() != 2:
+            raise TranscriptionError("native silence detection requires 16-bit PCM WAV")
+        sample_rate = audio.getframerate()
+        channels = audio.getnchannels()
+        samples = array("h")
+        samples.frombytes(audio.readframes(audio.getnframes()))
+    window_frames = max(1, round(sample_rate * 0.01))
+    threshold = 32767 * 10 ** (noise_db / 20)
+    minimum_windows = max(1, math.ceil(minimum_silence_seconds / 0.01))
+    intervals = []
+    silence_start: int | None = None
+    frame_count = len(samples) // channels
+    for window_start in range(0, frame_count, window_frames):
+        sample_start = window_start * channels
+        sample_end = min(frame_count, window_start + window_frames) * channels
+        silent = max((abs(value) for value in samples[sample_start:sample_end]), default=0) <= threshold
+        if silent and silence_start is None:
+            silence_start = window_start
+        if not silent and silence_start is not None:
+            windows = (window_start - silence_start) / window_frames
+            if windows >= minimum_windows:
+                intervals.append((silence_start / sample_rate, window_start / sample_rate))
+            silence_start = None
+    if silence_start is not None:
+        windows = (frame_count - silence_start) / window_frames
+        if windows >= minimum_windows:
+            intervals.append((silence_start / sample_rate, frame_count / sample_rate))
+    return tuple(intervals)
+
+
+def _extract_pcm_wave(source: Path, start_ms: int, end_ms: int, output: Path) -> None:
+    with wave.open(str(source), "rb") as audio:
+        if audio.getcomptype() != "NONE":
+            raise TranscriptionError("native WAV extraction requires uncompressed PCM")
+        sample_rate = audio.getframerate()
+        start_frame = round(start_ms * sample_rate / 1000)
+        end_frame = round(end_ms * sample_rate / 1000)
+        audio.setpos(min(start_frame, audio.getnframes()))
+        content = audio.readframes(max(0, end_frame - start_frame))
+        parameters = audio.getparams()
+    with wave.open(str(output), "wb") as destination:
+        destination.setparams(parameters)
+        destination.writeframes(content)
+
+
 class AdaptiveChunkPlanner:
     def __init__(
         self,
@@ -190,32 +273,69 @@ class AdaptiveChunkPlanner:
         minimum_seconds: int = 60,
         maximum_seconds: int = 480,
         overlap_seconds: float = 2.0,
+        hard_boundary_silence_seconds: float = 0.7,
     ) -> None:
-        if not 30 <= minimum_seconds <= target_seconds <= maximum_seconds <= 1800:
-            raise ValueError("chunk bounds must satisfy 30 <= minimum <= target <= maximum <= 1800")
+        if not 1 <= minimum_seconds <= target_seconds <= maximum_seconds <= 1800:
+            raise ValueError("chunk bounds must satisfy 1 <= minimum <= target <= maximum <= 1800")
         if overlap_seconds < 0 or overlap_seconds >= minimum_seconds / 2:
             raise ValueError("invalid overlap_seconds")
+        if hard_boundary_silence_seconds <= 0:
+            raise ValueError("hard_boundary_silence_seconds must be positive")
         self.target_ms = target_seconds * 1000
         self.minimum_ms = minimum_seconds * 1000
         self.maximum_ms = maximum_seconds * 1000
         self.overlap_ms = round(overlap_seconds * 1000)
+        self.hard_boundary_silence_ms = round(hard_boundary_silence_seconds * 1000)
 
-    def plan(self, duration_ms: int, silence_centres: tuple[int, ...]) -> tuple[AdaptiveChunk, ...]:
+    def plan(
+        self,
+        duration_ms: int,
+        silence_centres: tuple[int, ...],
+        *,
+        silence_intervals: tuple[tuple[int, int], ...] = (),
+    ) -> tuple[AdaptiveChunk, ...]:
         boundaries = [0]
         cursor = 0
         silences = sorted(point for point in silence_centres if 0 < point < duration_ms)
+        silence_durations = {
+            round((start_ms + end_ms) / 2): end_ms - start_ms
+            for start_ms, end_ms in silence_intervals
+            if 0 <= start_ms < end_ms <= duration_ms
+        }
         reasons: list[str] = []
-        while duration_ms - cursor > self.maximum_ms:
+        while duration_ms - cursor > self.target_ms + self.minimum_ms:
+            remaining = duration_ms - cursor
             minimum = cursor + self.minimum_ms
-            maximum = min(duration_ms, cursor + self.maximum_ms)
+            maximum = min(
+                cursor + self.maximum_ms,
+                duration_ms - self.minimum_ms,
+            )
             target = cursor + self.target_ms
             candidates = [point for point in silences if minimum <= point <= maximum]
             if candidates:
-                boundary = min(candidates, key=lambda point: (abs(point - target), point))
-                reason = "silence"
-            else:
-                boundary = maximum
+                hard_boundaries = [
+                    point
+                    for point in candidates
+                    if silence_durations.get(point, 0) >= self.hard_boundary_silence_ms
+                ]
+                if hard_boundaries:
+                    boundary = min(hard_boundaries)
+                    reason = "long-silence"
+                else:
+                    boundary = min(
+                        candidates,
+                        key=lambda point: (
+                            -silence_durations.get(point, 0),
+                            abs(point - target),
+                            point,
+                        ),
+                    )
+                    reason = "silence"
+            elif remaining > self.maximum_ms:
+                boundary = cursor + self.maximum_ms
                 reason = "maximum-duration"
+            else:
+                break
             boundaries.append(boundary)
             reasons.append(reason)
             cursor = boundary
@@ -241,6 +361,8 @@ class AdaptiveChunkPlanner:
             "minimum_ms": self.minimum_ms,
             "maximum_ms": self.maximum_ms,
             "overlap_ms": self.overlap_ms,
+            "hard_boundary_silence_ms": self.hard_boundary_silence_ms,
+            "boundary_selection": "earliest-hard-silence-else-longest-v1",
         }
 
 
@@ -289,18 +411,32 @@ class AdaptiveLongFormCoordinator:
         planner: AdaptiveChunkPlanner | None = None,
         retry_backend: TranscriptionBackend | None = None,
         candidate_languages: tuple[str, ...] = ("en", "ru", "ro", "ko"),
+        minimum_silence_seconds: float = 0.7,
+        language_retry_policy: dict[str, str] | None = None,
     ) -> None:
+        if minimum_silence_seconds <= 0:
+            raise ValueError("minimum_silence_seconds must be positive")
+        retry_policy = language_retry_policy or {}
+        if any(mode not in {"always", "confidence"} for mode in retry_policy.values()):
+            raise ValueError("language retry policy must use always or confidence")
         self.backend = backend
         self.retry_backend = retry_backend
         self.checkpoint_dir = Path(checkpoint_dir)
         self.planner = planner or AdaptiveChunkPlanner()
         self.candidate_languages = candidate_languages
+        self.minimum_silence_seconds = minimum_silence_seconds
+        self.language_retry_policy = dict(sorted(retry_policy.items()))
 
     @staticmethod
     def _extract(source: Path, stream: AudioStream, chunk: AdaptiveChunk, output: Path) -> None:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
-            raise TranscriptionError("ffmpeg is required for adaptive transcription")
+            if source.suffix.casefold() == ".wav":
+                _extract_pcm_wave(
+                    source, chunk.extract_start_ms, chunk.extract_end_ms, output
+                )
+                return
+            raise TranscriptionError("ffmpeg is required for non-WAV adaptive transcription")
         process = subprocess.run(
             [
                 ffmpeg,
@@ -334,9 +470,9 @@ class AdaptiveLongFormCoordinator:
             raise TranscriptionError(f"chunk extraction failed: {process.stderr.strip()}")
 
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
-        return {
+        manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v4",
+            "coordinator_version": "adaptive-long-form-v5",
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
@@ -353,6 +489,13 @@ class AdaptiveLongFormCoordinator:
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
         }
+        if self.minimum_silence_seconds != 0.7:
+            manifest["silence_detection"] = {
+                "minimum_silence_seconds": self.minimum_silence_seconds
+            }
+        if self.language_retry_policy:
+            manifest["language_retry_policy"] = self.language_retry_policy
+        return manifest
 
     def _admit_manifest(self, expected: dict) -> None:
         path = self.checkpoint_dir / "manifest.json"
@@ -605,7 +748,9 @@ class AdaptiveLongFormCoordinator:
         attempts: list[dict],
     ) -> tuple[TranscriptionResult, TranscriptQualityReport]:
         duration_ms = expected_duration_ms
-        silence_centres = detect_silence_centres(audio)
+        silence_centres = detect_silence_centres(
+            audio, minimum_silence_seconds=self.minimum_silence_seconds
+        )
         repaired = result
         report = quality
         for round_index in range(2):
@@ -669,6 +814,9 @@ class AdaptiveLongFormCoordinator:
         attempts: list[dict] = []
         duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
+        result = self._retry_detected_chunk_language(
+            audio, result, options, duration_ms, attempts
+        )
         result = self._resolve_uncertain_turns(
             audio,
             result,
@@ -705,6 +853,63 @@ class AdaptiveLongFormCoordinator:
         }
 
     @staticmethod
+    def _average_log_probability(result: TranscriptionResult) -> float | None:
+        values = [
+            segment.diagnostics.avg_log_probability
+            for segment in result.segments
+            if segment.diagnostics
+            and segment.diagnostics.avg_log_probability is not None
+        ]
+        return sum(values) / len(values) if values else None
+
+    def _retry_detected_chunk_language(
+        self,
+        audio: Path,
+        automatic: TranscriptionResult,
+        options: TranscriptionOptions,
+        duration_ms: int,
+        attempts: list[dict],
+    ) -> TranscriptionResult:
+        if options.language is not None:
+            return automatic
+        language = automatic.language
+        mode = self.language_retry_policy.get(language or "")
+        if not mode:
+            return automatic
+        forced = annotate_transcript_languages(
+            self.backend.transcribe(audio, replace(options, language=language))
+        )
+        forced_quality = evaluate_transcript_quality(
+            forced, expected_duration_ms=duration_ms
+        )
+        automatic_score = self._average_log_probability(automatic)
+        forced_score = self._average_log_probability(forced)
+        eligible = forced_quality.status not in {
+            TranscriptQualityStatus.FAILED,
+            TranscriptQualityStatus.REPROCESS_REQUIRED,
+        }
+        selected = eligible and (
+            mode == "always"
+            or (
+                forced_score is not None
+                and automatic_score is not None
+                and forced_score > automatic_score
+            )
+        )
+        attempts.append(
+            {
+                "kind": "detected-chunk-language-redecode",
+                "language": language,
+                "mode": mode,
+                "automatic_avg_log_probability": automatic_score,
+                "forced_avg_log_probability": forced_score,
+                "forced_quality": forced_quality.to_dict(),
+                "selected": selected,
+            }
+        )
+        return forced if selected else automatic
+
+    @staticmethod
     def _extract_language_span(
         source: Path,
         segment: TranscriptSegment,
@@ -712,7 +917,10 @@ class AdaptiveLongFormCoordinator:
     ) -> None:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
-            raise TranscriptionError("ffmpeg is required for turn-level language retry")
+            if source.suffix.casefold() == ".wav":
+                _extract_pcm_wave(source, segment.start_ms, segment.end_ms, destination)
+                return
+            raise TranscriptionError("ffmpeg is required for non-WAV language retry")
         process = subprocess.run(
             [
                 ffmpeg,
@@ -869,8 +1077,18 @@ class AdaptiveLongFormCoordinator:
         options = options or TranscriptionOptions()
         digest = source_sha256(source)
         probe = probe_media(source)
-        silence_centres = detect_silence_centres(source)
-        chunks = self.planner.plan(probe.duration_ms, silence_centres)
+        silence_intervals = detect_silence_intervals(
+            source, minimum_silence_seconds=self.minimum_silence_seconds
+        )
+        silence_centres = tuple(
+            round((start_ms + end_ms) / 2)
+            for start_ms, end_ms in silence_intervals
+        )
+        chunks = self.planner.plan(
+            probe.duration_ms,
+            silence_centres,
+            silence_intervals=silence_intervals,
+        )
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._admit_manifest(self._manifest(source, digest, probe, chunks))
         stream = probe.audio_streams[0]
@@ -918,7 +1136,7 @@ class AdaptiveLongFormCoordinator:
             confidence_available=any(item.confidence is not None for item in segments),
             source_sha256=digest,
             provenance={
-                "coordinator": "adaptive-long-form-v4",
+                "coordinator": "adaptive-long-form-v5",
                 "chunk_count": len(chunks),
                 "audio_stream": stream.to_dict(),
             },
@@ -928,7 +1146,7 @@ class AdaptiveLongFormCoordinator:
             quality = evaluate_transcript_quality(
                 result,
                 expected_duration_ms=probe.duration_ms,
-                known_silence_intervals=detect_silence_intervals(source),
+                known_silence_intervals=silence_intervals,
             )
         _atomic_json(self.checkpoint_dir / "result.json", result.to_dict())
         _atomic_json(self.checkpoint_dir / "quality-report.json", quality.to_dict())

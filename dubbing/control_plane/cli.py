@@ -15,7 +15,7 @@ from dubbing.transcription import (
 from dubbing.transcription.adaptive import (
     AdaptiveChunkPlanner,
     AdaptiveLongFormCoordinator,
-    detect_silence_centres,
+    detect_silence_intervals,
     probe_media,
 )
 from dubbing.transcription.whisperkit import (
@@ -47,7 +47,12 @@ def _backend(args: argparse.Namespace):
             options["temperature"] = tuple(args.mlx_temperature)
         return MLXWhisperTranscriptionBackend(**options)
     if args.backend == "faster-whisper":
-        return FasterWhisperTranscriptionBackend(model=args.model or "large-v3-turbo")
+        return FasterWhisperTranscriptionBackend(
+            model=args.model or "large-v3-turbo",
+            device=args.device,
+            compute_type=args.compute_type,
+            local_files_only=args.local_files_only,
+        )
     models = discover_whisperkit_models()
     model_path = Path(args.model_path).resolve() if args.model_path else (models[0] if models else None)
     if model_path is None:
@@ -88,12 +93,23 @@ def main() -> None:
         default="whisperkit",
     )
     parser.add_argument("--model")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--compute-type", default="default")
+    parser.add_argument("--local-files-only", action="store_true")
     parser.add_argument("--model-path")
     parser.add_argument("--language")
     parser.add_argument("--target-seconds", type=int, default=240)
     parser.add_argument("--minimum-seconds", type=int, default=60)
     parser.add_argument("--maximum-seconds", type=int, default=480)
     parser.add_argument("--overlap-seconds", type=float, default=2.0)
+    parser.add_argument("--minimum-silence-seconds", type=float, default=0.7)
+    parser.add_argument(
+        "--language-retry-policy",
+        action="append",
+        default=[],
+        metavar="LANG=MODE",
+        help="Reference-independent detected-language retry; MODE is always or confidence.",
+    )
     parser.add_argument("--start-server", action="store_true")
     parser.add_argument("--server-url")
     parser.add_argument("--port", type=int, default=50060)
@@ -109,6 +125,14 @@ def main() -> None:
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    language_retry_policy = {}
+    for value in args.language_retry_policy:
+        if "=" not in value:
+            raise SystemExit("--language-retry-policy must use LANG=MODE")
+        language, mode = value.split("=", 1)
+        if language in language_retry_policy:
+            raise SystemExit(f"duplicate language retry policy: {language}")
+        language_retry_policy[language] = mode
 
     source = Path(args.media).resolve()
     output = Path(args.output).resolve()
@@ -120,13 +144,26 @@ def main() -> None:
     )
     if args.dry_run:
         probe = probe_media(source)
-        silences = detect_silence_centres(source)
+        silence_intervals = detect_silence_intervals(
+            source, minimum_silence_seconds=args.minimum_silence_seconds
+        )
+        silence_centres = tuple(
+            round((start_ms + end_ms) / 2)
+            for start_ms, end_ms in silence_intervals
+        )
         document = {
             "schema_version": "dubbing.adaptive-plan-preview.v1",
             "source": source.name,
             "probe": probe.to_dict(),
             "planner": planner.to_dict(),
-            "chunks": [item.to_dict() for item in planner.plan(probe.duration_ms, silences)],
+            "chunks": [
+                item.to_dict()
+                for item in planner.plan(
+                    probe.duration_ms,
+                    silence_centres,
+                    silence_intervals=silence_intervals,
+                )
+            ],
         }
         output.mkdir(parents=True, exist_ok=True)
         (output / "plan-preview.json").write_text(
@@ -136,7 +173,13 @@ def main() -> None:
         return
 
     backend = _backend(args)
-    coordinator = AdaptiveLongFormCoordinator(backend, output, planner=planner)
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        output,
+        planner=planner,
+        minimum_silence_seconds=args.minimum_silence_seconds,
+        language_retry_policy=language_retry_policy,
+    )
     started = time.monotonic()
     result, quality = coordinator.run(
         source,

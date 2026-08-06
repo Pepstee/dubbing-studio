@@ -91,6 +91,8 @@ def test_parses_words_and_forwards_gpu_configuration(tmp_path):
     )
     assert _Model.call[1]["language"] == "en"
     assert _Model.call[1]["initial_prompt"] == "Names: Artiom."
+    assert _Model.call[1]["multilingual"] is False
+    assert _Model.call[1]["condition_on_previous_text"] is False
     assert result.text == "Hello world"
     assert result.segments[0].words[1].end_ms == 1400
     assert result.duration_ms == 1500
@@ -98,6 +100,22 @@ def test_parses_words_and_forwards_gpu_configuration(tmp_path):
     assert result.confidence_available is True
     assert result.segments[0].diagnostics.compression_ratio == 1.1
     assert result.provenance["persistent_model_instance"]
+
+
+def test_enables_segment_level_language_detection_for_auto_language(tmp_path):
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"audio")
+    backend = FasterWhisperTranscriptionBackend("fixture")
+
+    with patch(
+        "dubbing.transcription.faster_whisper.importlib.import_module",
+        return_value=_FasterWhisper(),
+    ):
+        result = backend.transcribe(audio)
+
+    assert _Model.call[1]["multilingual"] is True
+    assert _Model.call[1]["condition_on_previous_text"] is False
+    assert result.provenance["multilingual_segment_detection"] is True
 
 
 def test_model_is_loaded_only_once(tmp_path):
@@ -122,6 +140,19 @@ def test_identity_includes_temperature_and_offline_policy():
 
     assert "0.25" in backend.identity
     assert "local=True" in backend.identity
+    assert "multilingual=True" in backend.identity
+
+
+def test_local_model_identity_binds_model_binary_sha256(tmp_path):
+    model = tmp_path / "model"
+    model.mkdir()
+    (model / "model.bin").write_bytes(b"model-weights")
+    backend = FasterWhisperTranscriptionBackend(str(model), local_files_only=True)
+
+    assert (
+        "revision=8e8ee3e16a9924b12f0fdef1212bf0355eb9cbea442da2479e60e2fd154240df"
+        in backend.identity
+    )
 
 
 @pytest.mark.parametrize(

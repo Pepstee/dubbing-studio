@@ -7,10 +7,7 @@ import os
 import time
 from pathlib import Path
 
-try:
-    from run_faster_whisper_gpu import configure_nvidia_dlls
-except ModuleNotFoundError:  # Imported as scripts.run_faster_whisper_language_sweep in tests.
-    from scripts.run_faster_whisper_gpu import configure_nvidia_dlls
+from dubbing.transcription.windows_cuda import configure_nvidia_dlls
 
 
 def sha256(path: Path) -> str:
