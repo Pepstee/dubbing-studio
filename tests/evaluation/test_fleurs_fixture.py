@@ -89,6 +89,13 @@ def test_build_fleurs_fixture_rejects_unknown_split(tmp_path):
         )
 
 
+def test_build_fleurs_fixture_rejects_negative_source_offset(tmp_path):
+    with pytest.raises(ValueError, match="source_offset"):
+        build_fleurs_fixture(
+            tmp_path / "clips", tmp_path / "fixture.json", source_offset=-1
+        )
+
+
 def test_build_fleurs_fixture_streams_bounded_archive_prefix(tmp_path):
     audio = _wav_bytes()
     archive_bytes = io.BytesIO()
@@ -122,3 +129,43 @@ def test_build_fleurs_fixture_streams_bounded_archive_prefix(tmp_path):
     assert fixture["selection_policy"]["source_mode"] == "tar_stream"
     assert all(span["dataset_row_id"] == 1 for span in fixture["spans"])
     assert all(span["clip_relative_path"].endswith("000000-1.wav") for span in fixture["spans"])
+
+
+def test_build_fleurs_fixture_streams_bounded_archive_offset(tmp_path):
+    audio = _wav_bytes()
+    archive_bytes = io.BytesIO()
+    with tarfile.open(fileobj=archive_bytes, mode="w:gz") as archive:
+        for filename in ("100.wav", "200.wav", "300.wav"):
+            info = tarfile.TarInfo(f"test/{filename}")
+            info.size = len(audio)
+            archive.addfile(info, io.BytesIO(audio))
+    tsv = (
+        "1\t100.wav\tRaw one.\traw one\tr a w | o n e |\t1600\tFEMALE\n"
+        "2\t200.wav\tRaw two.\traw two\tr a w | t w o |\t1600\tMALE\n"
+        "3\t300.wav\tRaw three.\traw three\tr a w | t h r e e |\t1600\tFEMALE\n"
+    ).encode()
+
+    def get(url: str) -> bytes:
+        if url == DATASET_API:
+            return json.dumps(
+                {"sha": REVISION, "cardData": {"license": ["cc-by-4.0"]}}
+            ).encode()
+        if url.endswith(".tsv"):
+            return tsv
+        raise AssertionError(url)
+
+    fixture = build_fleurs_fixture(
+        tmp_path / "clips",
+        tmp_path / "fixture.json",
+        samples_per_language=1,
+        split="test",
+        source_mode="tar_stream",
+        source_offset=1,
+        http_get=get,
+        http_open=lambda _: io.BytesIO(archive_bytes.getvalue()),
+    )
+
+    assert fixture["selection_policy"]["source_offset"] == 1
+    assert "offset1" in fixture["fixture_id"]
+    assert all(span["dataset_row_id"] == 2 for span in fixture["spans"])
+    assert all(span["clip_relative_path"].endswith("000001-2.wav") for span in fixture["spans"])

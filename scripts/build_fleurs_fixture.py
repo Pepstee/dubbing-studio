@@ -50,6 +50,7 @@ def _stream_archive_rows(
     config: str,
     split: str,
     count: int,
+    offset: int,
     *,
     http_get: Callable[[str], bytes],
     http_open: Callable,
@@ -76,11 +77,16 @@ def _stream_archive_rows(
         }
 
     selected = []
+    wav_index = 0
     with http_open(archive_url) as response:
         with tarfile.open(fileobj=response, mode="r|gz") as archive:
             for member in archive:
                 if not member.isfile() or not member.name.lower().endswith(".wav"):
                     continue
+                if wav_index < offset:
+                    wav_index += 1
+                    continue
+                wav_index += 1
                 filename = Path(member.name).name
                 if filename not in metadata:
                     raise RuntimeError(f"archive member missing from TSV: {config}:{filename}")
@@ -124,6 +130,7 @@ def build_fleurs_fixture(
     samples_per_language: int = 10,
     split: str = DEFAULT_SPLIT,
     source_mode: str = "rows_api",
+    source_offset: int = 0,
     http_get: Callable[[str], bytes] = _http_get,
     http_open: Callable = _http_open,
 ) -> dict:
@@ -133,6 +140,8 @@ def build_fleurs_fixture(
         raise ValueError(f"split must be one of {sorted(ALLOWED_SPLITS)}")
     if source_mode not in ALLOWED_SOURCE_MODES:
         raise ValueError(f"source_mode must be one of {sorted(ALLOWED_SOURCE_MODES)}")
+    if source_offset < 0:
+        raise ValueError("source_offset cannot be negative")
     metadata_bytes = http_get(DATASET_API)
     metadata = json.loads(metadata_bytes)
     if metadata.get("sha") != REVISION:
@@ -157,7 +166,7 @@ def build_fleurs_fixture(
                     "dataset": DATASET,
                     "config": config,
                     "split": split,
-                    "offset": 0,
+                    "offset": source_offset,
                     "length": samples_per_language,
                 }
             )
@@ -168,6 +177,7 @@ def build_fleurs_fixture(
                 config,
                 split,
                 samples_per_language,
+                source_offset,
                 http_get=http_get,
                 http_open=http_open,
             )
@@ -264,7 +274,12 @@ def build_fleurs_fixture(
     )
     fixture = {
         "schema_version": "dubbing.fleurs-ground-truth.v1",
-        "fixture_id": f"fleurs-{split}-{samples_per_language}x4-{REVISION[:12]}",
+        "fixture_id": (
+            f"fleurs-{split}-{samples_per_language}x4-{REVISION[:12]}"
+            if source_offset == 0
+            else f"fleurs-{split}-offset{source_offset}-{samples_per_language}x4-"
+            f"{REVISION[:12]}"
+        ),
         "source": {
             "kind": "dataset_slice",
             "dataset": DATASET,
@@ -287,9 +302,19 @@ def build_fleurs_fixture(
         "selection_policy": {
             "policy_version": "dubbing.fleurs-split-prefix.v1",
             "strategy": (
-                f"first N {split} rows from each pinned language configuration"
+                (
+                    f"first N {split} rows from each pinned language configuration"
+                    if source_offset == 0
+                    else f"N {split} rows starting at offset {source_offset} from each "
+                    "pinned language configuration"
+                )
                 if source_mode == "rows_api"
-                else f"first N WAV members from each pinned {split} archive"
+                else (
+                    f"first N WAV members from each pinned {split} archive"
+                    if source_offset == 0
+                    else f"N WAV members starting at offset {source_offset} from each "
+                    f"pinned {split} archive"
+                )
             ),
             "source_mode": source_mode,
             "source_order": (
@@ -297,6 +322,7 @@ def build_fleurs_fixture(
                 if source_mode == "rows_api"
                 else "first N WAV members in pinned tar archive order, joined to pinned TSV"
             ),
+            **({"source_offset": source_offset} if source_offset else {}),
             "samples_per_language": samples_per_language,
             "reference_text_is_human_ground_truth": True,
             "reference_timestamps_are_human_ground_truth": True,
@@ -330,6 +356,7 @@ def main() -> None:
     parser.add_argument("--samples-per-language", type=int, default=10)
     parser.add_argument("--split", choices=sorted(ALLOWED_SPLITS), default=DEFAULT_SPLIT)
     parser.add_argument("--source-mode", choices=sorted(ALLOWED_SOURCE_MODES), default="rows_api")
+    parser.add_argument("--source-offset", type=int, default=0)
     args = parser.parse_args()
     fixture = build_fleurs_fixture(
         args.output_dir,
@@ -337,6 +364,7 @@ def main() -> None:
         samples_per_language=args.samples_per_language,
         split=args.split,
         source_mode=args.source_mode,
+        source_offset=args.source_offset,
     )
     print(
         json.dumps(

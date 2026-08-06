@@ -1,0 +1,6 @@
+# Optional, separately authorized Korean spacing stage for Gigabyte Python 3.12.
+# Install with: python -m pip install --no-deps --require-hashes -r requirements/kiwi-spacing-windows.txt
+kiwipiepy==0.23.2 \
+    --hash=sha256:2ee49d007b55955ffe4d91d56c9adaae6f358f8c6d5c281efbdf8162ecbad3e2
+kiwipiepy_model==0.23.0 \
+    --hash=sha256:498a22f5585e6c4a162423d7557eb3ee3f71cddc6e0aeb2650c50467e85933e2
