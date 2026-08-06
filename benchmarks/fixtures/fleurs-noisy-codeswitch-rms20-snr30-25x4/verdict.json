@@ -1,0 +1,70 @@
+{
+  "schema_version": "dubbing.noisy-codeswitch-development-verdict.v1",
+  "verdict": "FAIL_CLOSED",
+  "scope": "DEVELOPMENT_ONLY",
+  "fixture": {
+    "manifest_sha256": "f84be70dd9b2e2d5f28f2bcf5e0fae34cdecb15711cef33c67e77964c2407a4d",
+    "derivation_builder_sha256": "93f14205120503354dae02774370b10635d7d2068481836390db29a308329858",
+    "source_sha256": "d93f6084a555464cb77ecbc29911536e9495592c17b747d611e32e458e9bf647",
+    "duration_ms": 1151940,
+    "snr_db": 30,
+    "languages": ["en", "ru", "ro", "ko"],
+    "utterances_per_language": 25,
+    "human_ground_truth_text": true,
+    "exact_derived_timestamps": true,
+    "natural_conversation": false
+  },
+  "selected_candidate": {
+    "report_path": "benchmarks/fixtures/fleurs-noisy-codeswitch-rms20-snr30-25x4/multilingual-v5-report.json",
+    "report_sha256": "78738e28a4224db735b04c09f1990ab46f8dcdaceba7b83bd0915f341b762145",
+    "runtime_seconds": 117.672,
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "compute_type": "int8_float16",
+    "segment_level_multilingual_detection": true,
+    "condition_on_previous_text": false
+  },
+  "metrics": {
+    "aggregate_word_accuracy": 0.9089506172839507,
+    "aggregate_wer": 0.09104938271604938,
+    "aggregate_cer": 0.03994431355750696,
+    "per_language_word_accuracy": {
+      "en": 0.9520958083832335,
+      "ru": 0.9362637362637363,
+      "ro": 0.8773747841105354,
+      "ko": 0.8704156479217604
+    }
+  },
+  "negative_controls": [
+    {
+      "name": "target-proximity chunking",
+      "report_sha256": "2fe8a74ce8630133a84d378f28b7a4b2c3f95385a71acd17c230088d71b45a97",
+      "aggregate_word_accuracy": 0.9058641975308642,
+      "failure": "A mixed Korean-English chunk dropped a complete English utterance."
+    },
+    {
+      "name": "1.5-second hard-silence chunking",
+      "report_sha256": "4ba22892682e3ab38e9315e1df69e96ce68993efbc91ce7939fc59a6d23c1871",
+      "aggregate_word_accuracy": 0.7263374485596708,
+      "failure": "Shorter genuine language-turn gaps were crossed, causing widespread omissions."
+    },
+    {
+      "name": "float16 compute",
+      "report_sha256": "34eee98f74a33137e38d9da5595dc0a89581e30aff1c5d101fb853891faa0933",
+      "aggregate_word_accuracy": 0.9089506172839507,
+      "romanian_word_accuracy": 0.8860103626943006,
+      "korean_word_accuracy": 0.8557457212713937,
+      "failure": "Romanian improved but Korean regressed; the reference-only cross-precision oracle still failed both languages."
+    }
+  ],
+  "gates": {
+    "quality_contract_passed": true,
+    "aggregate_accuracy_at_least_90_percent": true,
+    "every_language_accuracy_at_least_90_percent": false,
+    "accuracy_certification_eligible": false,
+    "production_scope_certified": false,
+    "giga_admission_emitted": false
+  },
+  "failure_reason": "Romanian reached 87.74% and Korean 87.04%; the derived fixture remains below the immutable per-language gate.",
+  "limitation": "The fixture is a deterministic concatenation of read-speech utterances with synthetic uniform noise. It does not certify natural conversation, overlap, diarization, or production audio."
+}

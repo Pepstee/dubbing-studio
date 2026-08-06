@@ -138,6 +138,46 @@ Strict word-midpoint scoring produced only 24.2% because the inherited segment t
 not match the corrected text extent. Whole-clip scoring can count neighbouring speech as
 errors. Both policies are retained and labelled; neither can be used for certification.
 
+## Derived noisy code-switch development evidence
+
+A deterministic 19.2-minute fixture now interleaves 25 complete FLEURS utterances per
+language at exact sample-derived boundaries. Every source clip and generated WAV is
+SHA-256-bound. Speech is normalized to -20 dBFS before deterministic uniform noise is
+added. The inherited FLEURS text remains human ground truth, but this is still synthetic
+read speech: it is explicitly ineligible for accuracy certification, production scope, or
+GIGA admission.
+
+At 20 dB SNR, the corrected adaptive tail planner reached 90.43% aggregate accuracy in
+117.34 seconds, but Romanian reached only 85.32% and Korean 89.24%. Forced Romanian and
+Korean re-decodes returned identical text, so they were rejected as no-op controls.
+
+At the predeclared 30 dB SNR point, the original target-proximity planner reached 90.59%
+aggregate but dropped a complete English utterance after Korean overlap contaminated the
+start of its chunk. A 1.5-second hard-silence policy was also rejected after collapsing to
+72.63%: real language-turn gaps were often only 0.75–1.35 seconds. The corrected 0.7-second
+turn policy isolates those transitions and reached the following result:
+
+| Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| English | 501 | 24 | 4.79% | 95.21% | 2.60% | PASS |
+| Russian | 455 | 29 | 6.37% | 93.63% | 1.43% | PASS |
+| Romanian | 579 | 71 | 12.26% | 87.74% | 5.16% | **FAIL** |
+| Korean | 409 | 53 | 12.96% | 87.04% | 8.85% | **FAIL** |
+| **Aggregate** | **1,944** | **177** | **9.10%** | **90.90%** | **3.99%** | **FAIL: per-language gate** |
+
+Segment-level Faster-Whisper multilingual detection produced the same metrics on this
+turn-isolated fixture. It remains enabled because it makes language decisions at decoder
+segment level when a real chunk contains multiple languages; it is not credited as an
+accuracy improvement here. Disabling previous-text conditioning prevents language leakage
+across decoder windows. INT8/FP16 comparison also failed to provide a deployable selector:
+FP16 improved Romanian to 88.60% but reduced Korean to 85.57%, and a reference-only
+cross-precision oracle still reached only 89.12% Romanian and 87.78% Korean.
+
+The structural quality contract passed every selected run, with no repetition, exhausted
+fallbacks, timestamp disorder, or uncertainty. That does not override semantic WER. Exact
+development verdicts are stored beside the SNR-20 and SNR-30 manifests; both say
+`FAIL_CLOSED`, `production_scope_certified=false`, and `giga_admission_emitted=false`.
+
 ## Next gates
 
 1. Evaluate a deterministic Korean spacing stage on validation only. It must preserve every
@@ -146,9 +186,9 @@ errors. Both policies are retained and labelled; neither can be used for certifi
    authorization before live evaluation.
 2. If and only if that validation experiment passes, freeze it before selecting a different,
    untouched test slice. Never re-score the exposed holdout as promotion evidence.
-3. Build or acquire a timestamp-exact, human-ground-truth noisy conversational/code-switched
-   fixture after the clean per-language capacity gate passes. Clean FLEURS speech is not a
-   production proxy.
+3. Build or acquire a timestamp-exact, human-ground-truth natural noisy
+   conversational/code-switched fixture. The derived noisy fixture is useful development
+   evidence but is not a production proxy.
 4. Promote only a reference-independent selector. Oracle and declared-reference-language
    selection remain diagnostic upper bounds.
 5. Keep cloud disabled and GIGA admission false.
