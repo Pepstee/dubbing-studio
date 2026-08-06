@@ -1,0 +1,50 @@
+{
+  "schema_version": "dubbing.fleurs-holdout-verdict.v1",
+  "verdict": "FAIL_CLOSED",
+  "fixture": {
+    "dataset": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "split": "test",
+    "manifest_sha256": "f5f7415e75277cd14562ba9e648391bd79c5bb1413e55d3cf6abb8444a7912e4",
+    "source_sha256": "4d0d3e5c70fb007dea644f5f5a01cdc76dfeabe538991f9a101699754c479abb",
+    "samples_per_language": 25
+  },
+  "frozen_policy": {
+    "path": "benchmarks/fixtures/fleurs-validation-25x4/frozen-language-retry-policy.json",
+    "sha256": "9ea5027dd00c38ab6b0746bb8b7a92761acafa19f8341e58320097b355c0e01e",
+    "changed_after_holdout_access": false
+  },
+  "selection_amendment": {
+    "path": "benchmarks/fixtures/fleurs-test-25x4/holdout-selection-amendment.json",
+    "sha256": "c3290089b71fe6f057fd8f04d59513b6d9461512699704c1855ac8a7d3eed21c",
+    "recorded_before_audio_extraction_or_inference": true
+  },
+  "evidence": {
+    "merged_sweep_sha256": "c3c5bd2165fd49370e12b5dd0f6670444112e19dc21e9799a6b22966fe7572b6",
+    "report_path": "benchmarks/fixtures/fleurs-test-25x4/frozen-policy-report.json",
+    "report_sha256": "7fec977b24f754f88b95f1d914c542fcf9a2ec35fa63e5af26ba110a296f8434",
+    "runtime_seconds": 426.844
+  },
+  "metrics": {
+    "aggregate_word_accuracy": 0.9195575666163901,
+    "aggregate_wer": 0.08044243338360986,
+    "aggregate_cer": 0.02621951219512195,
+    "per_language_word_accuracy": {
+      "en": 0.9391143911439115,
+      "ru": 0.9389473684210526,
+      "ro": 0.9157212317666127,
+      "ko": 0.8704225352112676
+    }
+  },
+  "gates": {
+    "aggregate_accuracy_at_least_90_percent": true,
+    "every_language_accuracy_at_least_90_percent": false,
+    "quality_gate_passed": true,
+    "word_timestamp_gate_passed": true,
+    "untouched_holdout_passed": false,
+    "production_scope_certified": false,
+    "giga_admission_emitted": false
+  },
+  "failure_reason": "Korean word accuracy was 87.04%, below the immutable 90% per-language threshold. Aggregate accuracy alone cannot promote the policy.",
+  "next_experiment_constraint": "Do not tune or re-score this exposed holdout. Any revised policy must be developed outside it, frozen, and evaluated on a new untouched slice."
+}
