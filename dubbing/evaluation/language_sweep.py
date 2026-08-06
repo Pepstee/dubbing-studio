@@ -72,6 +72,8 @@ def _quality_diagnostics(selections: list[tuple[dict, dict]], temperatures: list
     repeated_token_run_ids: list[str] = []
     fallback_ids: list[str] = []
     exhausted_fallback_ids: list[str] = []
+    rejected_spacing_ids: list[str] = []
+    spacing_normalization_attempted = False
     maximum_compression_ratio: float | None = None
     maximum_used_temperature = 0.0
     configured_maximum_temperature = max(temperatures, default=0.0)
@@ -152,6 +154,10 @@ def _quality_diagnostics(selections: list[tuple[dict, dict]], temperatures: list
                 fallback_ids.append(identifier)
             if configured_maximum_temperature > 0 and used_maximum >= configured_maximum_temperature:
                 exhausted_fallback_ids.append(identifier)
+        spacing_normalization_attempted |= "spacing_normalization" in candidate
+        spacing = candidate.get("spacing_normalization", {})
+        if str(spacing.get("status", "")).startswith("REJECTED_"):
+            rejected_spacing_ids.append(identifier)
 
     fail_closed_issues = {
         "blank_hypotheses": sorted(blank_ids),
@@ -160,6 +166,10 @@ def _quality_diagnostics(selections: list[tuple[dict, dict]], temperatures: list
         "repeated_token_runs": sorted(repeated_token_run_ids),
         "fallback_exhausted": sorted(exhausted_fallback_ids),
     }
+    if spacing_normalization_attempted:
+        fail_closed_issues["spacing_normalization_rejected"] = sorted(
+            rejected_spacing_ids
+        )
     return {
         "selected_candidate_count": len(selections),
         "maximum_compression_ratio": maximum_compression_ratio,

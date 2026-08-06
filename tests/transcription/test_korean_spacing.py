@@ -1,4 +1,12 @@
-from dubbing.transcription.korean_spacing import normalize_candidate_spacing
+import pytest
+
+from dubbing.transcription import korean_spacing
+from dubbing.transcription.korean_spacing import (
+    KIWIPIEPY_MODEL_ARCHIVE,
+    KIWIPIEPY_WINDOWS_ARCHIVE,
+    kiwi_runtime_receipt,
+    normalize_candidate_spacing,
+)
 
 
 def _candidate(text: str = "한국어띄어 쓰기") -> dict:
@@ -33,6 +41,8 @@ def test_spacing_only_normalization_retimes_words_monotonically() -> None:
     assert words[0]["start_ms"] == 0
     assert words[0]["end_ms"] <= words[1]["start_ms"]
     assert words[1]["end_ms"] == 1000
+    assert words[0]["probability"] == 0.9
+    assert words[1]["probability"] == pytest.approx(0.85)
 
 
 def test_normalization_rejects_any_non_whitespace_change() -> None:
@@ -43,3 +53,62 @@ def test_normalization_rejects_any_non_whitespace_change() -> None:
 
     assert result["text"] == original["text"]
     assert result["spacing_normalization"]["status"] == "REJECTED_CHARACTER_CHANGE"
+
+
+def test_normalization_rejects_candidate_segment_misalignment() -> None:
+    original = _candidate()
+    original["text"] = "다른 내용"
+    result = normalize_candidate_spacing(original, lambda text: text, provider="test")
+
+    assert result["spacing_normalization"]["status"] == "REJECTED_SOURCE_ALIGNMENT"
+
+
+def test_normalization_rejects_missing_word_timestamps() -> None:
+    original = _candidate()
+    original["segments"][0]["words"] = []
+    result = normalize_candidate_spacing(original, lambda text: text, provider="test")
+
+    assert result["spacing_normalization"]["status"] == "REJECTED_TIMESTAMP_EVIDENCE"
+
+
+def test_unchanged_spacing_is_explicit() -> None:
+    original = _candidate()
+    result = normalize_candidate_spacing(original, lambda text: text, provider="test")
+
+    assert result["spacing_normalization"]["status"] == "UNCHANGED"
+
+
+def test_kiwi_download_receipt_is_exact_and_version_locked(monkeypatch) -> None:
+    assert KIWIPIEPY_WINDOWS_ARCHIVE["bytes"] == 3613895
+    assert KIWIPIEPY_MODEL_ARCHIVE["bytes"] == 87976912
+
+    def receipt(package: str, _: str) -> dict:
+        return {
+            "package": package,
+            "version": "0.23.2" if package == "kiwipiepy" else "0.23.0",
+            "tree_sha256": "a" * 64,
+            "file_count": 1,
+            "installed_bytes": 1,
+        }
+
+    monkeypatch.setattr(korean_spacing, "_distribution_tree_receipt", receipt)
+    result = kiwi_runtime_receipt()
+
+    assert result["expected_download_bytes"] == 91590807
+    assert result["runtime"]["version"] == "0.23.2"
+    assert result["model"]["version"] == "0.23.0"
+
+
+def test_kiwi_runtime_rejects_unpinned_version(monkeypatch) -> None:
+    def receipt(package: str, _: str) -> dict:
+        return {
+            "package": package,
+            "version": "99.0" if package == "kiwipiepy" else "0.23.0",
+            "tree_sha256": "a" * 64,
+            "file_count": 1,
+            "installed_bytes": 1,
+        }
+
+    monkeypatch.setattr(korean_spacing, "_distribution_tree_receipt", receipt)
+    with pytest.raises(RuntimeError, match="version mismatch"):
+        kiwi_runtime_receipt()

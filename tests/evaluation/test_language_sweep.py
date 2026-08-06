@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dubbing.evaluation.language_sweep import evaluate_language_sweep
+from dubbing.evaluation.language_sweep import _quality_diagnostics, evaluate_language_sweep
 
 
 def _write(path: Path, value: dict) -> None:
@@ -15,6 +15,28 @@ def _write(path: Path, value: dict) -> None:
 
 def _hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+
+def test_quality_diagnostics_fail_closed_on_rejected_spacing() -> None:
+    diagnostics = _quality_diagnostics(
+        [
+            (
+                {"id": "ko-1", "no_speech": False},
+                {
+                    "text": "한국어",
+                    "segments": [],
+                    "spacing_normalization": {
+                        "status": "REJECTED_CHARACTER_CHANGE"
+                    },
+                },
+            )
+        ],
+        [0.0],
+    )
+
+    assert diagnostics["quality_gate_passed"] is False
+    assert diagnostics["issues"]["spacing_normalization_rejected"] == ["ko-1"]
 
 
 def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path) -> None:
@@ -121,8 +143,8 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
             "blank_hypotheses": [],
             "malformed_timestamps": [],
             "adjacent_duplicate_segments": [],
-            "repeated_token_runs": [],
-            "fallback_exhausted": [],
+                "repeated_token_runs": [],
+                "fallback_exhausted": [],
         },
         "quality_gate_passed": True,
     }
@@ -215,8 +237,8 @@ def test_evaluate_language_sweep_quality_gate_fails_closed(tmp_path: Path) -> No
         "blank_hypotheses": ["blank"],
         "malformed_timestamps": ["loop"],
         "adjacent_duplicate_segments": [],
-        "repeated_token_runs": ["loop"],
-        "fallback_exhausted": ["loop"],
+            "repeated_token_runs": ["loop"],
+            "fallback_exhausted": ["loop"],
     }
     assert report["fixture_gate_passed"] is False
     assert report["giga_admission_emitted"] is False

@@ -6,7 +6,11 @@ import json
 import os
 from pathlib import Path
 
-from dubbing.transcription.korean_spacing import kiwi_space, normalize_candidate_spacing
+from dubbing.transcription.korean_spacing import (
+    kiwi_runtime_receipt,
+    kiwi_space,
+    normalize_candidate_spacing,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -20,7 +24,15 @@ def _sha256(path: Path) -> str:
 def apply_korean_spacing(source_path: str | Path, output_path: str | Path) -> dict:
     source = Path(source_path).resolve()
     document = json.loads(source.read_text(encoding="utf-8"))
+    if document.get("postprocessing") is not None:
+        raise RuntimeError("source sweep already contains postprocessing provenance")
+    runtime_receipt = kiwi_runtime_receipt()
+    provider = (
+        f"kiwipiepy=={runtime_receipt['runtime']['version']}:"
+        "Kiwi.space(reset_whitespace=True)"
+    )
     applied = 0
+    unchanged = 0
     rejected = 0
     for row in document["spans"]:
         candidates = []
@@ -29,19 +41,22 @@ def apply_korean_spacing(source_path: str | Path, output_path: str | Path) -> di
                 candidates.append(candidate)
                 continue
             processed = normalize_candidate_spacing(
-                candidate, kiwi_space, provider="kiwipiepy:Kiwi.space(reset_whitespace=True)"
+                candidate, kiwi_space, provider=provider
             )
             status = processed["spacing_normalization"]["status"]
             applied += status == "APPLIED"
-            rejected += status != "APPLIED"
+            unchanged += status == "UNCHANGED"
+            rejected += status.startswith("REJECTED_")
             candidates.append(processed)
         row["candidates"] = candidates
     document["postprocessing"] = {
         "kind": "korean_spacing",
-        "provider": "kiwipiepy:Kiwi.space(reset_whitespace=True)",
+        "provider": provider,
+        "runtime_receipt": runtime_receipt,
         "source_sweep_sha256": _sha256(source),
         "character_changes_allowed": False,
         "applied_candidates": applied,
+        "unchanged_candidates": unchanged,
         "rejected_candidates": rejected,
     }
     destination = Path(output_path).resolve()
