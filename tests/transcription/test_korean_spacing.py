@@ -1,9 +1,14 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from dubbing.transcription import korean_spacing
 from dubbing.transcription.korean_spacing import (
     KIWIPIEPY_MODEL_ARCHIVE,
+    KIWIPIEPY_MODEL_VERSION,
     KIWIPIEPY_WINDOWS_ARCHIVE,
+    KIWIPIEPY_VERSION,
     kiwi_runtime_receipt,
     normalize_candidate_spacing,
 )
@@ -97,6 +102,32 @@ def test_kiwi_download_receipt_is_exact_and_version_locked(monkeypatch) -> None:
     assert result["expected_download_bytes"] == 91590807
     assert result["runtime"]["version"] == "0.23.2"
     assert result["model"]["version"] == "0.23.0"
+
+
+def test_download_gate_matches_runtime_constants_and_remains_unauthorized() -> None:
+    repository = Path(__file__).resolve().parents[2]
+    gate = json.loads(
+        (
+            repository
+            / "benchmarks"
+            / "fixtures"
+            / "fleurs-validation-25x4"
+            / "kiwi-spacing-download-gate.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert gate["candidate"]["packages"] == [
+        {"name": "kiwipiepy", "version": KIWIPIEPY_VERSION, **KIWIPIEPY_WINDOWS_ARCHIVE},
+        {
+            "name": "kiwipiepy_model",
+            "version": KIWIPIEPY_MODEL_VERSION,
+            **KIWIPIEPY_MODEL_ARCHIVE,
+        },
+    ]
+    assert gate["candidate"]["total_download_bytes"] == 91590807
+    assert not gate["authorization"]["download_authorized"]
+    assert not gate["authorization"]["download_started"]
+    assert not gate["giga_admission_emitted"]
 
 
 def test_kiwi_runtime_rejects_unpinned_version(monkeypatch) -> None:

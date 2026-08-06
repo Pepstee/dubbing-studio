@@ -9,7 +9,16 @@
     "model_bin_bytes": 3087284237,
     "format": "CTranslate2",
     "stored_weight_type": "float16",
-    "proposed_compute_type": "int8_float16"
+    "proposed_compute_type": "int8_float16",
+    "files": [
+      {"path": ".gitattributes", "bytes": 1519, "git_blob_sha1": "a6344aac8c09253b3b630fb776ae94478aa0275b"},
+      {"path": "README.md", "bytes": 2052, "git_blob_sha1": "a84bfa7f20cac02ea5a99efa5eaf687ad58c1caf"},
+      {"path": "config.json", "bytes": 2394, "git_blob_sha1": "75336feae814999bae6ccccdecf177639ffc6f9d"},
+      {"path": "model.bin", "bytes": 3087284237, "sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1"},
+      {"path": "preprocessor_config.json", "bytes": 340, "git_blob_sha1": "931c77a740890c46365c7ae0c9d350ba3cca908f"},
+      {"path": "tokenizer.json", "bytes": 2480617, "git_blob_sha1": "3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61"},
+      {"path": "vocabulary.json", "bytes": 1068114, "git_blob_sha1": "0adcd01e7c237205d593b707e66dd5d7bc785d2d"}
+    ]
   },
   "hardware_observation": {
     "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
@@ -18,7 +27,16 @@
     "observed_idle_free_vram_mib": 3320,
     "published_faster_whisper_large_int8_vram_mib": 2926,
     "estimated_free_headroom_mib": 394,
-    "fit_verdict": "PLAUSIBLE_BUT_TIGHT_REQUIRES_RUNTIME_PREFLIGHT"
+    "fit_verdict": "PLAUSIBLE_BUT_TIGHT_REQUIRES_RUNTIME_PREFLIGHT",
+    "latest_preflight": {
+      "observed_date": "2026-08-06",
+      "idle_used_vram_mib": 2417,
+      "idle_free_vram_mib": 5540,
+      "estimated_free_headroom_mib": 2614,
+      "system_disk_free_bytes": 747365429248,
+      "fit_verdict": "PLAUSIBLE_WITH_HEADROOM_REQUIRES_RUNTIME_MEASUREMENT",
+      "note": "VRAM is shared with WSL/Ollama and must be rechecked immediately before loading the model."
+    }
   },
   "rationale": {
     "installed_alternative_models_found": 0,

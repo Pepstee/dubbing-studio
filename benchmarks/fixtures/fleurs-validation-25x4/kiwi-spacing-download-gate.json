@@ -1,0 +1,49 @@
+{
+  "schema_version": "dubbing.kiwi-spacing-download-gate.v1",
+  "candidate": {
+    "purpose": "Whitespace-only Korean transcript normalization on validation evidence",
+    "packages": [
+      {
+        "name": "kiwipiepy",
+        "version": "0.23.2",
+        "filename": "kiwipiepy-0.23.2-cp39-abi3-win_amd64.whl",
+        "bytes": 3613895,
+        "sha256": "2ee49d007b55955ffe4d91d56c9adaae6f358f8c6d5c281efbdf8162ecbad3e2"
+      },
+      {
+        "name": "kiwipiepy_model",
+        "version": "0.23.0",
+        "filename": "kiwipiepy_model-0.23.0.tar.gz",
+        "bytes": 87976912,
+        "sha256": "498a22f5585e6c4a162423d7557eb3ee3f71cddc6e0aeb2650c50467e85933e2"
+      }
+    ],
+    "total_download_bytes": 91590807,
+    "requirements_path": "requirements/kiwi-spacing-windows.txt",
+    "install_command": "python -m pip install --no-deps --require-hashes -r requirements/kiwi-spacing-windows.txt"
+  },
+  "guard_contract": {
+    "non_whitespace_character_changes_allowed": false,
+    "source_alignment_required": true,
+    "monotonic_word_timestamps_required": true,
+    "installed_package_tree_hashes_required": true,
+    "double_processing_allowed": false,
+    "rejected_output_can_be_selected": false
+  },
+  "evaluation_sequence": [
+    "Install the two pinned packages only after authorization.",
+    "Capture installed distribution versions and complete tree hashes.",
+    "Apply spacing to the existing Korean validation candidate only.",
+    "Merge with the frozen non-Korean candidates and evaluate every immutable gate.",
+    "Freeze a revised policy only if every validation language passes.",
+    "Evaluate once on a different untouched test slice selected before inference."
+  ],
+  "authorization": {
+    "download_authorized": false,
+    "download_started": false,
+    "operator_gate": "Authorize exactly 91,590,807 bytes for the two pinned Kiwi packages"
+  },
+  "cloud_allowed": false,
+  "production_scope_certified": false,
+  "giga_admission_emitted": false
+}
