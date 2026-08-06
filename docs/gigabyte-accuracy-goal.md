@@ -89,6 +89,13 @@ cannot override the Korean failure. The receipt is hash-bound in
 `benchmarks/fixtures/fleurs-test-25x4/verdict.json`; GIGA admission remains false. This
 holdout is now exposed and cannot be used for further policy tuning.
 
+A reference-informed diagnostic, retained only as an error-analysis ceiling, found that 13
+of the 25 Korean candidates already have exactly the reference non-whitespace character
+sequence. Fourteen of the 46 Korean word edits on those clips are spacing-only; repairing
+only those would produce 90.99% Korean word accuracy. This does not validate a spacing
+provider and cannot be used as holdout promotion evidence. It only justifies evaluating the
+guarded provider on validation before freezing a revised policy for a different holdout.
+
 Two validation-only Korean controls have also been rejected. A fixed orthography/spacing
 prompt reduced Korean accuracy from 90.22% to 87.29%. Beam 10 reached 89.73%, also below the
 beam-5 baseline. Neither is eligible for a new holdout.
