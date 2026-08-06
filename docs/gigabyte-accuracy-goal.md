@@ -178,6 +178,16 @@ fallbacks, timestamp disorder, or uncertainty. That does not override semantic W
 development verdicts are stored beside the SNR-20 and SNR-30 manifests; both say
 `FAIL_CLOSED`, `production_scope_certified=false`, and `giga_admission_emitted=false`.
 
+A text-only Romanian repair audit was also rejected. The pinned 1,790,902-byte FLEURS
+Romanian training TSV was used only as a lexicon, never as candidate ground truth. Across a
+finite distance/frequency/diacritic grid, the safest unique-correction policy fixed only
+three errors and moved Romanian from 87.74% to 88.26%. Removing the diacritic-equivalence
+guard worsened WER by replacing valid rare words with common neighbours. Qwen3 8B was no
+better: the strict token-preserving prompt made no changes, while stronger correction
+instructions produced plausible but wrong substitutions. No LLM-corrected transcript was
+admitted. The hash-bound diagnostic verdict concludes that Romanian now requires stronger
+acoustic evidence, not more aggressive text guessing.
+
 ## Next gates
 
 1. Evaluate a deterministic Korean spacing stage on validation only. It must preserve every

@@ -98,3 +98,22 @@ def test_committed_noisy_codeswitch_verdicts_are_hash_bound_and_fail_closed() ->
         assert not verdict["gates"]["accuracy_certification_eligible"]
         assert not verdict["gates"]["production_scope_certified"]
         assert not verdict["gates"]["giga_admission_emitted"]
+
+
+def test_romanian_text_repair_diagnostic_cannot_promote() -> None:
+    path = (
+        REPOSITORY
+        / "benchmarks"
+        / "fixtures"
+        / "fleurs-noisy-codeswitch-rms20-snr30-25x4"
+        / "romanian-text-repair-verdict.json"
+    )
+    verdict = json.loads(path.read_text(encoding="utf-8"))
+    report = REPOSITORY / verdict["candidate"]["report_path"]
+
+    assert _sha256(report) == verdict["candidate"]["report_sha256"]
+    assert verdict["verdict"] == "REJECTED_INSUFFICIENT_CEILING"
+    assert not verdict["best_safe_policy"]["target_passed"]
+    assert not verdict["gates"]["deployable_policy_frozen"]
+    assert not verdict["gates"]["holdout_accessed"]
+    assert not verdict["gates"]["giga_admission_emitted"]
