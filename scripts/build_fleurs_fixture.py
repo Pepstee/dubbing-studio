@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -13,10 +14,13 @@ from pathlib import Path
 
 DATASET = "google/fleurs"
 REVISION = "70bb2e84b976b7e960aa89f1c648e09c59f894dd"
-SPLIT = "validation"
+DEFAULT_SPLIT = "validation"
+ALLOWED_SPLITS = {"validation", "test"}
 LANGUAGES = {"en_us": "en", "ru_ru": "ru", "ro_ro": "ro", "ko_kr": "ko"}
 DATASET_API = "https://huggingface.co/api/datasets/google/fleurs"
 ROWS_API = "https://datasets-server.huggingface.co/rows"
+REPOSITORY_RESOLVE = "https://huggingface.co/datasets/google/fleurs/resolve"
+ALLOWED_SOURCE_MODES = {"rows_api", "tar_stream"}
 
 
 def _sha256_bytes(value: bytes) -> str:
@@ -37,6 +41,75 @@ def _http_get(url: str) -> bytes:
         return response.read()
 
 
+def _http_open(url: str):
+    request = urllib.request.Request(url, headers={"User-Agent": "dubbing-studio/1"})
+    return urllib.request.urlopen(request, timeout=60)  # noqa: S310
+
+
+def _stream_archive_rows(
+    config: str,
+    split: str,
+    count: int,
+    *,
+    http_get: Callable[[str], bytes],
+    http_open: Callable,
+) -> list[dict]:
+    tsv_url = f"{REPOSITORY_RESOLVE}/{REVISION}/data/{config}/{split}.tsv"
+    archive_url = (
+        f"{REPOSITORY_RESOLVE}/{REVISION}/data/{config}/audio/{split}.tar.gz"
+    )
+    lines = http_get(tsv_url).decode("utf-8").splitlines()
+    metadata = {}
+    for row_index, line in enumerate(lines):
+        fields = line.split("\t")
+        if len(fields) != 7:
+            raise RuntimeError(f"unexpected TSV row for {config}:{row_index}")
+        row_id, filename, raw_text, text, _, sample_count, _ = fields
+        metadata[filename] = {
+            "row_idx": row_index,
+            "row": {
+                "id": int(row_id),
+                "num_samples": int(sample_count),
+                "transcription": text,
+                "raw_transcription": raw_text,
+            },
+        }
+
+    selected = []
+    with http_open(archive_url) as response:
+        with tarfile.open(fileobj=response, mode="r|gz") as archive:
+            for member in archive:
+                if not member.isfile() or not member.name.lower().endswith(".wav"):
+                    continue
+                filename = Path(member.name).name
+                if filename not in metadata:
+                    raise RuntimeError(f"archive member missing from TSV: {config}:{filename}")
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    raise RuntimeError(f"cannot extract archive member: {config}:{filename}")
+                wrapped = metadata[filename]
+                selected.append(
+                    {
+                        **wrapped,
+                        "row": {
+                            **wrapped["row"],
+                            "audio": [
+                                {
+                                    "src": f"{archive_url}#{member.name}",
+                                    "type": "audio/wav",
+                                    "content": extracted.read(),
+                                }
+                            ],
+                        },
+                    }
+                )
+                if len(selected) == count:
+                    break
+    if len(selected) != count:
+        raise RuntimeError(f"expected {count} {config} archive rows, received {len(selected)}")
+    return selected
+
+
 def _write_atomic(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -49,10 +122,17 @@ def build_fleurs_fixture(
     fixture_path: str | Path,
     *,
     samples_per_language: int = 10,
+    split: str = DEFAULT_SPLIT,
+    source_mode: str = "rows_api",
     http_get: Callable[[str], bytes] = _http_get,
+    http_open: Callable = _http_open,
 ) -> dict:
     if samples_per_language < 1 or samples_per_language > 100:
         raise ValueError("samples_per_language must be between 1 and 100")
+    if split not in ALLOWED_SPLITS:
+        raise ValueError(f"split must be one of {sorted(ALLOWED_SPLITS)}")
+    if source_mode not in ALLOWED_SOURCE_MODES:
+        raise ValueError(f"source_mode must be one of {sorted(ALLOWED_SOURCE_MODES)}")
     metadata_bytes = http_get(DATASET_API)
     metadata = json.loads(metadata_bytes)
     if metadata.get("sha") != REVISION:
@@ -71,18 +151,26 @@ def build_fleurs_fixture(
     spans = []
     total_audio_bytes = 0
     for config, language in LANGUAGES.items():
-        query = urllib.parse.urlencode(
-            {
-                "dataset": DATASET,
-                "config": config,
-                "split": SPLIT,
-                "offset": 0,
-                "length": samples_per_language,
-            }
-        )
-        rows_bytes = http_get(f"{ROWS_API}?{query}")
-        rows_document = json.loads(rows_bytes)
-        rows = rows_document.get("rows", [])
+        if source_mode == "rows_api":
+            query = urllib.parse.urlencode(
+                {
+                    "dataset": DATASET,
+                    "config": config,
+                    "split": split,
+                    "offset": 0,
+                    "length": samples_per_language,
+                }
+            )
+            rows_bytes = http_get(f"{ROWS_API}?{query}")
+            rows = json.loads(rows_bytes).get("rows", [])
+        else:
+            rows = _stream_archive_rows(
+                config,
+                split,
+                samples_per_language,
+                http_get=http_get,
+                http_open=http_open,
+            )
         if len(rows) != samples_per_language:
             raise RuntimeError(
                 f"expected {samples_per_language} {config} rows, received {len(rows)}"
@@ -96,7 +184,9 @@ def build_fleurs_fixture(
             audio_url = audio_items[0]["src"]
             if f"/{REVISION}/" not in audio_url:
                 raise RuntimeError(f"audio asset is not pinned to {REVISION}")
-            audio_bytes = http_get(audio_url)
+            audio_bytes = audio_items[0].get("content")
+            if audio_bytes is None:
+                audio_bytes = http_get(audio_url)
             clip = clips_dir / config / f"{row_index:06d}-{int(row['id'])}.wav"
             _write_atomic(clip, audio_bytes)
             probe = subprocess.run(
@@ -132,7 +222,7 @@ def build_fleurs_fixture(
             total_audio_bytes += len(audio_bytes)
             spans.append(
                 {
-                    "id": f"fleurs-{config}-{SPLIT}-{row_index:06d}-{int(row['id'])}",
+                    "id": f"fleurs-{config}-{split}-{row_index:06d}-{int(row['id'])}",
                     "dataset_config": config,
                     "dataset_row_index": row_index,
                     "dataset_row_id": int(row["id"]),
@@ -157,7 +247,7 @@ def build_fleurs_fixture(
     source_binding = {
         "dataset": DATASET,
         "revision": REVISION,
-        "split": SPLIT,
+        "split": split,
         "spans": [
             {
                 "id": span["id"],
@@ -174,12 +264,12 @@ def build_fleurs_fixture(
     )
     fixture = {
         "schema_version": "dubbing.fleurs-ground-truth.v1",
-        "fixture_id": f"fleurs-{SPLIT}-{samples_per_language}x4-{REVISION[:12]}",
+        "fixture_id": f"fleurs-{split}-{samples_per_language}x4-{REVISION[:12]}",
         "source": {
             "kind": "dataset_slice",
             "dataset": DATASET,
             "revision": REVISION,
-            "split": SPLIT,
+            "split": split,
             "sha256": source_sha256,
         },
         "dataset_evidence": {
@@ -195,8 +285,18 @@ def build_fleurs_fixture(
             ),
         },
         "selection_policy": {
-            "policy_version": "dubbing.fleurs-validation-prefix.v1",
-            "strategy": "first N validation rows from each pinned language configuration",
+            "policy_version": "dubbing.fleurs-split-prefix.v1",
+            "strategy": (
+                f"first N {split} rows from each pinned language configuration"
+                if source_mode == "rows_api"
+                else f"first N WAV members from each pinned {split} archive"
+            ),
+            "source_mode": source_mode,
+            "source_order": (
+                "dataset row order"
+                if source_mode == "rows_api"
+                else "first N WAV members in pinned tar archive order, joined to pinned TSV"
+            ),
             "samples_per_language": samples_per_language,
             "reference_text_is_human_ground_truth": True,
             "reference_timestamps_are_human_ground_truth": True,
@@ -228,11 +328,15 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--fixture", required=True)
     parser.add_argument("--samples-per-language", type=int, default=10)
+    parser.add_argument("--split", choices=sorted(ALLOWED_SPLITS), default=DEFAULT_SPLIT)
+    parser.add_argument("--source-mode", choices=sorted(ALLOWED_SOURCE_MODES), default="rows_api")
     args = parser.parse_args()
     fixture = build_fleurs_fixture(
         args.output_dir,
         args.fixture,
         samples_per_language=args.samples_per_language,
+        split=args.split,
+        source_mode=args.source_mode,
     )
     print(
         json.dumps(

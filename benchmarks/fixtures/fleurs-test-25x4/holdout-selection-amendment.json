@@ -1,0 +1,36 @@
+{
+  "schema_version": "dubbing.holdout-selection-amendment.v1",
+  "amendment_id": "fleurs-test-tar-prefix-before-inference-v1",
+  "frozen_policy": {
+    "path": "benchmarks/fixtures/fleurs-validation-25x4/frozen-language-retry-policy.json",
+    "sha256": "9ea5027dd00c38ab6b0746bb8b7a92761acafa19f8341e58320097b355c0e01e"
+  },
+  "recorded_before_audio_extraction_or_inference": true,
+  "reason": {
+    "rows_api_result": "HTTP 500: Parquet scan attempted 401715275 bytes, exceeding the service limit of 300000000 bytes",
+    "full_archive_download_avoided": true,
+    "selection_only": true
+  },
+  "original_selection": "first 25 test rows from en_us, ru_ru, ro_ro, and ko_kr",
+  "operational_selection": {
+    "dataset": "google/fleurs",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "split": "test",
+    "configs": ["en_us", "ru_ru", "ro_ro", "ko_kr"],
+    "rule": "first 25 WAV members in each pinned tar archive's deterministic stream order, joined by filename to the pinned TSV",
+    "samples_per_language": 25
+  },
+  "immutable_components": {
+    "model": true,
+    "candidate_variants": true,
+    "decode_parameters": true,
+    "routing_policy": true,
+    "quality_contract": true,
+    "accuracy_thresholds": true
+  },
+  "evaluation_constraints": {
+    "no_policy_tuning_from_holdout": true,
+    "no_cloud_audio_upload": true,
+    "no_giga_admission": true
+  }
+}
