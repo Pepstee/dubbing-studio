@@ -102,3 +102,25 @@ def test_fleurs_verdict_is_hash_bound_and_oracle_is_reproducible() -> None:
     assert verdict["gates"]["clean_validation_fixture_passed"] is True
     assert verdict["gates"]["untouched_holdout_passed"] is False
     assert verdict["gates"]["giga_admission_emitted"] is False
+
+
+def test_post_holdout_validation_controls_are_rejected() -> None:
+    controls = {
+        "orthography-prompt-v1-report.json": (
+            "5b88587c8ae93b9e4b86c75aecab112ddebecfc155de03befac3112773a099b9",
+            0.8728606356968215,
+        ),
+        "forced-ko-beam10-v1-report.json": (
+            "d243aec1c08e416083b74c9fca63d686342005f118115017cec69f505b493fd1",
+            0.8973105134474327,
+        ),
+    }
+    for name, (expected_sha256, korean_accuracy) in controls.items():
+        report = _load(name)
+        assert _sha256(name) == expected_sha256
+        assert report["fixture_gate_passed"] is False
+        assert report["promotion_passed"] is False
+        assert report["giga_admission_emitted"] is False
+        assert report["methods"]["language_conditioned_retry"]["per_language"]["ko"][
+            "word_accuracy"
+        ] == pytest.approx(korean_accuracy)

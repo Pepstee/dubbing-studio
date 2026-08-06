@@ -65,8 +65,33 @@ six-variant confidence selector reached 92.23% aggregate but still only 89.98% R
 it is explicitly non-deployable and is not treated as ground truth or promotion evidence.
 The final language-conditioned policy passes all validation language gates without reference
 access. Its exact policy and candidate hashes were frozen in
-`frozen-language-retry-policy.json` before holdout access. It must now pass the untouched
-FLEURS test slice unchanged. Validation success is not production certification.
+`frozen-language-retry-policy.json` before holdout access.
+
+## Untouched holdout result
+
+The frozen policy was run unchanged on 25 test clips per language from the same pinned
+FLEURS revision. The dataset server could not serve test rows because its Parquet scan
+exceeded the 300 MB service limit, so a selection-only amendment was committed before audio
+extraction or inference: the first 25 WAV members in each pinned test archive were streamed
+and joined to the pinned TSV. Model, decoding, routing, metrics, and thresholds remained
+unchanged.
+
+| Language | Reference words | Edits | WER | Word accuracy | CER | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| English | 542 | 33 | 6.09% | 93.91% | 3.19% | PASS |
+| Russian | 475 | 29 | 6.11% | 93.89% | 1.39% | PASS |
+| Romanian | 617 | 52 | 8.43% | 91.57% | 2.86% | PASS |
+| Korean | 355 | 46 | 12.96% | 87.04% | 3.86% | **FAIL** |
+| **Aggregate** | **1,989** | **160** | **8.04%** | **91.96%** | **2.62%** | **FAIL: per-language gate** |
+
+All structural, repetition, fallback, and word-timestamp checks pass, but aggregate accuracy
+cannot override the Korean failure. The receipt is hash-bound in
+`benchmarks/fixtures/fleurs-test-25x4/verdict.json`; GIGA admission remains false. This
+holdout is now exposed and cannot be used for further policy tuning.
+
+Two validation-only Korean controls have also been rejected. A fixed orthography/spacing
+prompt reduced Korean accuracy from 90.22% to 87.29%. Beam 10 reached 89.73%, also below the
+beam-5 baseline. Neither is eligible for a new holdout.
 
 ## Human evidence discovered
 
@@ -108,14 +133,18 @@ errors. Both policies are retained and labelled; neither can be used for certifi
 
 ## Next gates
 
-1. Evaluate the frozen language-retry policy unchanged on the first 25 test rows per language
-   from the same pinned FLEURS revision. No policy tuning is allowed after holdout access.
-2. Build or acquire a timestamp-exact, human-ground-truth noisy conversational/code-switched
+1. Evaluate a deterministic Korean spacing stage on validation only. It must preserve every
+   non-whitespace character, rebuild monotonic word timestamps, and record provenance. The
+   official Kiwi runtime plus model is 91,590,807 bytes and requires separate download
+   authorization before live evaluation.
+2. If and only if that validation experiment passes, freeze it before selecting a different,
+   untouched test slice. Never re-score the exposed holdout as promotion evidence.
+3. Build or acquire a timestamp-exact, human-ground-truth noisy conversational/code-switched
    fixture after the clean per-language capacity gate passes. Clean FLEURS speech is not a
    production proxy.
-3. Promote only a reference-independent selector. Oracle and declared-reference-language
+4. Promote only a reference-independent selector. Oracle and declared-reference-language
    selection remain diagnostic upper bounds.
-4. Keep cloud disabled and GIGA admission false.
+5. Keep cloud disabled and GIGA admission false.
 
 ## Next model-capacity gate
 
