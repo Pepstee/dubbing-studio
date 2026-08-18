@@ -190,12 +190,12 @@ acoustic evidence, not more aggressive text guessing.
 
 ## Next gates
 
-1. Evaluate a deterministic Korean spacing stage on validation only. It must preserve every
-   non-whitespace character, rebuild monotonic word timestamps, and record provenance. The
-   official Kiwi runtime plus model is 91,590,807 bytes and requires separate download
-   authorization before live evaluation.
-2. If and only if that validation experiment passes, freeze it before selecting a different,
-   untouched test slice. Never re-score the exposed holdout as promotion evidence.
+1. The deterministic Kiwi spacing stage was installed on Gigabyte WSL and validated. It
+   preserved every non-whitespace character, but automatic Korean word accuracy reached only
+   89.49% and Romanian 89.98%; it is therefore retained as a guarded postprocessor and was not
+   promoted as an accuracy solution. The untouched test slice remains unused.
+2. Keep the untouched test slice sealed until a reference-independent validation policy passes
+   every language floor. Never use the exposed validation slice as promotion evidence.
 3. Build or acquire a timestamp-exact, human-ground-truth natural noisy
    conversational/code-switched fixture. The derived noisy fixture is useful development
    evidence but is not a production proxy.
@@ -212,8 +212,10 @@ credible capacity comparison is the official CTranslate2
 bytes (2.88 GiB), including a 3,087,284,237-byte FP16 `model.bin`. It would be loaded with
 `int8_float16` compute.
 
-Published Faster-Whisper measurements report roughly 2,926 MB VRAM for non-batched INT8
-large-model inference. The Gigabyte had 3,320 MiB free at the preflight, leaving only about
-394 MiB of indicative headroom; actual fit must be measured and an out-of-memory result must
-fail safely. This download has not been authorized or started. The model is a capacity test,
-not a promised route to 90%.
+The operator authorized the pinned 3,090,839,273-byte download on 2026-08-19. Every file hash
+matched, and `int8_float16` inference used about 2.2 GiB VRAM with more than 5.7 GiB free. The
+capacity test nevertheless failed promotion: automatic FLEURS validation reached 92.28%
+aggregate but only 86.80% Korean, and even the oracle selector missed the all-language gate.
+On the 83-minute lesson it reached only 49.25% word accuracy against the provisional MacWhisper
+reference and looped `nya` 222 times, producing `REPROCESS_REQUIRED`. Full large-v3 remains an
+evaluation-only optional adjudicator; large-v3-turbo remains the production default.

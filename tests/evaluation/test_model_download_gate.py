@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 
-def test_large_v3_download_gate_is_complete_and_unauthorized() -> None:
+def test_large_v3_download_receipt_matches_the_pinned_gate() -> None:
     repository = Path(__file__).resolve().parents[2]
     gate = json.loads(
         (
@@ -25,6 +25,16 @@ def test_large_v3_download_gate_is_complete_and_unauthorized() -> None:
         latest["idle_free_vram_mib"]
         - gate["hardware_observation"]["published_faster_whisper_large_int8_vram_mib"]
     )
-    assert not gate["authorization"]["download_authorized"]
-    assert not gate["authorization"]["download_started"]
+    assert gate["authorization"]["download_authorized"]
+    assert gate["authorization"]["download_completed"]
+    assert gate["download_receipt"]["verified_total_bytes"] == candidate[
+        "total_download_bytes"
+    ]
+    assert gate["download_receipt"]["verified_model_bin_sha256"] == model["sha256"]
+    assert gate["download_receipt"]["all_pinned_file_hashes_passed"]
+    assert gate["download_receipt"]["int8_float16_runtime_preflight"]["model_loaded"]
+    assert not gate["validation_evidence"]["automatic_all_language_targets_passed"]
+    assert not gate["validation_evidence"]["oracle_all_language_targets_passed"]
+    assert gate["long_form_evidence"]["quality_status"] == "REPROCESS_REQUIRED"
+    assert gate["promotion_verdict"]["state"] == "REJECTED_AS_PRODUCTION_DEFAULT"
     assert not gate["giga_admission_emitted"]
