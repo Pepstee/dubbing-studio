@@ -53,7 +53,7 @@ def test_apply_korean_spacing_binds_runtime_and_source(tmp_path, monkeypatch) ->
         lambda: {
             "runtime": {"version": "0.23.2", "tree_sha256": "a" * 64},
             "model": {"version": "0.23.0", "tree_sha256": "b" * 64},
-            "expected_download_bytes": 91590807,
+            "expected_download_bytes": 99490262,
         },
     )
     monkeypatch.setattr(

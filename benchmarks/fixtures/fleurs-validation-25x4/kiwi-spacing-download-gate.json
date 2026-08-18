@@ -6,9 +6,9 @@
       {
         "name": "kiwipiepy",
         "version": "0.23.2",
-        "filename": "kiwipiepy-0.23.2-cp39-abi3-win_amd64.whl",
-        "bytes": 3613895,
-        "sha256": "2ee49d007b55955ffe4d91d56c9adaae6f358f8c6d5c281efbdf8162ecbad3e2"
+        "filename": "kiwipiepy-0.23.2-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "bytes": 11513350,
+        "sha256": "46a0a9fd36727736e8010ff54c655639f5df1c2ec34b92679cd3a94e8734d81f"
       },
       {
         "name": "kiwipiepy_model",
@@ -18,9 +18,9 @@
         "sha256": "498a22f5585e6c4a162423d7557eb3ee3f71cddc6e0aeb2650c50467e85933e2"
       }
     ],
-    "total_download_bytes": 91590807,
-    "requirements_path": "requirements/kiwi-spacing-windows.txt",
-    "install_command": "python -m pip install --no-deps --require-hashes -r requirements/kiwi-spacing-windows.txt"
+    "total_download_bytes": 99490262,
+    "requirements_path": "requirements/kiwi-spacing-gigabyte.txt",
+    "install_command": "python -m pip install --no-deps --require-hashes -r requirements/kiwi-spacing-gigabyte.txt"
   },
   "guard_contract": {
     "non_whitespace_character_changes_allowed": false,
@@ -39,9 +39,34 @@
     "Evaluate once on a different untouched test slice selected before inference."
   ],
   "authorization": {
-    "download_authorized": false,
-    "download_started": false,
-    "operator_gate": "Authorize exactly 91,590,807 bytes for the two pinned Kiwi packages"
+    "download_authorized": true,
+    "download_completed": true,
+    "operator_gate": "Satisfied by the operator's 2026-08-19 broad accuracy authorization",
+    "installed_runtime": {
+      "host": "Gigabyte WSL x86_64",
+      "python": "3.12",
+      "kiwipiepy_tree_sha256": "2007a4567431d9aac7d75202f8fd032cb678320051c19e29e1719eefdd7d35a8",
+      "kiwipiepy_model_tree_sha256": "bea433706dd51f8eaf883b2ce25f4f6f3309e2e9f906ec4eeea93f29480fa8cd"
+    }
+  },
+  "validation_evidence": {
+    "evaluated_on": "2026-08-19",
+    "source_sweep_sha256": "e9481cbd7f125a98fb869f742151bc6415696573357d51d8f654a7ba04413d69",
+    "spaced_sweep_sha256": "5f28eec5b1ff1f3e0b64ccfaf83a2dfbb4189ce3f572c1c14fdba88a0ee35fd9",
+    "report_sha256": "ddd6185175d6a50726a317b439269400ff779bacbe625acdaed1c9705ad7ddec",
+    "applied_candidates": 15,
+    "rejected_candidates": 0,
+    "automatic_minimum_beam": {
+      "aggregate_word_accuracy": 0.9243827160493827,
+      "per_language_word_accuracy": {
+        "en": 0.9560878243512974,
+        "ru": 0.9472527472527472,
+        "ro": 0.8998272884283247,
+        "ko": 0.8948655256723717
+      },
+      "all_language_targets_passed": false
+    },
+    "verdict": "VALIDATED_SAFE_POSTPROCESSOR_NOT_PROMOTED"
   },
   "cloud_allowed": false,
   "production_scope_certified": false,

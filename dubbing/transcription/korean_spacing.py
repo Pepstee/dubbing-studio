@@ -9,10 +9,13 @@ from pathlib import Path
 
 KIWIPIEPY_VERSION = "0.23.2"
 KIWIPIEPY_MODEL_VERSION = "0.23.0"
-KIWIPIEPY_WINDOWS_ARCHIVE = {
-    "filename": "kiwipiepy-0.23.2-cp39-abi3-win_amd64.whl",
-    "bytes": 3613895,
-    "sha256": "2ee49d007b55955ffe4d91d56c9adaae6f358f8c6d5c281efbdf8162ecbad3e2",
+KIWIPIEPY_GIGABYTE_ARCHIVE = {
+    "filename": (
+        "kiwipiepy-0.23.2-cp39-abi3-manylinux2014_x86_64."
+        "manylinux_2_17_x86_64.whl"
+    ),
+    "bytes": 11513350,
+    "sha256": "46a0a9fd36727736e8010ff54c655639f5df1c2ec34b92679cd3a94e8734d81f",
 }
 KIWIPIEPY_MODEL_ARCHIVE = {
     "filename": "kiwipiepy_model-0.23.0.tar.gz",
@@ -76,9 +79,9 @@ def kiwi_runtime_receipt() -> dict:
     return {
         "runtime": runtime,
         "model": model,
-        "expected_downloads": [KIWIPIEPY_WINDOWS_ARCHIVE, KIWIPIEPY_MODEL_ARCHIVE],
+        "expected_downloads": [KIWIPIEPY_GIGABYTE_ARCHIVE, KIWIPIEPY_MODEL_ARCHIVE],
         "expected_download_bytes": (
-            KIWIPIEPY_WINDOWS_ARCHIVE["bytes"] + KIWIPIEPY_MODEL_ARCHIVE["bytes"]
+            KIWIPIEPY_GIGABYTE_ARCHIVE["bytes"] + KIWIPIEPY_MODEL_ARCHIVE["bytes"]
         ),
     }
 

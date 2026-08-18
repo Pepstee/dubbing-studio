@@ -7,7 +7,7 @@ from dubbing.transcription import korean_spacing
 from dubbing.transcription.korean_spacing import (
     KIWIPIEPY_MODEL_ARCHIVE,
     KIWIPIEPY_MODEL_VERSION,
-    KIWIPIEPY_WINDOWS_ARCHIVE,
+    KIWIPIEPY_GIGABYTE_ARCHIVE,
     KIWIPIEPY_VERSION,
     kiwi_runtime_receipt,
     normalize_candidate_spacing,
@@ -84,7 +84,7 @@ def test_unchanged_spacing_is_explicit() -> None:
 
 
 def test_kiwi_download_receipt_is_exact_and_version_locked(monkeypatch) -> None:
-    assert KIWIPIEPY_WINDOWS_ARCHIVE["bytes"] == 3613895
+    assert KIWIPIEPY_GIGABYTE_ARCHIVE["bytes"] == 11513350
     assert KIWIPIEPY_MODEL_ARCHIVE["bytes"] == 87976912
 
     def receipt(package: str, _: str) -> dict:
@@ -99,7 +99,7 @@ def test_kiwi_download_receipt_is_exact_and_version_locked(monkeypatch) -> None:
     monkeypatch.setattr(korean_spacing, "_distribution_tree_receipt", receipt)
     result = kiwi_runtime_receipt()
 
-    assert result["expected_download_bytes"] == 91590807
+    assert result["expected_download_bytes"] == 99490262
     assert result["runtime"]["version"] == "0.23.2"
     assert result["model"]["version"] == "0.23.0"
 
@@ -117,16 +117,16 @@ def test_download_gate_matches_runtime_constants_and_remains_unauthorized() -> N
     )
 
     assert gate["candidate"]["packages"] == [
-        {"name": "kiwipiepy", "version": KIWIPIEPY_VERSION, **KIWIPIEPY_WINDOWS_ARCHIVE},
+        {"name": "kiwipiepy", "version": KIWIPIEPY_VERSION, **KIWIPIEPY_GIGABYTE_ARCHIVE},
         {
             "name": "kiwipiepy_model",
             "version": KIWIPIEPY_MODEL_VERSION,
             **KIWIPIEPY_MODEL_ARCHIVE,
         },
     ]
-    assert gate["candidate"]["total_download_bytes"] == 91590807
-    assert not gate["authorization"]["download_authorized"]
-    assert not gate["authorization"]["download_started"]
+    assert gate["candidate"]["total_download_bytes"] == 99490262
+    assert gate["authorization"]["download_authorized"]
+    assert gate["authorization"]["download_completed"]
     assert not gate["giga_admission_emitted"]
 
 
