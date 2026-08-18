@@ -53,11 +53,21 @@ def build_service(config: dict) -> CaptureService:
         state_dir=paths.get("state", "state"),
         processing_dir=paths.get("processing", "processing"),
         resumable=defaults.get("resumable", True),
+        transcription_strategy=defaults.get("transcription_strategy", "adaptive"),
         transcription_chunk_seconds=defaults.get(
-            "transcription_chunk_seconds", 30 * 60
+            "transcription_chunk_seconds", 4 * 60
+        ),
+        transcription_minimum_chunk_seconds=defaults.get(
+            "transcription_minimum_chunk_seconds", 60
+        ),
+        transcription_maximum_chunk_seconds=defaults.get(
+            "transcription_maximum_chunk_seconds", 8 * 60
         ),
         transcription_overlap_seconds=defaults.get(
-            "transcription_overlap_seconds", 5
+            "transcription_overlap_seconds", 2
+        ),
+        transcription_minimum_silence_seconds=defaults.get(
+            "transcription_minimum_silence_seconds", 0.7
         ),
         diarization_chunk_seconds=defaults.get(
             "diarization_chunk_seconds", 2 * 60 * 60

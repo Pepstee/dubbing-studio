@@ -38,7 +38,8 @@ hidden .partial transfer
 → source snapshot replay check
 → SHA-256 claim in SQLite
 → free-space and duration gates
-→ 30-minute ASR chunks with 5-second overlap
+→ automatic media probe and silence-aware adaptive ASR chunks
+→ bounded overlap reconciliation and failed-span-only retries
 → 2-hour diarization chunks
 → per-segment translation checkpoints
 → source snapshot and SHA-256 re-verification
@@ -48,7 +49,8 @@ hidden .partial transfer
 → atomic, self-contained, hash-verified outbox bundle
 ```
 
-Every expensive processing stage writes a source/configuration-bound manifest,
+The operator supplies one original media file; chunk planning is entirely an
+internal execution detail. Every expensive processing stage writes a source/configuration-bound manifest,
 incremental checkpoints, a progress document and a final result. A restart
 reuses completed work. ASR options and language-detector identity are part of
 the checkpoint key. Malformed or mismatched checkpoints fail closed.

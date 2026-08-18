@@ -82,18 +82,29 @@ def validate_config(document: dict) -> dict:
         raise ValueError("defaults.model_manifest must be an absolute path")
     if defaults.get("resumable") is not True:
         raise ValueError("production Personal Capture requires resumable=true")
+    if defaults.get("transcription_strategy") != "adaptive":
+        raise ValueError(
+            "production Personal Capture requires transcription_strategy=adaptive"
+        )
     if defaults.get("review_required") is not True:
         raise ValueError("production Personal Capture requires review_required=true")
     transcription_chunk = int(defaults.get("transcription_chunk_seconds", 0))
-    if not 30 <= transcription_chunk <= 3600:
-        raise ValueError("transcription_chunk_seconds must be between 30 and 3600")
-    transcription_overlap = int(
-        defaults.get("transcription_overlap_seconds", -1)
-    )
-    if not 0 <= transcription_overlap < transcription_chunk // 2:
+    minimum_chunk = int(defaults.get("transcription_minimum_chunk_seconds", 0))
+    maximum_chunk = int(defaults.get("transcription_maximum_chunk_seconds", 0))
+    if not 1 <= minimum_chunk <= transcription_chunk <= maximum_chunk <= 1800:
         raise ValueError(
-            "transcription_overlap_seconds must be non-negative and below half a chunk"
+            "adaptive chunk bounds must satisfy 1 <= minimum <= target <= maximum <= 1800"
         )
+    transcription_overlap = float(defaults.get("transcription_overlap_seconds", -1))
+    if not 0 <= transcription_overlap < minimum_chunk / 2:
+        raise ValueError(
+            "transcription_overlap_seconds must be non-negative and below half the minimum chunk"
+        )
+    minimum_silence = float(
+        defaults.get("transcription_minimum_silence_seconds", 0)
+    )
+    if minimum_silence <= 0:
+        raise ValueError("transcription_minimum_silence_seconds must be positive")
     diarization_chunk = int(defaults.get("diarization_chunk_seconds", 0))
     if not 60 <= diarization_chunk <= 10_800:
         raise ValueError("diarization_chunk_seconds must be between 60 and 10800")
@@ -111,6 +122,9 @@ def validate_config(document: dict) -> dict:
         raise ValueError("service.restart_policy must be on-failure")
     if int(document["network"].get("max_upload_bytes", 0)) <= 0:
         raise ValueError("network.max_upload_bytes must be positive")
+    upload_timeout = int(document["network"].get("upload_timeout_seconds", 0))
+    if not 120 <= upload_timeout <= 86_400:
+        raise ValueError("network.upload_timeout_seconds must be between 120 and 86400")
     if document["network"].get("bind_host") not in {"127.0.0.1", "::1", "localhost"}:
         raise ValueError("production review service must bind to loopback")
     port = int(document["network"].get("port", 0))

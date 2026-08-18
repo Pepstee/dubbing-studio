@@ -25,6 +25,10 @@ from dubbing.transcription import (
     transcript_to_text,
 )
 from dubbing.transcription.job import media_duration_ms
+from dubbing.transcription.adaptive import (
+    AdaptiveChunkPlanner,
+    AdaptiveLongFormCoordinator,
+)
 from dubbing.transcription.quality import (
     TranscriptQualityReport,
     TranscriptQualityStatus,
@@ -119,8 +123,12 @@ class CaptureService:
         state_dir: str | Path = "state",
         processing_dir: str | Path = "processing",
         resumable: bool = True,
+        transcription_strategy: str = "fixed",
         transcription_chunk_seconds: int = 30 * 60,
+        transcription_minimum_chunk_seconds: int = 60,
+        transcription_maximum_chunk_seconds: int = 8 * 60,
         transcription_overlap_seconds: int = 5,
+        transcription_minimum_silence_seconds: float = 0.7,
         diarization_chunk_seconds: int = 2 * 60 * 60,
         minimum_free_bytes: int = 0,
         maximum_audio_seconds: int = 24 * 60 * 60,
@@ -135,8 +143,16 @@ class CaptureService:
         self.store = CaptureStore(state / "capture.sqlite3")
         self.transcription_backend = transcription_backend
         self.resumable = resumable
+        if transcription_strategy not in {"adaptive", "fixed"}:
+            raise ValueError("transcription_strategy must be adaptive or fixed")
+        self.transcription_strategy = transcription_strategy
         self.transcription_chunk_seconds = transcription_chunk_seconds
+        self.transcription_minimum_chunk_seconds = transcription_minimum_chunk_seconds
+        self.transcription_maximum_chunk_seconds = transcription_maximum_chunk_seconds
         self.transcription_overlap_seconds = transcription_overlap_seconds
+        self.transcription_minimum_silence_seconds = (
+            transcription_minimum_silence_seconds
+        )
         self.diarization_chunk_seconds = diarization_chunk_seconds
         if minimum_free_bytes < 0:
             raise ValueError("minimum_free_bytes cannot be negative")
@@ -215,8 +231,12 @@ class CaptureService:
                 },
                 "execution": {
                     "resumable": self.resumable,
+                    "transcription_strategy": self.transcription_strategy,
                     "transcription_chunk_seconds": self.transcription_chunk_seconds,
+                    "transcription_minimum_chunk_seconds": self.transcription_minimum_chunk_seconds,
+                    "transcription_maximum_chunk_seconds": self.transcription_maximum_chunk_seconds,
                     "transcription_overlap_seconds": self.transcription_overlap_seconds,
+                    "transcription_minimum_silence_seconds": self.transcription_minimum_silence_seconds,
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
                     "speaker_identity_scope": (
                         "chunk-local" if self.resumable and self.diarizer else "recording"
@@ -344,17 +364,48 @@ class CaptureService:
                     raise ValueError(
                         "capture exceeds the configured maximum audio duration"
                     )
-                transcript = ResumableTranscriptionJob(
-                    self.transcription_backend,
-                    checkpoint_root / "transcription",
-                    chunk_seconds=self.transcription_chunk_seconds,
-                    overlap_seconds=self.transcription_overlap_seconds,
-                ).run(
-                    path,
-                    self.transcription_options,
-                    source_digest=digest,
-                    duration_ms=duration_ms,
-                )
+                if self.transcription_strategy == "adaptive":
+                    planner = AdaptiveChunkPlanner(
+                        target_seconds=self.transcription_chunk_seconds,
+                        minimum_seconds=self.transcription_minimum_chunk_seconds,
+                        maximum_seconds=self.transcription_maximum_chunk_seconds,
+                        overlap_seconds=self.transcription_overlap_seconds,
+                        hard_boundary_silence_seconds=(
+                            self.transcription_minimum_silence_seconds
+                        ),
+                    )
+                    transcript, quality_document = AdaptiveLongFormCoordinator(
+                        self.transcription_backend,
+                        checkpoint_root / "transcription",
+                        planner=planner,
+                        minimum_silence_seconds=(
+                            self.transcription_minimum_silence_seconds
+                        ),
+                        language_retry_policy={"ko": "always"},
+                    ).run(
+                        path,
+                        self.transcription_options,
+                        source_digest=digest,
+                    )
+                    quality_report = TranscriptQualityReport.from_dict(
+                        quality_document
+                    )
+                else:
+                    transcript = ResumableTranscriptionJob(
+                        self.transcription_backend,
+                        checkpoint_root / "transcription",
+                        chunk_seconds=self.transcription_chunk_seconds,
+                        overlap_seconds=self.transcription_overlap_seconds,
+                    ).run(
+                        path,
+                        self.transcription_options,
+                        source_digest=digest,
+                        duration_ms=duration_ms,
+                    )
+                    quality_report = evaluate_transcript_quality(
+                        transcript,
+                        expected_duration_ms=duration_ms,
+                    )
                 if self.diarizer is not None:
                     diarization = ResumableDiarizationJob(
                         self.diarizer,
@@ -376,10 +427,11 @@ class CaptureService:
                     diarizer=self.diarizer,
                     speaker_constraints=self.speaker_constraints,
                 )
-            quality_report = evaluate_transcript_quality(
-                transcript,
-                expected_duration_ms=duration_ms if self.resumable else transcript.duration_ms,
-            )
+            if not self.resumable:
+                quality_report = evaluate_transcript_quality(
+                    transcript,
+                    expected_duration_ms=transcript.duration_ms,
+                )
             translation = None
             if (
                 quality_report.status is TranscriptQualityStatus.PASS

@@ -248,6 +248,28 @@ def test_overlap_reconciliation_drops_duplicate_boundary_segment():
     assert len(reconcile_chunks(list(zip(chunks, (first, second))))) == 1
 
 
+def test_overlap_context_is_clipped_to_non_overlapping_logical_chunks():
+    chunks = [
+        AdaptiveChunk(0, 0, 10_000, 0, 12_000, "silence"),
+        AdaptiveChunk(1, 10_000, 20_000, 8_000, 20_000, "end-of-media"),
+    ]
+    first = TranscriptionResult(
+        (TranscriptSegment(8_500, 10_500, "before boundary"),),
+        "before boundary", "x", "x", "x", "en", 12_000, False,
+    )
+    second = TranscriptionResult(
+        (TranscriptSegment(1_500, 3_000, "after boundary"),),
+        "after boundary", "x", "x", "x", "en", 12_000, False,
+    )
+
+    segments = reconcile_chunks(list(zip(chunks, (first, second))))
+
+    assert [(item.start_ms, item.end_ms) for item in segments] == [
+        (8_500, 10_000),
+        (10_000, 11_000),
+    ]
+
+
 def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     source = tmp_path / "source.mov"
     source.write_bytes(b"source")

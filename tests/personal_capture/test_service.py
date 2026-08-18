@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import wave
+from array import array
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +17,7 @@ from dubbing.transcription import (
     TranscriptionBackend,
     TranscriptionOptions,
     TranscriptionResult,
+    evaluate_transcript_quality,
 )
 from dubbing.translation.base import LanguageDetector, TranslationBackend
 
@@ -61,6 +64,16 @@ class Translator(TranslationBackend):
 
 def media(path: Path, content: bytes = b"audio") -> Path:
     path.write_bytes(content)
+    os.utime(path, (1, 1))
+    return path
+
+
+def pcm_media(path: Path, *, seconds: int, sample_rate: int = 16_000) -> Path:
+    with wave.open(str(path), "wb") as destination:
+        destination.setnchannels(1)
+        destination.setsampwidth(2)
+        destination.setframerate(sample_rate)
+        destination.writeframes(array("h", [0] * (seconds * sample_rate)).tobytes())
     os.utime(path, (1, 1))
     return path
 
@@ -198,6 +211,79 @@ def test_resumable_capture_uses_project_processing_directory(tmp_path):
     checkpoint_dir = run.call_args_list[0].args[0]
     assert checkpoint_dir == source.resolve()
     assert service.processing == tmp_path / "workspace" / "processing"
+
+
+def test_adaptive_capture_owns_long_file_chunking_and_preserves_checkpoints(tmp_path):
+    source = media(tmp_path / "one-long-recording.wav")
+    result = FakeASR().transcribe(source)
+    quality = evaluate_transcript_quality(
+        result, expected_duration_ms=result.duration_ms
+    ).to_dict()
+    service = CaptureService(
+        tmp_path / "workspace",
+        FakeASR(),
+        processing_dir="processing",
+        transcription_strategy="adaptive",
+        transcription_chunk_seconds=240,
+        transcription_minimum_chunk_seconds=60,
+        transcription_maximum_chunk_seconds=480,
+        transcription_overlap_seconds=2,
+    )
+
+    with patch(
+        "dubbing.apps.personal_capture.service.media_duration_ms",
+        return_value=3_600_000,
+    ), patch(
+        "dubbing.apps.personal_capture.service.AdaptiveLongFormCoordinator.run",
+        return_value=(result, quality),
+    ) as run:
+        outcome = service.process(source)
+
+    assert outcome.state == "review"
+    assert run.call_count == 1
+    assert run.call_args.args[0] == source.resolve()
+    assert run.call_args.kwargs["source_digest"] == hashlib.sha256(b"audio").hexdigest()
+    manifest = json.loads((outcome.package_path / "manifest.json").read_text())
+    assert manifest["execution"]["transcription_strategy"] == "adaptive"
+    assert manifest["execution"]["transcription_chunk_seconds"] == 240
+
+
+def test_one_long_file_is_automatically_split_into_internal_checkpoints(tmp_path):
+    source = pcm_media(tmp_path / "single-upload.wav", seconds=7)
+    backend = FakeASR()
+    service = CaptureService(
+        tmp_path / "workspace",
+        backend,
+        transcription_strategy="adaptive",
+        transcription_chunk_seconds=2,
+        transcription_minimum_chunk_seconds=1,
+        transcription_maximum_chunk_seconds=3,
+        transcription_overlap_seconds=0.25,
+    )
+
+    with patch(
+        "dubbing.transcription.adaptive.detect_silence_intervals",
+        return_value=(),
+    ), patch(
+        "dubbing.transcription.adaptive.detect_silence_centres",
+        return_value=(),
+    ):
+        outcome = service.process(source)
+
+    assert outcome.state == "review"
+    checkpoint_root = (
+        tmp_path
+        / "workspace"
+        / "processing"
+        / outcome.capture_id
+        / "transcription"
+    )
+    checkpoint_manifest = json.loads(
+        (checkpoint_root / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert len(checkpoint_manifest["chunks"]) == 3
+    assert len(tuple((checkpoint_root / "chunks").glob("*.json"))) == 3
+    assert backend.calls >= 3
 
 
 def test_capture_fails_when_source_changes_during_processing(tmp_path):

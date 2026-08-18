@@ -51,8 +51,12 @@
         "asr_device",
         "asr_compute_type",
         "resumable",
+        "transcription_strategy",
         "transcription_chunk_seconds",
+        "transcription_minimum_chunk_seconds",
+        "transcription_maximum_chunk_seconds",
         "transcription_overlap_seconds",
+        "transcription_minimum_silence_seconds",
         "diarization_chunk_seconds",
         "maximum_audio_seconds",
         "minimum_free_bytes",
@@ -72,15 +76,30 @@
         "asr_device": {"enum": ["cpu", "cuda"]},
         "asr_compute_type": {"type": "string", "minLength": 1},
         "resumable": {"const": true},
+        "transcription_strategy": {"const": "adaptive"},
         "transcription_chunk_seconds": {
           "type": "integer",
-          "minimum": 30,
-          "maximum": 3600
+          "minimum": 1,
+          "maximum": 1800
+        },
+        "transcription_minimum_chunk_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800
+        },
+        "transcription_maximum_chunk_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1800
         },
         "transcription_overlap_seconds": {
-          "type": "integer",
+          "type": "number",
           "minimum": 0,
-          "maximum": 1799
+          "exclusiveMaximum": 900
+        },
+        "transcription_minimum_silence_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
         },
         "diarization_chunk_seconds": {
           "type": "integer",
@@ -114,11 +133,16 @@
     },
     "network": {
       "type": "object",
-      "required": ["bind_host", "port", "max_upload_bytes", "token_file"],
+      "required": ["bind_host", "port", "max_upload_bytes", "upload_timeout_seconds", "token_file"],
       "properties": {
         "bind_host": {"enum": ["127.0.0.1", "::1", "localhost"]},
         "port": {"type": "integer", "minimum": 1, "maximum": 65535},
         "max_upload_bytes": {"type": "integer", "minimum": 1},
+        "upload_timeout_seconds": {
+          "type": "integer",
+          "minimum": 120,
+          "maximum": 86400
+        },
         "token_file": {"type": "string", "minLength": 1}
       }
     },

@@ -43,12 +43,18 @@ dubbing-capture-model-manifest --help
 
 ## Full-day logical gate
 
-`tests/personal_capture/test_full_day_gate.py` represents an 18-hour source:
+`tests/personal_capture/test_full_day_gate.py` retains a deterministic stress
+gate for the legacy fixed-chunk primitive:
 
 - 36 resumable 30-minute ASR chunks;
 - 9 resumable 2-hour diarization chunks;
 - replay without repeated backend calls;
 - deterministic chunk-local speaker labels.
+
+Production Personal Capture uses the adaptive coordinator instead. Its gate
+submits one media path, automatically creates multiple silence-aware ASR
+checkpoints, reconciles overlap, and resumes without asking the operator to
+prepare chunks.
 
 ## Host gate
 

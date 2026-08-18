@@ -393,6 +393,31 @@ def reconcile_chunks(
             midpoint = segment.start_ms + (segment.end_ms - segment.start_ms) // 2
             if not chunk.start_ms <= midpoint < chunk.end_ms:
                 continue
+            # The overlap is decoder context, not output territory.  Clamp admitted
+            # timestamps to the chunk's logical (non-overlapping) interval so two
+            # adjacent chunks cannot manufacture a timestamp collision.
+            start_ms = max(segment.start_ms, chunk.start_ms)
+            end_ms = min(segment.end_ms, chunk.end_ms)
+            if end_ms <= start_ms:
+                continue
+            words = []
+            for word in segment.words:
+                word_start = max(word.start_ms, start_ms)
+                word_end = min(word.end_ms, end_ms)
+                if word_end > word_start:
+                    words.append(
+                        replace(
+                            word,
+                            start_ms=word_start,
+                            end_ms=word_end,
+                        )
+                    )
+            segment = replace(
+                segment,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                words=tuple(words),
+            )
             if admitted and _normalize(admitted[-1].text) == _normalize(segment.text):
                 if segment.start_ms <= admitted[-1].end_ms + 2000:
                     continue
@@ -1070,12 +1095,16 @@ class AdaptiveLongFormCoordinator:
         self,
         media: str | Path,
         options: TranscriptionOptions | None = None,
+        *,
+        source_digest: str | None = None,
     ) -> tuple[TranscriptionResult, dict]:
         source = Path(media).resolve()
         if not source.is_file():
             raise TranscriptionError(f"media input not found: {source}")
         options = options or TranscriptionOptions()
-        digest = source_sha256(source)
+        digest = source_digest or source_sha256(source)
+        if not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise TranscriptionError("source_digest must be a lowercase SHA-256 digest")
         probe = probe_media(source)
         silence_intervals = detect_silence_intervals(
             source, minimum_silence_seconds=self.minimum_silence_seconds

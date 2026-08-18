@@ -68,6 +68,9 @@ dubbing-capture-preflight \
 
 The watcher has a filesystem lock, a 60-second stability window, bounded
 15-second polling, durable SQLite state and checkpointed long-audio stages.
+The operator uploads one original file. The watcher probes it, plans adaptive
+silence-aware chunks, reconciles contextual overlap and retries only rejected
+spans internally; no manual cutting is part of the operating procedure.
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after
 that process acquires the exclusive watcher lock.

@@ -304,6 +304,12 @@ python -m dubbing transcribe day.m4a \
   --output day.json
 ```
 
+Personal Capture is the production one-file workflow: upload or copy one long
+audio/video file into its inbox. The service probes it and performs adaptive
+silence-aware chunking, overlap reconciliation, targeted retries, diarization,
+translation, and review-package creation automatically. Callers never prepare
+chunks themselves.
+
 Transcription and diarisation remain independent plugins. They can be composed
 when local Sherpa-ONNX models are configured:
 

@@ -24,8 +24,12 @@ def deployment_config(tmp_path: Path) -> dict:
         "defaults": {
             "asr_backend": "faster-whisper",
             "resumable": True,
-            "transcription_chunk_seconds": 1800,
-            "transcription_overlap_seconds": 5,
+            "transcription_strategy": "adaptive",
+            "transcription_chunk_seconds": 240,
+            "transcription_minimum_chunk_seconds": 60,
+            "transcription_maximum_chunk_seconds": 480,
+            "transcription_overlap_seconds": 2,
+            "transcription_minimum_silence_seconds": 0.7,
             "diarization_chunk_seconds": 7200,
             "maximum_audio_seconds": 86400,
             "minimum_free_bytes": 0,
@@ -46,7 +50,8 @@ def deployment_config(tmp_path: Path) -> dict:
         "network": {
             "bind_host": "127.0.0.1",
             "port": 7433,
-            "max_upload_bytes": 2_147_483_648,
+            "max_upload_bytes": 17_179_869_184,
+            "upload_timeout_seconds": 3600,
             "token_file": str(tmp_path / "capture.token"),
             "secure_cookie": False,
             "exposure": "tailscale-serve-only",
@@ -76,6 +81,10 @@ def test_canonical_config_is_valid(tmp_path):
     ("mutation", "message"),
     [
         (lambda config: config["defaults"].update(resumable=False), "resumable"),
+        (
+            lambda config: config["defaults"].update(transcription_strategy="fixed"),
+            "transcription_strategy",
+        ),
         (
             lambda config: config["paths"].update(processing="../outside"),
             "escapes",

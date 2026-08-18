@@ -250,7 +250,7 @@ def main() -> None:
         host=host,
         port=port,
         threads=4,
-        channel_timeout=120,
+        channel_timeout=int(config["network"].get("upload_timeout_seconds", 3600)),
         clear_untrusted_proxy_headers=True,
     )
 
