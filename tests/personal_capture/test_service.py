@@ -276,7 +276,7 @@ def test_one_long_file_is_automatically_split_into_internal_checkpoints(tmp_path
         / "workspace"
         / "processing"
         / outcome.capture_id
-        / "transcription"
+        / "transcription-adaptive"
     )
     checkpoint_manifest = json.loads(
         (checkpoint_root / "manifest.json").read_text(encoding="utf-8")

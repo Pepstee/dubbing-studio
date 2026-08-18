@@ -376,7 +376,7 @@ class CaptureService:
                     )
                     transcript, quality_document = AdaptiveLongFormCoordinator(
                         self.transcription_backend,
-                        checkpoint_root / "transcription",
+                        checkpoint_root / "transcription-adaptive",
                         planner=planner,
                         minimum_silence_seconds=(
                             self.transcription_minimum_silence_seconds

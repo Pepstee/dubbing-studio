@@ -53,7 +53,9 @@ The operator supplies one original media file; chunk planning is entirely an
 internal execution detail. Every expensive processing stage writes a source/configuration-bound manifest,
 incremental checkpoints, a progress document and a final result. A restart
 reuses completed work. ASR options and language-detector identity are part of
-the checkpoint key. Malformed or mismatched checkpoints fail closed.
+the checkpoint key. Adaptive checkpoints use a separate namespace from the
+retained legacy fixed-job checkpoints, so migration and rollback cannot confuse
+the two formats. Malformed or mismatched checkpoints fail closed.
 
 Review edits regenerate the canonical JSON, plain-text and SRT projections.
 Editing source text invalidates word-level text evidence for that segment and
