@@ -161,18 +161,28 @@ Diarization asks whether two regions contain the same voice. Identity asks whose
 is. They remain separate.
 
 Long recordings are diarized in resumable chunks, but speaker labels are recording-global.
-For the production Sherpa path, each chunk now extracts one TitaNet embedding per anonymous
-speaker from speech that does not overlap another detected speaker. A conservative incremental
-clusterer reconciles those embeddings across every chunk. It cannot merge two speakers detected
-inside the same chunk, requires both a similarity threshold and an ambiguity margin, and assigns
-a new anonymous label when evidence is missing or ambiguous. The result preserves overlapping
-turns and carries the complete chunk-label → global-label mapping, scores and reasons in its
-provenance receipt. `CHUNK_000N_SPEAKER_XX` is therefore checkpoint evidence only; review and
-transcript attribution receive stable `SPEAKER_XX` labels across the recording.
+The preferred local reference backend is pyannote Community-1. Its runtime is selectable only
+from an absolute local model path, so a missing gated model cannot silently trigger a download.
+Sherpa remains the fully offline fallback and the independent TitaNet embedding provider. Its
+automatic distance threshold is explicit deployment configuration rather than a hidden library
+default.
+
+Each chunk extracts one TitaNet embedding per anonymous speaker from speech that does not overlap
+another detected speaker. An overlap-safe agglomerative complete-link clusterer reconciles those
+embeddings across every chunk and may repair same-chunk fragmentation only when the underlying
+turns never overlap. Complete-link scoring prevents a weak embedding bridge from joining two
+voices; temporal overlap is a hard cannot-link constraint; an ambiguity margin applies when a
+candidate competes with a temporally incompatible voice. Missing or ambiguous evidence stays as
+a separate anonymous label. The result preserves overlapping turns and carries the full mapping,
+merge evidence and ambiguity evidence in its provenance receipt. `CHUNK_000N_SPEAKER_XX` is
+therefore checkpoint evidence only; review and transcript attribution receive stable
+`SPEAKER_XX` labels across the recording.
 
 This is anonymous consistency, not automatic identity. No person is named from embedding
-similarity alone. The production defaults are a `0.65` cosine threshold and `0.05` best-vs-second
-margin; both are source-bound checkpoint configuration and changing either invalidates reuse.
+similarity alone. The fallback's current evidence-selected settings are a Sherpa clustering
+distance threshold of `0.85`, a TitaNet complete-link cosine threshold of `0.80`, and a `0.05`
+incompatible-candidate margin. All are source-bound checkpoint configuration; changing them or
+the embedding provider invalidates reuse.
 
 The voiceprint registry accepts multiple consented reference clips per person, hashes every
 clip, applies an explicit similarity threshold and inter-candidate margin, and returns

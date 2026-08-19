@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dubbing.apps.personal_capture.config import load_config
 from dubbing.apps.personal_capture.model_manifest import verify_model_manifest
-from dubbing.diarization import SherpaOnnxDiarizationBackend
+from dubbing.diarization import PyannoteCommunityBackend, SherpaOnnxDiarizationBackend
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription import (
     FasterWhisperSileroSpeechRegionDetector,
@@ -44,11 +44,18 @@ def _check_model_directory(
 
 
 def _probe_diarization(defaults: dict) -> None:
-    backend = SherpaOnnxDiarizationBackend(
-        defaults["segmentation_model"],
-        defaults["embedding_model"],
-        device=defaults["diarization_device"],
-    )
+    if defaults.get("diarization_backend") == "pyannote-community-1":
+        backend = PyannoteCommunityBackend(
+            defaults["pyannote_model"],
+            device=defaults["diarization_device"],
+        )
+    else:
+        backend = SherpaOnnxDiarizationBackend(
+            defaults["segmentation_model"],
+            defaults["embedding_model"],
+            device=defaults["diarization_device"],
+            cluster_threshold=defaults["diarization_cluster_threshold"],
+        )
     with tempfile.TemporaryDirectory(prefix="dubbing-diarization-probe-") as directory:
         sample = Path(directory) / "silence.wav"
         with wave.open(str(sample), "wb") as output:
@@ -133,6 +140,8 @@ def inspect_environment(
         "transformers": "NLLB translation",
         "waitress": "production review server",
     }
+    if config["defaults"].get("diarization_backend") == "pyannote-community-1":
+        dependencies["pyannote.audio"] = "preferred local speaker diarization"
     for module, purpose in dependencies.items():
         available = importlib.util.find_spec(module) is not None
         _check(
@@ -182,6 +191,14 @@ def inspect_environment(
             checks,
             f"model:{key}",
             "pass" if model.is_file() else "fail",
+            str(model),
+        )
+    if config["defaults"].get("diarization_backend") == "pyannote-community-1":
+        model = Path(config["defaults"]["pyannote_model"])
+        _check(
+            checks,
+            "model:pyannote_model",
+            "pass" if model.is_dir() else "fail",
             str(model),
         )
     _check_model_directory(

@@ -17,7 +17,7 @@ from dubbing.diarization.models import (
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.job import media_duration_ms, source_sha256
 
-_CHECKPOINT_SCHEMA = "dubbing.diarization-checkpoint.v1"
+_CHECKPOINT_SCHEMA = "dubbing.diarization-checkpoint.v2"
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -60,13 +60,15 @@ class ResumableDiarizationJob:
         backend: DiarizationBackend,
         checkpoint_dir: str | Path,
         *,
+        speaker_embedding_backend: DiarizationBackend | None = None,
         chunk_seconds: int = 2 * 60 * 60,
-        global_speaker_threshold: float = 0.65,
+        global_speaker_threshold: float = 0.80,
         global_speaker_margin: float = 0.05,
     ) -> None:
         if not 60 <= chunk_seconds <= 3 * 60 * 60:
             raise ValueError("diarization chunk_seconds must be between 60 and 10800")
         self.backend = backend
+        self.speaker_embedding_backend = speaker_embedding_backend or backend
         self.checkpoint_dir = Path(checkpoint_dir)
         self.chunk_seconds = chunk_seconds
         if not 0 < global_speaker_threshold <= 1:
@@ -138,6 +140,13 @@ class ResumableDiarizationJob:
             "source_sha256": digest,
             "duration_ms": duration_ms,
             "backend_identity": self.backend_identity,
+            "speaker_embedding_backend_identity": str(
+                getattr(
+                    self.speaker_embedding_backend,
+                    "identity",
+                    type(self.speaker_embedding_backend).__qualname__,
+                )
+            ),
             "chunk_seconds": self.chunk_seconds,
             "speaker_constraints": {
                 "num_speakers": constraints.num_speakers,
@@ -196,76 +205,139 @@ class ResumableDiarizationJob:
             for speaker in {turn.speaker for turn in turns}
         }
         ordered_speakers = sorted(first_start, key=lambda speaker: (first_start[speaker], speaker))
-        clusters: dict[str, list[tuple[float, ...]]] = {}
-        mapping: dict[str, str] = {}
-        decisions = []
-        def chunk_scope(speaker: str) -> str:
-            parts = speaker.split("_", 2)
-            return "_".join(parts[:2]) if len(parts) == 3 and parts[0] == "CHUNK" else speaker
+        intervals = {
+            speaker: tuple(
+                (turn.start_ms, turn.end_ms)
+                for turn in turns
+                if turn.speaker == speaker
+            )
+            for speaker in ordered_speakers
+        }
 
-        for chunk_speaker in ordered_speakers:
-            chunk_id = chunk_scope(chunk_speaker)
-            forbidden = {
-                global_speaker
-                for local_speaker, global_speaker in mapping.items()
-                if chunk_scope(local_speaker) == chunk_id
-            }
-            embedding = embeddings.get(chunk_speaker)
-            scores = []
-            if embedding is not None:
-                scores = sorted(
-                    (
-                        (self._cosine(embedding, self._centroid(samples)), speaker)
-                        for speaker, samples in clusters.items()
-                        if speaker not in forbidden and samples
-                    ),
-                    reverse=True,
-                )
-            best_score = scores[0][0] if scores else None
-            second_score = scores[1][0] if len(scores) > 1 else None
-            margin = (
-                best_score - second_score
-                if best_score is not None and second_score is not None
-                else None
+        def clusters_overlap(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
+            return any(
+                left_start < right_end and right_start < left_end
+                for left_speaker in left
+                for right_speaker in right
+                for left_start, left_end in intervals[left_speaker]
+                for right_start, right_end in intervals[right_speaker]
             )
-            matched = bool(
-                embedding is not None
-                and scores
-                and best_score is not None
-                and best_score >= self.global_speaker_threshold
-                and (margin is None or margin >= self.global_speaker_margin)
+
+        def linkage(left: tuple[str, ...], right: tuple[str, ...]) -> float:
+            """Complete-link similarity prevents a weak bridge from joining voices."""
+
+            return min(
+                self._cosine(embeddings[left_speaker], embeddings[right_speaker])
+                for left_speaker in left
+                for right_speaker in right
             )
-            if matched:
-                global_speaker = scores[0][1]
-                reason = "embedding-match"
-            else:
-                global_speaker = f"SPEAKER_{len(clusters):02d}"
-                reason = (
-                    "missing-embedding"
-                    if embedding is None
-                    else (
-                        "below-threshold"
-                        if best_score is None or best_score < self.global_speaker_threshold
-                        else "ambiguous-margin"
+
+        clusters = [
+            (speaker,)
+            for speaker in ordered_speakers
+            if speaker in embeddings
+        ]
+        missing = [speaker for speaker in ordered_speakers if speaker not in embeddings]
+        merges: list[dict] = []
+        ambiguous_pairs: list[dict] = []
+        while True:
+            candidates = sorted(
+                (
+                    (linkage(left, right), left, right)
+                    for index, left in enumerate(clusters)
+                    for right in clusters[index + 1 :]
+                    if not clusters_overlap(left, right)
+                ),
+                key=lambda item: (-item[0], item[1], item[2]),
+            )
+            accepted = None
+            for score, left, right in candidates:
+                if score < self.global_speaker_threshold:
+                    break
+                competitor_scores = [
+                    other_score
+                    for other_score, other_left, other_right in candidates
+                    if (other_left, other_right) != (left, right)
+                    and (
+                        (
+                            other_left == left
+                            and clusters_overlap(other_right, right)
+                        )
+                        or (
+                            other_right == left
+                            and clusters_overlap(other_left, right)
+                        )
+                        or (
+                            other_left == right
+                            and clusters_overlap(other_right, left)
+                        )
+                        or (
+                            other_right == right
+                            and clusters_overlap(other_left, left)
+                        )
                     )
-                )
-                clusters[global_speaker] = []
-            mapping[chunk_speaker] = global_speaker
-            if embedding is not None:
-                clusters[global_speaker].append(embedding)
-            decisions.append(
+                ]
+                competitor = max(competitor_scores, default=None)
+                if (
+                    competitor is not None
+                    and score - competitor < self.global_speaker_margin
+                ):
+                    ambiguous_pairs.append(
+                        {
+                            "left": list(left),
+                            "right": list(right),
+                            "similarity": round(score, 6),
+                            "competing_similarity": round(competitor, 6),
+                        }
+                    )
+                    continue
+                accepted = (score, left, right)
+                break
+            if accepted is None:
+                break
+            score, left, right = accepted
+            clusters.remove(left)
+            clusters.remove(right)
+            merged = tuple(sorted((*left, *right)))
+            clusters.append(merged)
+            merges.append(
                 {
-                    "chunk_speaker": chunk_speaker,
-                    "global_speaker": global_speaker,
-                    "reason": reason,
-                    "best_similarity": round(best_score, 6) if best_score is not None else None,
-                    "second_similarity": (
-                        round(second_score, 6) if second_score is not None else None
-                    ),
-                    "margin": round(margin, 6) if margin is not None else None,
-                    "embedding_available": embedding is not None,
+                    "left": list(left),
+                    "right": list(right),
+                    "merged": list(merged),
+                    "complete_link_similarity": round(score, 6),
                 }
             )
+
+        clusters.extend((speaker,) for speaker in missing)
+        clusters.sort(
+            key=lambda members: (
+                min(first_start[speaker] for speaker in members),
+                members,
+            )
+        )
+        mapping = {
+            local_speaker: f"SPEAKER_{index:02d}"
+            for index, members in enumerate(clusters)
+            for local_speaker in members
+        }
+        decisions = [
+            {
+                "chunk_speaker": speaker,
+                "global_speaker": mapping[speaker],
+                "reason": (
+                    "missing-embedding"
+                    if speaker in missing
+                    else (
+                        "embedding-cluster"
+                        if next(len(group) for group in clusters if speaker in group) > 1
+                        else "embedding-singleton"
+                    )
+                ),
+                "embedding_available": speaker in embeddings,
+            }
+            for speaker in ordered_speakers
+        ]
         global_turns = tuple(
             sorted(
                 (
@@ -281,18 +353,18 @@ class ResumableDiarizationJob:
             )
         )
         return global_turns, {
-            "scope": "recording-global-embedding-cluster",
+            "scope": "recording-global-overlap-safe-complete-link-cluster",
+            "algorithm": "agglomerative-complete-link-v2",
             "threshold": self.global_speaker_threshold,
             "minimum_margin": self.global_speaker_margin,
             "chunk_speaker_count": len(ordered_speakers),
             "global_speaker_count": len(clusters),
             "embedding_count": len(embeddings),
-            "unresolved_count": sum(
-                item["reason"] in {"missing-embedding", "ambiguous-margin"}
-                for item in decisions
-            ),
+            "unresolved_count": len(missing) + len(ambiguous_pairs),
             "mapping": mapping,
             "decisions": decisions,
+            "merges": merges,
+            "ambiguous_pairs": ambiguous_pairs,
         }
 
     def run(
@@ -354,7 +426,9 @@ class ResumableDiarizationJob:
                     chunk = Path(directory) / f"{index:06d}.wav"
                     self._extract_chunk(source, start_ms, end_ms, chunk)
                     local = self.backend.diarize(chunk, constraints=constraints)
-                    embed_speakers = getattr(self.backend, "speaker_embeddings", None)
+                    embed_speakers = getattr(
+                        self.speaker_embedding_backend, "speaker_embeddings", None
+                    )
                     local_embeddings = (
                         embed_speakers(chunk, local) if callable(embed_speakers) else {}
                     )

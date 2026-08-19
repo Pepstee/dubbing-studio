@@ -13,6 +13,7 @@ from dubbing.diarization.models import (
     SpeakerTurn,
     UnsupportedSpeakerConstraintError,
 )
+from dubbing.diarization.pyannote import PyannoteCommunityBackend
 from dubbing.diarization.sherpa import SherpaOnnxDiarizationBackend
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "ResumableDiarizationJob",
     "DiarizationError",
     "DiarizationResult",
+    "PyannoteCommunityBackend",
     "SegmentAttribution",
     "SherpaOnnxDiarizationBackend",
     "SpeakerConstraints",

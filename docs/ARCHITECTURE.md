@@ -64,17 +64,18 @@ closed until transcript and translation representations agree.
 
 ## Speaker-label boundary
 
-Long-audio diarization labels are deliberately chunk-local:
+Long-audio diarization checkpoints preserve their chunk-local labels:
 
 ```text
 CHUNK_0000_SPEAKER_00
 CHUNK_0001_SPEAKER_00
 ```
 
-Equal suffixes in different chunks do not claim a shared human identity.
-Cross-chunk voice matching and known-speaker enrolment are later evidence
-layers. The current contract prefers explicit uncertainty over false identity
-continuity.
+Those internal labels are reconciled into recording-global anonymous
+`SPEAKER_XX` labels with overlap-safe complete-link voice clustering. Temporal
+overlap is a hard cannot-link constraint. Missing or ambiguous acoustic
+evidence stays separate. Human identity remains a later, consented evidence
+layer and is never inferred from the anonymous cluster number.
 
 ## Storage boundary
 

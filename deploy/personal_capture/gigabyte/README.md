@@ -93,12 +93,20 @@ One-token agreement also remains uncertain because two Whisper-family models
 can confidently agree on the wrong short phonetic neighbor.
 
 Diarization remains resumable in two-hour chunks, but anonymous speaker labels are reconciled
-across the whole recording. Sherpa's already-installed TitaNet model extracts embeddings only
-from non-overlapping speech; the global reconciler requires cosine similarity `0.65`, a
-best-vs-second margin of `0.05`, and never maps two local speakers from the same chunk to one
-global label. Missing or ambiguous evidence creates a new `SPEAKER_XX` identity instead of a
-guess. These settings are checkpoint-bound and the complete mapping decision is retained in the
-diarization result provenance.
+across the whole recording. The offline Sherpa fallback uses an explicit `0.85` clustering
+distance threshold. Its already-installed TitaNet model extracts embeddings only from
+non-overlapping speech; the global complete-link reconciler requires cosine similarity `0.80`,
+uses a `0.05` margin against competing temporally incompatible voices, and treats temporal
+overlap as a hard cannot-link constraint. It can therefore repair non-overlapping fragmentation
+inside a chunk without erasing real overlap. Missing or ambiguous evidence creates a new
+`SPEAKER_XX` label instead of a guess. These settings and the embedding provider are
+checkpoint-bound, and full merge/ambiguity evidence is retained in provenance.
+
+pyannote Community-1 is supported as the preferred local reference backend. Production selects
+it only from an absolute local model path after the operator has independently obtained access;
+the service never accepts model terms, fetches a gated model, or falls back across that boundary
+silently. Sherpa/TitaNet remains available as both fallback diarizer and independent global
+embedding provider.
 
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dubbing.apps.personal_capture.service import CaptureService
 from dubbing.apps.personal_capture.model_manifest import verify_model_manifest
-from dubbing.diarization import SherpaOnnxDiarizationBackend
+from dubbing.diarization import PyannoteCommunityBackend, SherpaOnnxDiarizationBackend
 from dubbing.transcription import (
     FasterWhisperSileroSpeechRegionDetector,
     FasterWhisperTranscriptionBackend,
@@ -28,12 +28,22 @@ def build_service(config: dict) -> CaptureService:
     model_manifest = verify_model_manifest(config)
     paths = config.get("paths", {})
     diarizer = None
+    diarization_embedding_backend = None
     if defaults.get("segmentation_model") and defaults.get("embedding_model"):
-        diarizer = SherpaOnnxDiarizationBackend(
+        sherpa = SherpaOnnxDiarizationBackend(
             defaults["segmentation_model"],
             defaults["embedding_model"],
             device=defaults.get("diarization_device", "cpu"),
+            cluster_threshold=defaults.get("diarization_cluster_threshold", 0.85),
         )
+        diarization_embedding_backend = sherpa
+        if defaults.get("diarization_backend", "sherpa-onnx") == "pyannote-community-1":
+            diarizer = PyannoteCommunityBackend(
+                defaults["pyannote_model"],
+                device=defaults.get("diarization_device", "auto"),
+            )
+        else:
+            diarizer = sherpa
     primary_asr = FasterWhisperTranscriptionBackend(
         defaults["asr_model"],
         device=defaults.get("asr_device", "cuda"),
@@ -63,6 +73,7 @@ def build_service(config: dict) -> CaptureService:
             maximum_region_seconds=defaults["vad_maximum_region_seconds"],
         ),
         diarizer=diarizer,
+        diarization_embedding_backend=diarization_embedding_backend,
         language_detector=LinguaLanguageDetector(),
         translation_backend=NLLBTranslationBackend(
             defaults["translation_model"],
@@ -95,7 +106,7 @@ def build_service(config: dict) -> CaptureService:
             "diarization_chunk_seconds", 2 * 60 * 60
         ),
         diarization_global_speaker_threshold=defaults.get(
-            "diarization_global_speaker_threshold", 0.65
+            "diarization_global_speaker_threshold", 0.80
         ),
         diarization_global_speaker_margin=defaults.get(
             "diarization_global_speaker_margin", 0.05

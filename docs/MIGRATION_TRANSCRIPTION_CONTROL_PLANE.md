@@ -48,6 +48,13 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
     review packages remain readable, while a re-run must use a fresh/global checkpoint. Rolling
     back to the previous commit restores chunk-local labels but does not change transcript text,
     source media, approval state or outbox records.
+13. The first natural-audio verification exposed severe Sherpa default-threshold fragmentation:
+    29 labels in ten minutes. The fallback now exposes and deploys Sherpa's documented distance
+    threshold (`0.85`), while global reconciliation uses overlap-safe complete-link clustering
+    (`0.80`) and can repair non-overlapping same-chunk fragments. Diarization checkpoint schema
+    v2 binds both the diarizer and independent embedding provider. pyannote Community-1 is wired
+    as the preferred local backend but remains fail-closed until an absolute local gated-model
+    path exists; no terms or private-audio upload are performed by migration.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.

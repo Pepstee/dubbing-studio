@@ -37,8 +37,10 @@ def deployment_config(tmp_path: Path) -> dict:
             "vad_minimum_silence_ms": 180,
             "vad_speech_pad_ms": 150,
             "vad_maximum_region_seconds": 8.0,
+            "diarization_backend": "sherpa-onnx",
+            "diarization_cluster_threshold": 0.85,
             "diarization_chunk_seconds": 7200,
-            "diarization_global_speaker_threshold": 0.65,
+            "diarization_global_speaker_threshold": 0.8,
             "diarization_global_speaker_margin": 0.05,
             "maximum_audio_seconds": 86400,
             "minimum_free_bytes": 0,
@@ -103,6 +105,19 @@ def test_canonical_config_is_valid(tmp_path):
                 vad_strict_threshold=0.2,
             ),
             "VAD thresholds",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                diarization_cluster_threshold=0,
+            ),
+            "diarization_cluster_threshold",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                diarization_backend="pyannote-community-1",
+                pyannote_model="relative/model",
+            ),
+            "absolute local pyannote_model",
         ),
         (
             lambda config: config["paths"].update(processing="../outside"),

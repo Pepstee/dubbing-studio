@@ -117,6 +117,7 @@ class CaptureService:
         transcription_retry_backend: TranscriptionBackend | None = None,
         speech_region_detector: SpeechRegionDetector | None = None,
         diarizer: DiarizationBackend | None = None,
+        diarization_embedding_backend: DiarizationBackend | None = None,
         speaker_constraints: SpeakerConstraints | None = None,
         transcription_options: TranscriptionOptions | None = None,
         language_detector: LanguageDetector | None = None,
@@ -133,7 +134,7 @@ class CaptureService:
         transcription_overlap_seconds: int = 5,
         transcription_minimum_silence_seconds: float = 0.7,
         diarization_chunk_seconds: int = 2 * 60 * 60,
-        diarization_global_speaker_threshold: float = 0.65,
+        diarization_global_speaker_threshold: float = 0.80,
         diarization_global_speaker_margin: float = 0.05,
         minimum_free_bytes: int = 0,
         maximum_audio_seconds: int = 24 * 60 * 60,
@@ -175,6 +176,7 @@ class CaptureService:
         self.inbox_dir = Path(inbox_dir).resolve() if inbox_dir else None
         self.packages_dir = Path(packages_dir)
         self.diarizer = diarizer
+        self.diarization_embedding_backend = diarization_embedding_backend
         self.speaker_constraints = speaker_constraints
         self.transcription_options = transcription_options or TranscriptionOptions()
         if (language_detector is None) != (translation_backend is None):
@@ -446,6 +448,7 @@ class CaptureService:
                     diarization = ResumableDiarizationJob(
                         self.diarizer,
                         checkpoint_root / "diarization",
+                        speaker_embedding_backend=self.diarization_embedding_backend,
                         chunk_seconds=self.diarization_chunk_seconds,
                         global_speaker_threshold=(
                             self.diarization_global_speaker_threshold

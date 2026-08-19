@@ -130,6 +130,20 @@ def validate_config(document: dict) -> dict:
     diarization_chunk = int(defaults.get("diarization_chunk_seconds", 0))
     if not 60 <= diarization_chunk <= 10_800:
         raise ValueError("diarization_chunk_seconds must be between 60 and 10800")
+    diarization_backend = defaults.get("diarization_backend")
+    if diarization_backend not in {"sherpa-onnx", "pyannote-community-1"}:
+        raise ValueError(
+            "diarization_backend must be sherpa-onnx or pyannote-community-1"
+        )
+    cluster_threshold = float(defaults.get("diarization_cluster_threshold", 0))
+    if not 0 < cluster_threshold <= 1:
+        raise ValueError("diarization_cluster_threshold must be in (0, 1]")
+    if diarization_backend == "pyannote-community-1":
+        pyannote_model = Path(defaults.get("pyannote_model", ""))
+        if not pyannote_model.is_absolute():
+            raise ValueError(
+                "pyannote Community-1 requires an absolute local pyannote_model path"
+            )
     global_speaker_threshold = float(
         defaults.get("diarization_global_speaker_threshold", 0)
     )

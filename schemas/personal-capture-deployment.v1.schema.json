@@ -67,6 +67,8 @@
         "vad_minimum_silence_ms",
         "vad_speech_pad_ms",
         "vad_maximum_region_seconds",
+        "diarization_backend",
+        "diarization_cluster_threshold",
         "diarization_chunk_seconds",
         "diarization_global_speaker_threshold",
         "diarization_global_speaker_margin",
@@ -140,6 +142,14 @@
           "minimum": 60,
           "maximum": 10800
         },
+        "diarization_backend": {
+          "enum": ["sherpa-onnx", "pyannote-community-1"]
+        },
+        "diarization_cluster_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
         "diarization_global_speaker_threshold": {
           "type": "number",
           "exclusiveMinimum": 0,
@@ -159,7 +169,8 @@
         "translation_target": {"type": "string", "minLength": 1},
         "translation_model": {"type": "string", "minLength": 1},
         "translation_device": {"enum": ["cpu", "cuda"]},
-        "diarization_device": {"enum": ["cpu", "cuda"]},
+        "diarization_device": {"enum": ["auto", "cpu", "cuda"]},
+        "pyannote_model": {"type": "string", "minLength": 1},
         "segmentation_model": {"type": "string", "minLength": 1},
         "embedding_model": {"type": "string", "minLength": 1},
         "model_manifest": {"type": "string", "minLength": 1},

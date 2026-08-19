@@ -68,7 +68,7 @@ Open the private review interface through Tailscale. Verify:
 
 - language and transcript text;
 - uncertain words and missing speech;
-- chunk-local speaker labels;
+- recording-global anonymous speaker consistency and any unresolved clusters;
 - English translations;
 - source playback at disputed timestamps.
 
