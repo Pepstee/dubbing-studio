@@ -42,7 +42,7 @@ class TranscriptQualityReport:
     status: TranscriptQualityStatus
     issues: tuple[QualityIssue, ...]
     metrics: dict
-    policy_version: str = "dubbing.transcript-quality-policy.v1"
+    policy_version: str = "dubbing.transcript-quality-policy.v2"
 
     @property
     def approval_allowed(self) -> bool:
@@ -121,7 +121,7 @@ def _max_token_run(tokens: list[str]) -> tuple[str | None, int]:
     return best_token, best
 
 
-def _max_phrase_run(tokens: list[str], max_width: int = 6) -> tuple[str | None, int]:
+def _max_phrase_run(tokens: list[str], max_width: int = 20) -> tuple[str | None, int]:
     best_phrase = None
     best_repeats = 1
     for width in range(1, min(max_width, len(tokens)) + 1):
@@ -138,6 +138,153 @@ def _max_phrase_run(tokens: list[str], max_width: int = 6) -> tuple[str | None, 
                 best_repeats = repeats
             index = cursor if repeats > 1 else index + 1
     return best_phrase, best_repeats
+
+
+@dataclass(frozen=True)
+class RepetitionFinding:
+    kind: str
+    phrase: str
+    repeat_count: int
+    repeated_token_count: int
+    phrase_width: int
+    start_ms: int
+    end_ms: int
+
+    def to_dict(self) -> dict:
+        return {
+            "kind": self.kind,
+            "phrase": self.phrase,
+            "repeat_count": self.repeat_count,
+            "repeated_token_count": self.repeated_token_count,
+            "phrase_width": self.phrase_width,
+            "start_ms": self.start_ms,
+            "end_ms": self.end_ms,
+        }
+
+
+@dataclass(frozen=True)
+class _RepetitionCandidate:
+    token_start: int
+    token_end: int
+    phrase: tuple[str, ...]
+    repeat_count: int
+
+    @property
+    def phrase_width(self) -> int:
+        return len(self.phrase)
+
+    @property
+    def repeated_token_count(self) -> int:
+        return self.token_end - self.token_start
+
+
+def _repetition_threshold_met(phrase_width: int, repeat_count: int) -> bool:
+    repeated_tokens = phrase_width * repeat_count
+    if phrase_width == 1:
+        return repeat_count >= 8
+    if phrase_width <= 3:
+        return repeat_count >= 6
+    return repeat_count >= 4 and repeated_tokens >= 24
+
+
+def detect_repetition_pathologies(
+    segments: Iterable[TranscriptSegment],
+    *,
+    maximum_phrase_width: int = 20,
+) -> tuple[RepetitionFinding, ...]:
+    """Return timestamp-localized decoder-loop evidence.
+
+    Thresholds depend on phrase width so ordinary conversational acknowledgements
+    do not receive the same treatment as long clauses repeated mechanically.
+    """
+    ordered = tuple(segments)
+    if maximum_phrase_width < 1:
+        raise ValueError("maximum_phrase_width must be positive")
+    tokens: list[str] = []
+    token_segments: list[int] = []
+    for segment_index, segment in enumerate(ordered):
+        segment_tokens = _tokens(segment.text)
+        tokens.extend(segment_tokens)
+        token_segments.extend([segment_index] * len(segment_tokens))
+
+    candidates: list[_RepetitionCandidate] = []
+    for start in range(len(tokens)):
+        available_width = min(maximum_phrase_width, (len(tokens) - start) // 2)
+        for width in range(1, available_width + 1):
+            phrase = tuple(tokens[start : start + width])
+            repeats = 1
+            cursor = start + width
+            while tokens[cursor : cursor + width] == list(phrase):
+                repeats += 1
+                cursor += width
+            if _repetition_threshold_met(width, repeats):
+                candidates.append(
+                    _RepetitionCandidate(start, cursor, phrase, repeats)
+                )
+
+    # Prefer the primitive phrase covering the largest run and suppress the same
+    # run rediscovered at later token offsets or as a multiple-width phrase.
+    selected: list[_RepetitionCandidate] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (
+            item.token_start,
+            -item.repeated_token_count,
+            item.phrase_width,
+        ),
+    ):
+        if any(
+            candidate.token_start >= existing.token_start
+            and candidate.token_end <= existing.token_end
+            for existing in selected
+        ):
+            continue
+        selected.append(candidate)
+
+    findings = [
+        RepetitionFinding(
+            kind="repeated_token" if item.phrase_width == 1 else "repeated_phrase",
+            phrase=" ".join(item.phrase),
+            repeat_count=item.repeat_count,
+            repeated_token_count=item.repeated_token_count,
+            phrase_width=item.phrase_width,
+            start_ms=ordered[token_segments[item.token_start]].start_ms,
+            end_ms=ordered[token_segments[item.token_end - 1]].end_ms,
+        )
+        for item in selected
+    ]
+
+    chain_start = 0
+    for index in range(1, len(ordered) + 1):
+        still_equal = (
+            index < len(ordered)
+            and _normalize(ordered[index].text)
+            and _normalize(ordered[index].text) == _normalize(ordered[index - 1].text)
+        )
+        if still_equal:
+            continue
+        repeat_count = index - chain_start
+        phrase_tokens = _tokens(ordered[chain_start].text)
+        if phrase_tokens and _repetition_threshold_met(
+            len(phrase_tokens), repeat_count
+        ):
+            finding = RepetitionFinding(
+                kind="repeated_segment",
+                phrase=_normalize(ordered[chain_start].text),
+                repeat_count=repeat_count,
+                repeated_token_count=len(phrase_tokens) * repeat_count,
+                phrase_width=len(phrase_tokens),
+                start_ms=ordered[chain_start].start_ms,
+                end_ms=ordered[index - 1].end_ms,
+            )
+            if not any(
+                finding.start_ms >= existing.start_ms
+                and finding.end_ms <= existing.end_ms
+                for existing in findings
+            ):
+                findings.append(finding)
+        chain_start = index
+    return tuple(sorted(findings, key=lambda item: (item.start_ms, item.end_ms)))
 
 
 def _covered_ms(segments: Iterable[TranscriptSegment]) -> int:
@@ -270,24 +417,21 @@ def evaluate_transcript_quality(
 
     token, token_run = _max_token_run(tokens)
     phrase, phrase_run = _max_phrase_run(tokens)
-    if (
-        token_run >= 8
-        or phrase_run >= 6
-        or adjacent_duplicates >= 20
-        or max_adjacent_duplicate_chain >= 4
-    ):
+    repetition_findings = detect_repetition_pathologies(segments)
+    for finding in repetition_findings:
         issues.append(
             QualityIssue(
                 "pathological_repetition",
                 "critical",
                 "Repeated decoding output indicates a hallucination loop.",
+                start_ms=finding.start_ms,
+                end_ms=finding.end_ms,
                 evidence={
-                    "max_token": token,
-                    "max_token_run": token_run,
-                    "max_phrase": phrase,
-                    "max_phrase_run": phrase_run,
-                    "adjacent_duplicate_segment_transitions": adjacent_duplicates,
-                    "max_adjacent_duplicate_chain": max_adjacent_duplicate_chain,
+                    "kind": finding.kind,
+                    "phrase": finding.phrase,
+                    "repeat_count": finding.repeat_count,
+                    "repeated_token_count": finding.repeated_token_count,
+                    "phrase_width": finding.phrase_width,
                 },
             )
         )
@@ -381,7 +525,13 @@ def evaluate_transcript_quality(
             "adjacent_duplicate_segment_transitions": adjacent_duplicates,
             "max_adjacent_duplicate_chain": max_adjacent_duplicate_chain,
             "max_token_run": token_run,
+            "max_token": token,
             "max_phrase_run": phrase_run,
+            "max_phrase": phrase,
+            "repetition_finding_count": len(repetition_findings),
+            "repetition_findings": [
+                finding.to_dict() for finding in repetition_findings
+            ],
             "timestamp_overlap_count": timestamp_overlaps,
             "large_gap_count": len(large_gaps),
             "explained_silence_gap_count": len(explained_silence_gaps),

@@ -543,26 +543,6 @@ class AdaptiveLongFormCoordinator:
             _atomic_json(path, expected)
 
     @staticmethod
-    def _has_repeated_tokens(text: str) -> bool:
-        tokens = _normalize(text).split()
-        run = 1
-        for previous, current in zip(tokens, tokens[1:]):
-            run = run + 1 if current == previous else 1
-            if run >= 8:
-                return True
-        for width in range(1, min(6, len(tokens)) + 1):
-            for index in range(0, len(tokens) - (2 * width) + 1):
-                phrase = tokens[index : index + width]
-                repeats = 1
-                cursor = index + width
-                while tokens[cursor : cursor + width] == phrase:
-                    repeats += 1
-                    cursor += width
-                if repeats >= 6:
-                    return True
-        return False
-
-    @staticmethod
     def _critical_failure_intervals(
         result: TranscriptionResult,
         quality: TranscriptQualityReport,
@@ -572,12 +552,17 @@ class AdaptiveLongFormCoordinator:
         }
         if not critical_codes:
             return []
-        intervals: list[tuple[int, int]] = []
+        intervals: list[tuple[int, int]] = [
+            (issue.start_ms, issue.end_ms)
+            for issue in quality.issues
+            if issue.severity in {"critical", "fatal"}
+            and issue.start_ms is not None
+            and issue.end_ms is not None
+        ]
         previous: TranscriptSegment | None = None
         for segment in result.segments:
             if (
-                AdaptiveLongFormCoordinator._has_repeated_tokens(segment.text)
-                or segment.text == _FAILED_SPAN_TEXT
+                segment.text == _FAILED_SPAN_TEXT
                 or (segment.diagnostics and segment.diagnostics.fallback_exhausted)
             ):
                 intervals.append((segment.start_ms, segment.end_ms))

@@ -212,6 +212,31 @@ def test_targeted_retry_spans_are_vad_bounded_between_20_and_60_seconds():
     assert all(20_000 <= end - start <= 60_000 for start, end in spans)
 
 
+def test_quality_issue_timestamps_drive_targeted_retry_not_the_whole_recording():
+    text = " ".join(["I don't know what to do"] * 10)
+    result = TranscriptionResult(
+        (
+            TranscriptSegment(0, 1000, "ordinary"),
+            TranscriptSegment(120_000, 130_000, text),
+            TranscriptSegment(240_000, 241_000, "ordinary again"),
+        ),
+        f"ordinary {text} ordinary again",
+        "fixture",
+        "fixture",
+        "test",
+        "en",
+        300_000,
+        False,
+    )
+    from dubbing.transcription.quality import evaluate_transcript_quality
+
+    quality = evaluate_transcript_quality(result, expected_duration_ms=300_000)
+
+    assert AdaptiveLongFormCoordinator._critical_failure_intervals(result, quality) == [
+        (120_000, 130_000)
+    ]
+
+
 def test_v3_checkpoint_manifest_migrates_only_when_other_contract_fields_match(tmp_path):
     backend = _RetryingBackend()
     coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")

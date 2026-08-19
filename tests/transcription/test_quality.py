@@ -76,6 +76,66 @@ def test_scattered_legitimate_duplicate_segments_do_not_form_a_loop():
     assert "pathological_repetition" not in {item.code for item in report.issues}
 
 
+def test_six_conversational_yes_responses_are_not_a_decoder_loop():
+    segments = tuple(
+        TranscriptSegment(index * 1000, index * 1000 + 500, "yes")
+        for index in range(6)
+    )
+
+    report = evaluate_transcript_quality(
+        _result(" ".join(item.text for item in segments), segments)
+    )
+
+    assert "pathological_repetition" not in {item.code for item in report.issues}
+
+
+def test_seven_token_decoder_loop_is_detected_and_timestamp_localized():
+    phrase = "I don't know what to do"
+    loop = " ".join([phrase] * 12)
+    segments = (
+        TranscriptSegment(0, 1000, "ordinary beginning"),
+        TranscriptSegment(10_000, 20_000, loop),
+        TranscriptSegment(21_000, 22_000, "ordinary ending"),
+    )
+
+    report = evaluate_transcript_quality(
+        _result(" ".join(item.text for item in segments), segments)
+    )
+
+    issue = next(item for item in report.issues if item.code == "pathological_repetition")
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert (issue.start_ms, issue.end_ms) == (10_000, 20_000)
+    assert issue.evidence["phrase"] == "i don t know what to do"
+    assert issue.evidence["phrase_width"] == 7
+    assert issue.evidence["repeat_count"] == 12
+
+
+def test_long_phrase_repeated_only_three_times_remains_eligible():
+    phrase = "I don't know what to do"
+    text = " ".join([phrase] * 3)
+    report = evaluate_transcript_quality(
+        _result(text, (TranscriptSegment(0, 10_000, text),))
+    )
+
+    assert "pathological_repetition" not in {item.code for item in report.issues}
+
+
+def test_decoder_loop_split_across_segments_keeps_full_retry_interval():
+    phrase = "we need to leave this place now"
+    segments = tuple(
+        TranscriptSegment(index * 1000, index * 1000 + 900, phrase)
+        for index in range(5)
+    )
+
+    report = evaluate_transcript_quality(
+        _result(" ".join(item.text for item in segments), segments)
+    )
+
+    issue = next(item for item in report.issues if item.code == "pathological_repetition")
+    assert (issue.start_ms, issue.end_ms) == (0, 4900)
+    assert issue.evidence["repeat_count"] == 5
+
+
 def test_failed_span_placeholder_requires_reprocessing():
     segment = TranscriptSegment(
         0, 1000, "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]", uncertain=True

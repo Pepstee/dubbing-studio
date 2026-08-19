@@ -63,7 +63,12 @@ window scores. Script-level error buckets are still reported.
 
 Observed repetitions such as `Loops` ×109, `tree` ×23, `second` ×16, `Mm-hmm` ×20 and
 `됐다` ×33 are adversarial regression tests. Scattered legitimate duplicate replies do not
-count as a loop; consecutive runs and aggregate pathology thresholds do.
+count as a loop. Quality policy v2 maps normalized tokens back to source segments, searches
+primitive repeated phrases up to 20 tokens, and emits exact failure timestamps for targeted
+retry. Length-sensitive thresholds allow six short conversational acknowledgements while
+still rejecting eight identical tokens, six short phrases, or four longer phrases covering
+at least 24 repeated tokens. The observed seven-token `I don't know what to do` decoder loop
+is a permanent regression fixture.
 
 ## Provider boundaries
 
