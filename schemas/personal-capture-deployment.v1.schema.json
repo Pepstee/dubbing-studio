@@ -60,6 +60,13 @@
         "transcription_maximum_chunk_seconds",
         "transcription_overlap_seconds",
         "transcription_minimum_silence_seconds",
+        "vad_backend",
+        "vad_strict_threshold",
+        "vad_sensitive_threshold",
+        "vad_minimum_speech_ms",
+        "vad_minimum_silence_ms",
+        "vad_speech_pad_ms",
+        "vad_maximum_region_seconds",
         "diarization_chunk_seconds",
         "maximum_audio_seconds",
         "minimum_free_bytes",
@@ -106,6 +113,25 @@
         "transcription_minimum_silence_seconds": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "vad_backend": {"const": "faster-whisper-silero"},
+        "vad_strict_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "vad_sensitive_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1
+        },
+        "vad_minimum_speech_ms": {"type": "integer", "minimum": 0},
+        "vad_minimum_silence_ms": {"type": "integer", "minimum": 0},
+        "vad_speech_pad_ms": {"type": "integer", "minimum": 0},
+        "vad_maximum_region_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 30
         },
         "diarization_chunk_seconds": {
           "type": "integer",

@@ -20,6 +20,7 @@ from dubbing.transcription.models import (
     TranscriptionOptions,
     TranscriptionResult,
 )
+from dubbing.transcription.speech_regions import SpeechRegion, SpeechRegionPlan
 
 
 
@@ -97,6 +98,27 @@ class _IndependentBackend(TranscriptionBackend):
             device="test",
             language=options.language or "en",
             duration_ms=10_000,
+            confidence_available=False,
+        )
+
+
+class _ConstantBackend(TranscriptionBackend):
+    def __init__(self, identity):
+        self._identity = identity
+
+    @property
+    def identity(self):
+        return self._identity
+
+    def transcribe(self, audio, options=None):
+        return TranscriptionResult(
+            segments=(TranscriptSegment(0, 500, "agreed speech"),),
+            text="agreed speech",
+            backend="fixture",
+            model=self._identity,
+            device="test",
+            language=options.language or "en",
+            duration_ms=500,
             confidence_available=False,
         )
 
@@ -456,6 +478,56 @@ def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(
         "ro",
         "ko",
     )
+
+
+def test_targeted_retry_microdecodes_regions_and_marks_long_uncovered_intervals(tmp_path):
+    class _Detector:
+        identity = "fixture:speech-regions"
+
+        def detect(self, audio):
+            regions = (
+                SpeechRegion(2000, 4000, "strict"),
+                SpeechRegion(8000, 9000, "sensitive"),
+            )
+            return SpeechRegionPlan(
+                self.identity,
+                20_000,
+                regions[:1],
+                regions[1:],
+                regions,
+            )
+
+    coordinator = AdaptiveLongFormCoordinator(
+        _ConstantBackend("fixture:primary"),
+        tmp_path / "job",
+        retry_backend=_ConstantBackend("fixture:independent"),
+        speech_region_detector=_Detector(),
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (10_000, 30_000),
+            "failed hallucination",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is not None
+    assert [(item.start_ms, item.end_ms, item.text, item.uncertain) for item in replacement] == [
+        (10_000, 12_000, "[UNCERTAIN: SPEECH REGION NOT ISOLATED]", True),
+        (12_000, 12_500, "agreed speech", False),
+        (12_500, 14_000, "[UNCERTAIN: SPEECH REGION NOT ISOLATED]", True),
+        (14_000, 18_000, "[UNCERTAIN: SPEECH REGION NOT ISOLATED]", True),
+        (18_000, 18_500, "agreed speech", False),
+        (19_000, 30_000, "[UNCERTAIN: SPEECH REGION NOT ISOLATED]", True),
+    ]
+    assert attempts[0]["kind"] == "targeted-speech-region-plan"
+    assert attempts[-1]["kind"] == "targeted-speech-region-result"
 
 
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):

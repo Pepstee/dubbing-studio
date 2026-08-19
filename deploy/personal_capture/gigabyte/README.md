@@ -79,6 +79,14 @@ targeted retry is never accepted on the primary model's evidence alone. The
 independent full `large-v3` model must return a healthy candidate. Cross-model
 agreement can produce a clean replacement; disagreement is retained as an
 explicitly uncertain span and remains blocked from GIGA admission.
+
+Rejected spans are additionally passed through the bundled local Silero VAD.
+A strict pass creates precise micro-regions; a more sensitive pass may add only
+non-overlapping regions, so it cannot swallow stricter boundaries. Each selected
+region is decoded independently by both ASR models. Long uncovered intervals,
+failed micro-regions and model disagreements remain explicit uncertainty rather
+than being silently treated as no speech. The thresholds and detector identity
+are checkpoint-bound in the deployment config.
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after
 that process acquires the exclusive watcher lock.

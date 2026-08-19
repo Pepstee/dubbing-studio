@@ -91,6 +91,23 @@ def validate_config(document: dict) -> dict:
         raise ValueError(
             "production Personal Capture requires transcription_strategy=adaptive"
         )
+    if defaults.get("vad_backend") != "faster-whisper-silero":
+        raise ValueError(
+            "production Personal Capture requires vad_backend=faster-whisper-silero"
+        )
+    strict_vad = float(defaults.get("vad_strict_threshold", 0))
+    sensitive_vad = float(defaults.get("vad_sensitive_threshold", 0))
+    if not 0 < sensitive_vad < strict_vad < 1:
+        raise ValueError("VAD thresholds must satisfy 0 < sensitive < strict < 1")
+    for key in (
+        "vad_minimum_speech_ms",
+        "vad_minimum_silence_ms",
+        "vad_speech_pad_ms",
+    ):
+        if int(defaults.get(key, -1)) < 0:
+            raise ValueError(f"defaults.{key} cannot be negative")
+    if not 0 < float(defaults.get("vad_maximum_region_seconds", 0)) <= 30:
+        raise ValueError("vad_maximum_region_seconds must be between 0 and 30")
     if defaults.get("review_required") is not True:
         raise ValueError("production Personal Capture requires review_required=true")
     transcription_chunk = int(defaults.get("transcription_chunk_seconds", 0))

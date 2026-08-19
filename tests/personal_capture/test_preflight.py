@@ -50,6 +50,7 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     asr_probe = MagicMock()
     translation_probe = MagicMock()
     diarization_probe = MagicMock()
+    vad_probe = MagicMock()
     with patch(
         "dubbing.apps.personal_capture.preflight.ffmpeg_executable",
         return_value="/usr/bin/ffmpeg",
@@ -66,6 +67,9 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
         "dubbing.apps.personal_capture.preflight.FasterWhisperTranscriptionBackend",
         return_value=asr_probe,
     ), patch(
+        "dubbing.apps.personal_capture.preflight.FasterWhisperSileroSpeechRegionDetector",
+        return_value=vad_probe,
+    ), patch(
         "dubbing.apps.personal_capture.preflight.NLLBTranslationBackend",
         return_value=translation_probe,
     ), patch(
@@ -77,6 +81,7 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     assert report["ready"] is True
     assert report["model_load_certified"] is True
     assert all(item["status"] == "pass" for item in report["checks"])
+    vad_probe.detect.assert_called_once()
 
 
 def test_preflight_cannot_report_ready_without_loading_models(tmp_path):

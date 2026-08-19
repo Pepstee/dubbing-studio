@@ -23,6 +23,12 @@ from dubbing.transcription.quality import (
     TranscriptQualityStatus,
     evaluate_transcript_quality,
 )
+from dubbing.transcription.speech_regions import (
+    FasterWhisperSileroSpeechRegionDetector,
+    SpeechRegion,
+    SpeechRegionDetector,
+    SpeechRegionPlan,
+)
 from dubbing.transcription.pipeline import AudioUnderstandingPipeline
 from dubbing.transcription.render import transcript_to_srt, transcript_to_text
 
@@ -32,8 +38,12 @@ __all__ = [
     "DEFAULT_MLX_MODEL",
     "DecodeDiagnostics",
     "FasterWhisperTranscriptionBackend",
+    "FasterWhisperSileroSpeechRegionDetector",
     "MLXWhisperTranscriptionBackend",
     "ResumableTranscriptionJob",
+    "SpeechRegion",
+    "SpeechRegionDetector",
+    "SpeechRegionPlan",
     "TranscriptSegment",
     "TranscriptWord",
     "TranscriptionBackend",

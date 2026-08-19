@@ -90,6 +90,15 @@ search. Agreement is calculated only between candidates decoded under the same l
 constraint, preventing a high-confidence wrong-language candidate from being compared with a
 different decoding condition.
 
+Sparse-speech repair adds a semantic speech-region stage before re-decoding. The production
+Gigabyte provider is the local Silero VAD already bundled with Faster-Whisper, so it needs no
+new checkpoint or network access. A strict `0.2` pass supplies precise regions; a `0.1`
+sensitive pass contributes only regions that do not overlap any strict region. Micro-regions
+are capped at eight seconds and decoded separately by both ASR models. Every plan, pass,
+source-time interval and candidate remains in the receipt. Uncovered intervals of at least one
+second, exhausted regions and model disagreement stay explicit uncertainty; VAD is never
+allowed to erase possibly quiet speech merely because it failed to detect it.
+
 ## Provider boundaries
 
 - **WhisperKit:** official `argmax-cli`/`whisperkit-cli` OpenAI-compatible local server,

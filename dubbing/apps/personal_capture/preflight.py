@@ -14,7 +14,10 @@ from dubbing.apps.personal_capture.config import load_config
 from dubbing.apps.personal_capture.model_manifest import verify_model_manifest
 from dubbing.diarization import SherpaOnnxDiarizationBackend
 from dubbing.media import ffmpeg_executable
-from dubbing.transcription import FasterWhisperTranscriptionBackend
+from dubbing.transcription import (
+    FasterWhisperSileroSpeechRegionDetector,
+    FasterWhisperTranscriptionBackend,
+)
 from dubbing.transcription.job import media_duration_ms
 from dubbing.translation import NLLBTranslationBackend
 
@@ -54,6 +57,25 @@ def _probe_diarization(defaults: dict) -> None:
             output.setframerate(16_000)
             output.writeframes(b"\0\0" * 16_000)
         backend.diarize(sample)
+
+
+def _probe_vad(defaults: dict) -> None:
+    detector = FasterWhisperSileroSpeechRegionDetector(
+        strict_threshold=defaults["vad_strict_threshold"],
+        sensitive_threshold=defaults["vad_sensitive_threshold"],
+        minimum_speech_ms=defaults["vad_minimum_speech_ms"],
+        minimum_silence_ms=defaults["vad_minimum_silence_ms"],
+        speech_pad_ms=defaults["vad_speech_pad_ms"],
+        maximum_region_seconds=defaults["vad_maximum_region_seconds"],
+    )
+    with tempfile.TemporaryDirectory(prefix="dubbing-vad-probe-") as directory:
+        sample = Path(directory) / "silence.wav"
+        with wave.open(str(sample), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16_000)
+            output.writeframes(b"\0\0" * 16_000)
+        detector.detect(sample)
 
 
 def inspect_environment(
@@ -224,6 +246,10 @@ def inspect_environment(
                     local_files_only=True,
                     model_revision=model_manifest["models"]["asr_retry"]["revision"],
                 )._load_model(),
+            ),
+            (
+                "vad-load",
+                lambda: _probe_vad(defaults),
             ),
             (
                 "translation-load",

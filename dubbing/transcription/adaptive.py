@@ -30,10 +30,12 @@ from dubbing.transcription.quality import (
     TranscriptQualityStatus,
     evaluate_transcript_quality,
 )
+from dubbing.transcription.speech_regions import SpeechRegionDetector
 
 
 _FAILED_SPAN_TEXT = "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]"
 _DISAGREEMENT_SPAN_TEXT = "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
+_UNISOLATED_SPAN_TEXT = "[UNCERTAIN: SPEECH REGION NOT ISOLATED]"
 _TARGET_RETRY_MIN_MS = 20_000
 _TARGET_RETRY_TARGET_MS = 45_000
 _TARGET_RETRY_MAX_MS = 60_000
@@ -458,6 +460,7 @@ class AdaptiveLongFormCoordinator:
         *,
         planner: AdaptiveChunkPlanner | None = None,
         retry_backend: TranscriptionBackend | None = None,
+        speech_region_detector: SpeechRegionDetector | None = None,
         candidate_languages: tuple[str, ...] = ("en", "ru", "ro", "ko"),
         minimum_silence_seconds: float = 0.7,
         language_retry_policy: dict[str, str] | None = None,
@@ -469,6 +472,7 @@ class AdaptiveLongFormCoordinator:
             raise ValueError("language retry policy must use always or confidence")
         self.backend = backend
         self.retry_backend = retry_backend
+        self.speech_region_detector = speech_region_detector
         self.checkpoint_dir = Path(checkpoint_dir)
         self.planner = planner or AdaptiveChunkPlanner()
         self.candidate_languages = candidate_languages
@@ -520,13 +524,18 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v7",
+            "coordinator_version": "adaptive-long-form-v8",
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
             "backend_identity": self.backend.identity,
             "retry_backend_identity": self.retry_backend.identity if self.retry_backend else None,
+            "speech_region_detector_identity": (
+                self.speech_region_detector.identity
+                if self.speech_region_detector is not None
+                else None
+            ),
             "candidate_languages": list(self.candidate_languages),
             "targeted_retry": {
                 "minimum_ms": _TARGET_RETRY_MIN_MS,
@@ -710,6 +719,8 @@ class AdaptiveLongFormCoordinator:
         original_text: str,
         options: TranscriptionOptions,
         attempts: list[dict],
+        *,
+        _allow_isolation: bool = True,
     ) -> tuple[TranscriptSegment, ...] | None:
         start_ms, end_ms = span
         candidates: list[tuple[TranscriptionBackend, TranscriptionOptions]] = [
@@ -739,6 +750,127 @@ class AdaptiveLongFormCoordinator:
             retry_audio = Path(directory) / "span.wav"
             marker = TranscriptSegment(start_ms, end_ms, "targeted retry span")
             self._extract_language_span(audio, marker, retry_audio)
+            if _allow_isolation and self.speech_region_detector is not None:
+                plan = self.speech_region_detector.detect(retry_audio)
+                source_regions = tuple(
+                    (region_start, region_end)
+                    for item in plan.selected_regions
+                    for region_start, region_end in (
+                        (
+                            max(start_ms, min(end_ms, start_ms + item.start_ms)),
+                            max(start_ms, min(end_ms, start_ms + item.end_ms)),
+                        ),
+                    )
+                    if region_end > region_start
+                )
+                attempts.append(
+                    {
+                        "kind": "targeted-speech-region-plan",
+                        "source_start_ms": start_ms,
+                        "source_end_ms": end_ms,
+                        "plan": plan.to_dict(),
+                        "source_regions": [
+                            {"start_ms": region_start, "end_ms": region_end}
+                            for region_start, region_end in source_regions
+                        ],
+                    }
+                )
+                total_region_ms = sum(
+                    region_end - region_start
+                    for region_start, region_end in source_regions
+                )
+                use_isolation = bool(source_regions) and (
+                    len(source_regions) > 1
+                    or total_region_ms < 0.8 * (end_ms - start_ms)
+                )
+                if use_isolation:
+                    replacements: list[TranscriptSegment] = []
+                    cursor = start_ms
+                    for region_start, region_end in source_regions:
+                        if region_start - cursor >= 1000:
+                            replacements.append(
+                                TranscriptSegment(
+                                    cursor,
+                                    region_start,
+                                    _UNISOLATED_SPAN_TEXT,
+                                    uncertain=True,
+                                )
+                            )
+                        replacement = self._decode_target_span(
+                            audio,
+                            (region_start, region_end),
+                            original_text,
+                            options,
+                            attempts,
+                            _allow_isolation=False,
+                        )
+                        if replacement is None:
+                            replacements.append(
+                                TranscriptSegment(
+                                    region_start,
+                                    region_end,
+                                    _FAILED_SPAN_TEXT,
+                                    uncertain=True,
+                                )
+                            )
+                        else:
+                            region_cursor = region_start
+                            for item in sorted(
+                                replacement,
+                                key=lambda candidate: (
+                                    candidate.start_ms,
+                                    candidate.end_ms,
+                                ),
+                            ):
+                                if item.start_ms - region_cursor >= 1000:
+                                    replacements.append(
+                                        TranscriptSegment(
+                                            region_cursor,
+                                            item.start_ms,
+                                            _UNISOLATED_SPAN_TEXT,
+                                            uncertain=True,
+                                        )
+                                    )
+                                replacements.append(item)
+                                region_cursor = max(region_cursor, item.end_ms)
+                            if region_end - region_cursor >= 1000:
+                                replacements.append(
+                                    TranscriptSegment(
+                                        region_cursor,
+                                        region_end,
+                                        _UNISOLATED_SPAN_TEXT,
+                                        uncertain=True,
+                                    )
+                                )
+                        cursor = max(cursor, region_end)
+                    if end_ms - cursor >= 1000:
+                        replacements.append(
+                            TranscriptSegment(
+                                cursor,
+                                end_ms,
+                                _UNISOLATED_SPAN_TEXT,
+                                uncertain=True,
+                            )
+                        )
+                    attempts.append(
+                        {
+                            "kind": "targeted-speech-region-result",
+                            "source_start_ms": start_ms,
+                            "source_end_ms": end_ms,
+                            "selected_region_count": len(source_regions),
+                            "selected_region_coverage_ms": total_region_ms,
+                            "replacement_segment_count": len(replacements),
+                            "uncertain_segment_count": sum(
+                                item.uncertain for item in replacements
+                            ),
+                        }
+                    )
+                    return tuple(
+                        sorted(
+                            replacements,
+                            key=lambda item: (item.start_ms, item.end_ms),
+                        )
+                    )
             for backend, retry_options in candidates:
                 candidate = annotate_transcript_languages(
                     backend.transcribe(retry_audio, retry_options)

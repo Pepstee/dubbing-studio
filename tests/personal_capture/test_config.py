@@ -30,6 +30,13 @@ def deployment_config(tmp_path: Path) -> dict:
             "transcription_maximum_chunk_seconds": 480,
             "transcription_overlap_seconds": 2,
             "transcription_minimum_silence_seconds": 0.7,
+            "vad_backend": "faster-whisper-silero",
+            "vad_strict_threshold": 0.2,
+            "vad_sensitive_threshold": 0.1,
+            "vad_minimum_speech_ms": 40,
+            "vad_minimum_silence_ms": 180,
+            "vad_speech_pad_ms": 150,
+            "vad_maximum_region_seconds": 8.0,
             "diarization_chunk_seconds": 7200,
             "maximum_audio_seconds": 86400,
             "minimum_free_bytes": 0,
@@ -87,6 +94,13 @@ def test_canonical_config_is_valid(tmp_path):
         (
             lambda config: config["defaults"].update(transcription_strategy="fixed"),
             "transcription_strategy",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                vad_sensitive_threshold=0.3,
+                vad_strict_threshold=0.2,
+            ),
+            "VAD thresholds",
         ),
         (
             lambda config: config["paths"].update(processing="../outside"),

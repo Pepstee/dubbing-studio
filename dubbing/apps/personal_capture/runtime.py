@@ -3,7 +3,10 @@ from __future__ import annotations
 from dubbing.apps.personal_capture.service import CaptureService
 from dubbing.apps.personal_capture.model_manifest import verify_model_manifest
 from dubbing.diarization import SherpaOnnxDiarizationBackend
-from dubbing.transcription import FasterWhisperTranscriptionBackend
+from dubbing.transcription import (
+    FasterWhisperSileroSpeechRegionDetector,
+    FasterWhisperTranscriptionBackend,
+)
 from dubbing.translation import LinguaLanguageDetector, NLLBTranslationBackend
 
 
@@ -51,6 +54,14 @@ def build_service(config: dict) -> CaptureService:
         config["workspace"]["wsl_path"],
         primary_asr,
         transcription_retry_backend=retry_asr,
+        speech_region_detector=FasterWhisperSileroSpeechRegionDetector(
+            strict_threshold=defaults["vad_strict_threshold"],
+            sensitive_threshold=defaults["vad_sensitive_threshold"],
+            minimum_speech_ms=defaults["vad_minimum_speech_ms"],
+            minimum_silence_ms=defaults["vad_minimum_silence_ms"],
+            speech_pad_ms=defaults["vad_speech_pad_ms"],
+            maximum_region_seconds=defaults["vad_maximum_region_seconds"],
+        ),
         diarizer=diarizer,
         language_detector=LinguaLanguageDetector(),
         translation_backend=NLLBTranslationBackend(

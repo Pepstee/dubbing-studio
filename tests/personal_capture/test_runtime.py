@@ -31,3 +31,6 @@ def test_production_runtime_wires_distinct_manifest_bound_retry_model(tmp_path):
     assert service.transcription_backend.identity != service.transcription_retry_backend.identity
     assert service.transcription_retry_backend.model_revision == "c" * 40
     assert service.transcription_retry_backend.compute_type == "int8_float16"
+    assert service.speech_region_detector.identity.startswith(
+        "faster-whisper-silero:strict=0.2:sensitive=0.1"
+    )

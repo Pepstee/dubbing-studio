@@ -17,6 +17,7 @@ from dubbing.diarization.models import SpeakerConstraints
 from dubbing.transcription import (
     AudioUnderstandingPipeline,
     ResumableTranscriptionJob,
+    SpeechRegionDetector,
     TranscriptionBackend,
     TranscriptionOptions,
     attribute_transcript,
@@ -114,6 +115,7 @@ class CaptureService:
         transcription_backend: TranscriptionBackend | None = None,
         *,
         transcription_retry_backend: TranscriptionBackend | None = None,
+        speech_region_detector: SpeechRegionDetector | None = None,
         diarizer: DiarizationBackend | None = None,
         speaker_constraints: SpeakerConstraints | None = None,
         transcription_options: TranscriptionOptions | None = None,
@@ -144,6 +146,7 @@ class CaptureService:
         self.store = CaptureStore(state / "capture.sqlite3")
         self.transcription_backend = transcription_backend
         self.transcription_retry_backend = transcription_retry_backend
+        self.speech_region_detector = speech_region_detector
         self.resumable = resumable
         if transcription_strategy not in {"adaptive", "fixed"}:
             raise ValueError("transcription_strategy must be adaptive or fixed")
@@ -247,6 +250,11 @@ class CaptureService:
                     "transcription_retry_backend": (
                         self.transcription_retry_backend.identity
                         if self.transcription_retry_backend is not None
+                        else None
+                    ),
+                    "speech_region_detector": (
+                        self.speech_region_detector.identity
+                        if self.speech_region_detector is not None
                         else None
                     ),
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
@@ -395,6 +403,7 @@ class CaptureService:
                         ),
                         language_retry_policy={"ko": "always"},
                         retry_backend=self.transcription_retry_backend,
+                        speech_region_detector=self.speech_region_detector,
                     ).run(
                         path,
                         self.transcription_options,
