@@ -397,12 +397,14 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
             "source_end_ms": 20_000,
             "status": "CONSENSUS_PASS",
             "primary_backend": "fixture:persistent",
-            "primary_language": None,
+            "primary_language": "en",
             "selected_backend": "fixture:independent",
-            "selected_language": None,
+            "selected_language": "en",
             "independent_backend_count": 1,
             "agreement": 1.0,
             "agreement_threshold": 0.75,
+            "acoustic_confidence_floor": None,
+            "minimum_acoustic_confidence": 0.35,
             "selected_uncertain": False,
         }
     ]
@@ -459,6 +461,55 @@ def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):
     ]
     assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
     assert attempts[-1]["agreement"] == 0.0
+
+
+def test_exact_low_confidence_agreement_cannot_become_clean_text(tmp_path):
+    class _LowConfidenceBackend(_ConstantBackend):
+        def transcribe(self, audio, options=None):
+            return TranscriptionResult(
+                segments=(
+                    TranscriptSegment(
+                        0,
+                        500,
+                        "Oh",
+                        confidence=0.08,
+                    ),
+                ),
+                text="Oh",
+                backend="fixture",
+                model=self.identity,
+                device="test",
+                language=options.language or "en",
+                duration_ms=500,
+                confidence_available=True,
+            )
+
+    coordinator = AdaptiveLongFormCoordinator(
+        _LowConfidenceBackend("fixture:primary"),
+        tmp_path / "job",
+        retry_backend=_LowConfidenceBackend("fixture:independent"),
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 2000),
+            "failed hallucination",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is not None
+    assert [item.text for item in replacement] == [
+        "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
+    ]
+    assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
+    assert attempts[-1]["agreement"] == 1.0
+    assert attempts[-1]["acoustic_confidence_floor"] == 0.08
 
 
 def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(tmp_path):

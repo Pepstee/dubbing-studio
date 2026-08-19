@@ -98,6 +98,9 @@ are capped at eight seconds and decoded separately by both ASR models. Every pla
 source-time interval and candidate remains in the receipt. Uncovered intervals of at least one
 second, exhausted regions and model disagreement stay explicit uncertainty; VAD is never
 allowed to erase possibly quiet speech merely because it failed to detect it.
+Text agreement alone is insufficient for micro-regions: when both providers expose acoustic
+confidence, their lower confidence must be at least `0.35`. This prevents exact agreement on
+low-confidence phonetic guesses such as `Oh` from becoming clean transcript text.
 
 ## Provider boundaries
 

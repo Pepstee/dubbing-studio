@@ -41,6 +41,7 @@ _TARGET_RETRY_TARGET_MS = 45_000
 _TARGET_RETRY_MAX_MS = 60_000
 _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
+_INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ class _SpanCandidate:
     text: str
     quality: TranscriptQualityReport
     average_log_probability: float
+    average_acoustic_confidence: float | None
     attempt_index: int
 
     @property
@@ -101,6 +103,7 @@ class _SpanCandidate:
         return (
             2.0 if self.quality.status is TranscriptQualityStatus.PASS else 1.0,
             -float(sum(item.uncertain for item in self.segments)),
+            self.average_acoustic_confidence or -1.0,
             self.average_log_probability,
         )
 
@@ -524,7 +527,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v8",
+            "coordinator_version": "adaptive-long-form-v9",
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
             "source_sha256": digest,
@@ -545,6 +548,9 @@ class AdaptiveLongFormCoordinator:
                 "maximum_rounds": 2,
                 "independent_backend_required": True,
                 "independent_agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
+                "independent_minimum_acoustic_confidence": (
+                    _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+                ),
             },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
@@ -905,15 +911,38 @@ class AdaptiveLongFormCoordinator:
                     if log_probabilities
                     else -10.0
                 )
+                word_confidences = [
+                    word.confidence
+                    for item in candidate.segments
+                    for word in item.words
+                    if word.confidence is not None
+                ]
+                segment_confidences = [
+                    item.confidence
+                    for item in candidate.segments
+                    if item.confidence is not None
+                ]
+                acoustic_confidences = word_confidences or segment_confidences
+                average_acoustic_confidence = (
+                    sum(acoustic_confidences) / len(acoustic_confidences)
+                    if acoustic_confidences
+                    else None
+                )
+                attempts[-1]["average_acoustic_confidence"] = (
+                    round(average_acoustic_confidence, 6)
+                    if average_acoustic_confidence is not None
+                    else None
+                )
                 shifted = tuple(item.shifted(start_ms) for item in candidate.segments)
                 eligible.append(
                     _SpanCandidate(
                         backend.identity,
-                        retry_options.language,
+                        candidate.language or retry_options.language,
                         shifted,
                         candidate.text,
                         quality,
                         average_log_probability,
+                        average_acoustic_confidence,
                         len(attempts) - 1,
                     )
                 )
@@ -938,6 +967,9 @@ class AdaptiveLongFormCoordinator:
                     "status": "NO_HEALTHY_INDEPENDENT_CANDIDATE",
                     "independent_backend_count": 0,
                     "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
+                    "minimum_acoustic_confidence": (
+                        _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+                    ),
                     "selected": False,
                 }
             )
@@ -953,26 +985,50 @@ class AdaptiveLongFormCoordinator:
                 if primary_candidate is not None
                 else None
             )
+            confidence_floor = (
+                min(
+                    primary_candidate.average_acoustic_confidence,
+                    independent_candidate.average_acoustic_confidence,
+                )
+                if primary_candidate is not None
+                and primary_candidate.average_acoustic_confidence is not None
+                and independent_candidate.average_acoustic_confidence is not None
+                else None
+            )
             paired_candidates.append(
-                (agreement, primary_candidate, independent_candidate)
+                (
+                    agreement,
+                    confidence_floor,
+                    primary_candidate,
+                    independent_candidate,
+                )
             )
         corroborated = [
             item
             for item in paired_candidates
             if item[0] is not None
             and item[0] >= _INDEPENDENT_AGREEMENT_THRESHOLD
+            and (
+                item[1] is None
+                or item[1] >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+            )
         ]
         ranked = corroborated or paired_candidates
-        agreement, primary_candidate, selected = max(
+        agreement, confidence_floor, primary_candidate, selected = max(
             ranked,
             key=lambda item: (
                 item[0] if item[0] is not None else -1.0,
-                item[2].score,
+                item[1] if item[1] is not None else -1.0,
+                item[3].score,
             ),
         )
         consensus = (
             agreement is not None
             and agreement >= _INDEPENDENT_AGREEMENT_THRESHOLD
+            and (
+                confidence_floor is None
+                or confidence_floor >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+            )
         )
         status = (
             "CONSENSUS_PASS"
@@ -1011,6 +1067,14 @@ class AdaptiveLongFormCoordinator:
                 ),
                 "agreement": round(agreement, 6) if agreement is not None else None,
                 "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
+                "acoustic_confidence_floor": (
+                    round(confidence_floor, 6)
+                    if confidence_floor is not None
+                    else None
+                ),
+                "minimum_acoustic_confidence": (
+                    _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+                ),
                 "selected_uncertain": not consensus,
             }
         )
