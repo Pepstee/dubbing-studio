@@ -29,6 +29,11 @@ The engine packages do not depend on Personal Capture. Personal Capture is an
 application assembled from the engine packages. The GIGA adapter consumes only
 approved outbox events and has no authority inside Dubbing Studio.
 
+Accuracy evaluation is also outside runtime admission. Per-fixture evaluators produce a scoped
+measurement gate and held-out benchmark claim. A separate portfolio gate combines clean,
+noisy/code-switched, natural long-form, uncertainty/coverage and speaker-attributed evidence.
+Host preflight, aggregate WER and a single successful fixture cannot set production accuracy.
+
 ## Full-day capture transaction
 
 ```text

@@ -52,6 +52,28 @@ per-language WER require timestamped, language-labelled reference turns; the cur
 MacWhisper reference has neither, so the report states that limitation instead of inventing
 window scores. Script-level error buckets are still reported.
 
+Language-sweep reports use the claim-scoped accuracy gate rather than an ambiguous aggregate
+`target_passed` boolean. Generate scoped validation/test reports, then evaluate the complete
+portfolio separately:
+
+```bash
+python -m dubbing.evaluation.language_sweep \
+  --fixture /path/to/fixture.json \
+  --sweep /path/to/sweep.json \
+  --output /path/to/scoped-report.json
+
+python -m dubbing.evaluation.accuracy_gate \
+  --report /path/to/clean-holdout-report.json \
+  --report /path/to/noisy-code-switch-report.json \
+  --report /path/to/natural-long-form-report.json \
+  --output /path/to/accuracy-portfolio.json
+```
+
+`measurement_gate`, `benchmark_claim` and `production_claim` are deliberately separate. Every
+required language must pass observed WER and CER, minimum evidence counts and the finite-sample
+guard. Reference-informed selectors are never benchmark-eligible. A single report always leaves
+production evidence insufficient, even when its scoped benchmark passes.
+
 ## Quality states
 
 | State | Meaning | Approval/outbox |

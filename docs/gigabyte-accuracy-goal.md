@@ -7,6 +7,35 @@ human-corrected English, Russian, Romanian, and Korean evidence. Model agreement
 provisional transcripts are not ground truth. No result from this work may emit a GIGA
 admission event until the gate passes.
 
+## Claim-scoped replacement gate (Project 7)
+
+The legacy tables below retain their historical point estimates, but their `PASS` labels are
+superseded. An aggregate score above 90% is not an accuracy certificate. New evaluations use
+`dubbing.accuracy-claim-gate.v1` and expose three non-interchangeable decisions:
+
+1. `measurement_gate`: this exact fixture, every required language, WER, CER, timestamps,
+   semantic quality and minimum sample size;
+2. `benchmark_claim`: the measurement gate plus a deployable selector, human ground truth and
+   an untouched holdout;
+3. `production_claim`: a portfolio requiring clean holdout, noisy code-switch stress, complete
+   natural long-form recordings, overlapping speech, speaker-attributed WER/DER/JER, speech
+   coverage and uncertainty burden. A single fixture can never pass this claim.
+
+The finite-sample guard reports a one-sided 95% Wilson error bound in addition to the observed
+WER/CER. It is explicitly a conservative promotion guard, not a binomial confidence interval
+for WER; insertions above the reference count force the maximum bound.
+
+Re-evaluating the frozen reference-independent selector demonstrates the correction:
+
+| Evidence | Aggregate word accuracy | Failing evidence | New status |
+|---|---:|---|---|
+| Validation | 92.59% | Romanian 89.98%; Romanian/Korean guarded lower bounds 87.74%/87.53% | `FAIL` |
+| Untouched test | 91.96% | Korean 87.04%; Romanian/Korean guarded lower bounds 89.55%/83.83% | `FAIL` |
+
+The source-bound receipt is
+`benchmarks/fixtures/transcription-accuracy-portfolio-v1.json`. The production portfolio is
+therefore `FAIL`, not “90% achieved,” and GIGA admission remains false.
+
 ## Hardware and model
 
 - GPU: RTX 4060 Laptop GPU, 8 GB VRAM.

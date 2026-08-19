@@ -70,6 +70,12 @@ dubbing-capture-preflight \
   --load-models
 ```
 
+Preflight `ready: true` means the host and pinned models are operational; it does not mean 90%
+accuracy or production certification. Generate v2 scoped reports with
+`python -m dubbing.evaluation.language_sweep`, then combine them with
+`python -m dubbing.evaluation.accuracy_gate`. Only the latter can make a production accuracy
+claim, and only when every natural/noisy/language/speaker/coverage requirement is present.
+
 The watcher has a filesystem lock, a 60-second stability window, bounded
 15-second polling, durable SQLite state and checkpointed long-audio stages.
 The operator uploads one original file. The watcher probes it, plans adaptive

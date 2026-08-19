@@ -39,3 +39,23 @@ def test_fleurs_holdout_failure_is_hash_bound_and_fail_closed() -> None:
     assert verdict["gates"]["every_language_accuracy_at_least_90_percent"] is False
     assert verdict["gates"]["untouched_holdout_passed"] is False
     assert verdict["gates"]["giga_admission_emitted"] is False
+
+
+def test_claim_scoped_portfolio_supersedes_aggregate_legacy_pass() -> None:
+    portfolio = _load(
+        ROOT / "benchmarks" / "fixtures" / "transcription-accuracy-portfolio-v1.json"
+    )
+
+    assert portfolio["validation"]["aggregate_word_accuracy"] > 0.9
+    assert portfolio["held_out_test"]["aggregate_word_accuracy"] > 0.9
+    assert portfolio["validation"]["measurement_status"] == "FAIL"
+    assert portfolio["held_out_test"]["measurement_status"] == "FAIL"
+    assert "RO_WORD_ACCURACY_BELOW_TARGET" in portfolio["validation"][
+        "failure_codes"
+    ]
+    assert "KO_WORD_ACCURACY_BELOW_TARGET" in portfolio["held_out_test"][
+        "failure_codes"
+    ]
+    assert portfolio["production_portfolio"]["status"] == "FAIL"
+    assert portfolio["production_portfolio"]["production_claim_passed"] is False
+    assert portfolio["giga_admission_emitted"] is False

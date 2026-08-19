@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
+from dubbing.evaluation.accuracy_gate import build_accuracy_gate
 from dubbing.evaluation.metrics import character_tokens, error_rate, word_tokens
 
 
@@ -392,39 +393,67 @@ def evaluate_language_sweep(
                 **language_score,
                 "cer": language_cer,
                 "character_accuracy": max(0.0, 1.0 - language_cer["rate"]),
-                "target_word_accuracy": 0.9,
-                "target_passed": language_score["wer"]["rate"] <= 0.1,
+                "word_accuracy_threshold": 0.9,
+                "word_accuracy_threshold_passed": (
+                    language_score["wer"]["rate"] <= 0.1
+                ),
+                "character_accuracy_threshold": 0.9,
+                "character_accuracy_threshold_passed": language_cer["rate"] <= 0.1,
             }
+        quality_diagnostics = _quality_diagnostics(
+            selections, [float(value) for value in sweep.get("temperatures", [0.0])]
+        )
+        accuracy_gate = build_accuracy_gate(
+            fixture,
+            rows,
+            deployable_selector=deployable,
+            quality_gate_passed=quality_diagnostics["quality_gate_passed"],
+            word_timestamp_gate_passed=sweep.get("word_timestamps", True),
+        )
         methods[method] = {
             "deployable": deployable,
             "description": description,
             "metrics": {
                 **overall,
-                "target_word_accuracy": 0.9,
-                "target_passed": overall["wer"]["rate"] <= 0.1,
-                "all_language_targets_passed": all(
-                    values["target_passed"] for values in per_language.values()
+                "word_accuracy_threshold": 0.9,
+                "aggregate_word_accuracy_threshold_passed": (
+                    overall["wer"]["rate"] <= 0.1
+                ),
+                "character_accuracy_threshold": 0.9,
+                "aggregate_character_accuracy_threshold_passed": (
+                    overall_cer["rate"] <= 0.1
+                ),
+                "every_required_language_word_threshold_passed": all(
+                    per_language.get(language, {}).get(
+                        "word_accuracy_threshold_passed", False
+                    )
+                    for language in ("en", "ru", "ro", "ko")
+                ),
+                "every_required_language_character_threshold_passed": all(
+                    per_language.get(language, {}).get(
+                        "character_accuracy_threshold_passed", False
+                    )
+                    for language in ("en", "ru", "ro", "ko")
                 ),
             },
             "per_language": per_language,
-            "quality_diagnostics": _quality_diagnostics(
-                selections, [float(value) for value in sweep.get("temperatures", [0.0])]
-            ),
+            "quality_diagnostics": quality_diagnostics,
+            "accuracy_gate": accuracy_gate,
             "spans": rows,
         }
 
-    fixture_gate_passed_methods = [
+    measurement_gate_passed_methods = [
         method
         for method, values in methods.items()
-        if not fixture["coverage_gaps"]
-        and sweep.get("word_timestamps", True)
-        and values["deployable"]
-        and values["metrics"]["target_passed"]
-        and values["metrics"]["all_language_targets_passed"]
-        and values["quality_diagnostics"]["quality_gate_passed"]
+        if values["accuracy_gate"]["measurement_gate"]["passed"]
+    ]
+    benchmark_claim_passed_methods = [
+        method
+        for method, values in methods.items()
+        if values["accuracy_gate"]["benchmark_claim"]["passed"]
     ]
     report = {
-        "schema_version": "dubbing.faster-whisper-language-sweep-evaluation.v1",
+        "schema_version": "dubbing.faster-whisper-language-sweep-evaluation.v2",
         "fixture_sha256": _sha256(fixture_file),
         "sweep_sha256": _sha256(sweep_file),
         "source_sha256": fixture["source"]["sha256"],
@@ -463,14 +492,14 @@ def evaluate_language_sweep(
             "accuracy_certification_eligible", False
         ),
         "methods": methods,
-        "fixture_gate_passed": bool(fixture_gate_passed_methods),
-        "fixture_gate_passed_methods": fixture_gate_passed_methods,
-        "promotion_passed": False,
-        "promotion_reason": (
-            "A clean fixture pass does not certify noisy code-switched long-form production."
-            if fixture_gate_passed_methods
-            else "No tested deployable selector reached 90% overall and in every covered "
-            "language; oracle/reference-informed methods cannot be promoted."
+        "measurement_gate_passed": bool(measurement_gate_passed_methods),
+        "measurement_gate_passed_methods": measurement_gate_passed_methods,
+        "benchmark_claim_passed": bool(benchmark_claim_passed_methods),
+        "benchmark_claim_passed_methods": benchmark_claim_passed_methods,
+        "production_claim_passed": False,
+        "production_claim_reason": (
+            "A multi-suite natural/noisy/code-switch/speaker-attributed evidence portfolio "
+            "is required; no single language sweep can certify production."
         ),
         "full_recording_accuracy_certified": False,
         "giga_admission_emitted": False,
@@ -496,7 +525,15 @@ def main() -> None:
     report = evaluate_language_sweep(
         args.fixture, args.sweep, args.output, timing_policy=args.timing_policy
     )
-    summary = {method: values["metrics"] for method, values in report["methods"].items()}
+    summary = {
+        method: {
+            "metrics": values["metrics"],
+            "measurement_status": values["accuracy_gate"]["measurement_gate"]["status"],
+            "benchmark_status": values["accuracy_gate"]["benchmark_claim"]["status"],
+            "production_status": values["accuracy_gate"]["production_claim"]["status"],
+        }
+        for method, values in report["methods"].items()
+    }
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 

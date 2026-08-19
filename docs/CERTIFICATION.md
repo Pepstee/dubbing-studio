@@ -75,6 +75,13 @@ Preflight intentionally reports `"ready": false` unless every configured model
 is both present at its absolute local path and successfully loaded with network
 fetching disabled.
 
+`"ready": true` certifies host operability only. It is not an accuracy or production-quality
+claim. Accuracy uses `dubbing.accuracy-claim-gate.v1`: an exact scoped measurement gate, a
+held-out benchmark claim and a separate multi-suite production portfolio. Aggregate accuracy,
+model agreement, a validation split, a synthetic fixture or a reference-informed oracle cannot
+individually certify production. The release receipt must preserve all three statuses and the
+codes for every failed or missing requirement.
+
 ## Release rule
 
 Deploy only a clean, versioned Git commit fetched from GitHub. Do not `rsync`

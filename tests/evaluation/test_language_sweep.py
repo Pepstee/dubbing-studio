@@ -124,10 +124,13 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
     assert report["methods"]["oracle_minimum_edits"]["metrics"]["word_accuracy"] == 1.0
     assert report["methods"]["oracle_minimum_edits"]["deployable"] is False
     assert (
-        report["methods"]["automatic_minimum_beam"]["metrics"]["all_language_targets_passed"]
+        report["methods"]["automatic_minimum_beam"]["metrics"][
+            "every_required_language_word_threshold_passed"
+        ]
         is False
     )
-    assert report["fixture_gate_passed"] is False
+    assert report["measurement_gate_passed"] is False
+    assert report["benchmark_claim_passed"] is False
     assert report["decode_configuration"]["condition_on_previous_text"] is False
     assert report["decode_configuration"]["word_timestamps"] is True
     assert report["decode_configuration"]["vad_filter"] is False
@@ -148,7 +151,13 @@ def test_evaluate_language_sweep_separates_deployable_and_oracle(tmp_path: Path)
         },
         "quality_gate_passed": True,
     }
-    assert report["promotion_passed"] is False
+    assert report["production_claim_passed"] is False
+    assert (
+        report["methods"]["detected_language_retry"]["accuracy_gate"][
+            "measurement_gate"
+        ]["status"]
+        == "INSUFFICIENT_EVIDENCE"
+    )
     assert report["giga_admission_emitted"] is False
 
 
@@ -240,7 +249,7 @@ def test_evaluate_language_sweep_quality_gate_fails_closed(tmp_path: Path) -> No
             "repeated_token_runs": ["loop"],
             "fallback_exhausted": ["loop"],
     }
-    assert report["fixture_gate_passed"] is False
+    assert report["measurement_gate_passed"] is False
     assert report["giga_admission_emitted"] is False
 
 
@@ -307,12 +316,20 @@ def test_evaluate_language_sweep_does_not_certify_text_only_decode(tmp_path: Pat
     report = evaluate_language_sweep(
         fixture_path, sweep_path, tmp_path / "report.json", timing_policy="full_clip"
     )
-    assert report["methods"]["automatic_minimum_beam"]["metrics"]["target_passed"]
+    assert report["methods"]["automatic_minimum_beam"]["metrics"][
+        "aggregate_word_accuracy_threshold_passed"
+    ]
     assert report["methods"]["automatic_minimum_beam"]["quality_diagnostics"][
         "quality_gate_passed"
     ]
     assert report["word_timestamp_gate_passed"] is False
-    assert report["fixture_gate_passed"] is False
+    assert report["measurement_gate_passed"] is False
+    assert (
+        report["methods"]["automatic_minimum_beam"]["accuracy_gate"][
+            "measurement_gate"
+        ]["status"]
+        == "INSUFFICIENT_EVIDENCE"
+    )
     assert report["giga_admission_emitted"] is False
 
 

@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from dubbing.evaluation.accuracy_gate import build_accuracy_gate
 from dubbing.evaluation.metrics import character_tokens, error_rate, word_tokens
 from dubbing.transcription.models import transcription_result_from_dict
 from dubbing.transcription.quality import evaluate_transcript_quality
@@ -92,17 +93,21 @@ def evaluate_timestamped_fixture(
             "wer": language_wer,
             "cer": language_cer,
             "word_accuracy": max(0.0, 1.0 - language_wer["rate"]),
-            "target_passed": language_wer["rate"] <= 0.1,
+            "character_accuracy": max(0.0, 1.0 - language_cer["rate"]),
+            "word_accuracy_threshold": 0.9,
+            "word_accuracy_threshold_passed": language_wer["rate"] <= 0.1,
+            "character_accuracy_threshold": 0.9,
+            "character_accuracy_threshold_passed": language_cer["rate"] <= 0.1,
         }
-    gate_passed = (
-        overall_wer["rate"] <= 0.1
-        and all(values["target_passed"] for values in per_language.values())
-        and not missing_word_timestamp_segments
-        and quality["status"] == "PASS"
-        and not fixture["coverage_gaps"]
+    accuracy_gate = build_accuracy_gate(
+        fixture,
+        rows,
+        deployable_selector=True,
+        quality_gate_passed=quality["status"] == "PASS",
+        word_timestamp_gate_passed=not missing_word_timestamp_segments,
     )
     report = {
-        "schema_version": "dubbing.timestamped-fixture-evaluation.v1",
+        "schema_version": "dubbing.timestamped-fixture-evaluation.v2",
         "fixture_sha256": _sha256(fixture_file),
         "candidate_sha256": _sha256(candidate_file),
         "source_sha256": result.source_sha256,
@@ -111,17 +116,25 @@ def evaluate_timestamped_fixture(
             "wer": overall_wer,
             "cer": overall_cer,
             "word_accuracy": max(0.0, 1.0 - overall_wer["rate"]),
-            "target_passed": overall_wer["rate"] <= 0.1,
+            "character_accuracy": max(0.0, 1.0 - overall_cer["rate"]),
+            "word_accuracy_threshold": 0.9,
+            "aggregate_word_accuracy_threshold_passed": overall_wer["rate"] <= 0.1,
+            "character_accuracy_threshold": 0.9,
+            "aggregate_character_accuracy_threshold_passed": (
+                overall_cer["rate"] <= 0.1
+            ),
         },
         "per_language": per_language,
         "word_timestamp_gate_passed": not missing_word_timestamp_segments,
         "missing_word_timestamp_segments": missing_word_timestamp_segments,
         "quality": quality,
-        "fixture_gate_passed": gate_passed,
+        "accuracy_gate": accuracy_gate,
+        "measurement_gate_passed": accuracy_gate["measurement_gate"]["passed"],
+        "benchmark_claim_passed": accuracy_gate["benchmark_claim"]["passed"],
         "accuracy_certification_eligible": fixture["selection_policy"].get(
             "accuracy_certification_eligible", False
         ),
-        "production_scope_certified": False,
+        "production_claim_passed": False,
         "giga_admission_emitted": False,
         "spans": rows,
     }
@@ -141,7 +154,24 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     report = evaluate_timestamped_fixture(args.fixture, args.candidate, args.output)
-    print(json.dumps({"metrics": report["metrics"], "per_language": report["per_language"], "fixture_gate_passed": report["fixture_gate_passed"]}, indent=2))
+    print(
+        json.dumps(
+            {
+                "metrics": report["metrics"],
+                "per_language": report["per_language"],
+                "measurement_status": report["accuracy_gate"]["measurement_gate"][
+                    "status"
+                ],
+                "benchmark_status": report["accuracy_gate"]["benchmark_claim"][
+                    "status"
+                ],
+                "production_status": report["accuracy_gate"]["production_claim"][
+                    "status"
+                ],
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

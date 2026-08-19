@@ -1,0 +1,80 @@
+{
+  "schema_version": "dubbing.transcription-accuracy-portfolio-verdict.v1",
+  "evaluated_on": "2026-08-20",
+  "policy": {
+    "target_accuracy": 0.9,
+    "required_languages": ["en", "ru", "ro", "ko"],
+    "minimum_utterances_per_language": 25,
+    "minimum_reference_words_per_language": 100,
+    "minimum_reference_characters_per_language": 500,
+    "finite_sample_guard": "one-sided Wilson error guard at 95%; observed WER and CER must also pass"
+  },
+  "selected_deployable_method": "language_conditioned_retry",
+  "validation": {
+    "fixture_sha256": "4852a0e88b06fe7bec33e062ef10d07f3203f2b6dd04e0c484e97b4a9343c614",
+    "sweep_sha256": "480811ceb4275169d01d8a78d7bf1bef61b7962e4261d23f23d2e97635c082ff",
+    "aggregate_word_accuracy": 0.9259259259259259,
+    "aggregate_guarded_lower_word_accuracy_95": 0.9155527038486944,
+    "per_language_word_accuracy": {
+      "en": 0.9560878243512974,
+      "ru": 0.9472527472527472,
+      "ro": 0.8998272884283247,
+      "ko": 0.902200488997555
+    },
+    "per_language_guarded_lower_word_accuracy_95": {
+      "en": 0.9384226404225313,
+      "ru": 0.927221137442567,
+      "ro": 0.8774081114580158,
+      "ko": 0.8753329367262779
+    },
+    "measurement_status": "FAIL",
+    "benchmark_status": "FAIL",
+    "failure_codes": [
+      "RO_WORD_ACCURACY_BELOW_TARGET",
+      "RO_WORD_ACCURACY_MARGIN_NOT_ESTABLISHED",
+      "KO_WORD_ACCURACY_MARGIN_NOT_ESTABLISHED"
+    ]
+  },
+  "held_out_test": {
+    "fixture_sha256": "f5f7415e75277cd14562ba9e648391bd79c5bb1413e55d3cf6abb8444a7912e4",
+    "sweep_sha256": "c3c5bd2165fd49370e12b5dd0f6670444112e19dc21e9799a6b22966fe7572b6",
+    "aggregate_word_accuracy": 0.9195575666163901,
+    "aggregate_guarded_lower_word_accuracy_95": 0.9089473171610394,
+    "per_language_word_accuracy": {
+      "en": 0.9391143911439115,
+      "ru": 0.9389473684210526,
+      "ro": 0.9157212317666127,
+      "ko": 0.8704225352112676
+    },
+    "per_language_guarded_lower_word_accuracy_95": {
+      "en": 0.9199403184641902,
+      "ru": 0.9182720913925746,
+      "ro": 0.8954608584662953,
+      "ko": 0.8382792459869738
+    },
+    "measurement_status": "FAIL",
+    "benchmark_status": "FAIL",
+    "failure_codes": [
+      "KO_WORD_ACCURACY_BELOW_TARGET",
+      "RO_WORD_ACCURACY_MARGIN_NOT_ESTABLISHED",
+      "KO_WORD_ACCURACY_MARGIN_NOT_ESTABLISHED"
+    ]
+  },
+  "production_portfolio": {
+    "status": "FAIL",
+    "production_claim_passed": false,
+    "missing_requirements": [
+      "clean_read_speech_holdout",
+      "noisy_code_switch_stress",
+      "natural_long_form_holdout",
+      "speaker_attributed_natural_audio",
+      "overlapping_speech_evaluated",
+      "natural_recording_diversity",
+      "natural_duration_at_least_three_hours",
+      "natural_speaker_diversity",
+      "speech_coverage_measured",
+      "uncertainty_burden_at_most_five_percent"
+    ]
+  },
+  "giga_admission_emitted": false
+}

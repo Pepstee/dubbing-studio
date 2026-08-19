@@ -81,12 +81,16 @@ def test_timestamped_fixture_scores_exact_windows_without_reference_trimming(tmp
     report = evaluate_timestamped_fixture(fixture, candidate, tmp_path / "report.json")
 
     assert report["metrics"]["word_accuracy"] == 1.0
-    assert report["per_language"]["en"]["target_passed"]
-    assert report["per_language"]["ko"]["target_passed"]
+    assert report["per_language"]["en"]["word_accuracy_threshold_passed"]
+    assert report["per_language"]["ko"]["word_accuracy_threshold_passed"]
     assert report["word_timestamp_gate_passed"]
-    assert report["fixture_gate_passed"]
+    assert not report["measurement_gate_passed"]
+    assert (
+        report["accuracy_gate"]["measurement_gate"]["status"]
+        == "INSUFFICIENT_EVIDENCE"
+    )
     assert not report["accuracy_certification_eligible"]
-    assert not report["production_scope_certified"]
+    assert not report["production_claim_passed"]
     assert not report["giga_admission_emitted"]
 
 
@@ -103,4 +107,4 @@ def test_timestamped_fixture_fails_closed_without_word_timestamps(tmp_path) -> N
 
     assert not report["word_timestamp_gate_passed"]
     assert len(report["missing_word_timestamp_segments"]) == 2
-    assert not report["fixture_gate_passed"]
+    assert not report["measurement_gate_passed"]

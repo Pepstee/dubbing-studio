@@ -8,6 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from dubbing.evaluation.accuracy_gate import build_accuracy_gate
 from dubbing.evaluation.metrics import (
     character_tokens,
     error_rate,
@@ -15,6 +16,7 @@ from dubbing.evaluation.metrics import (
     word_tokens,
 )
 from dubbing.transcription.models import TranscriptionResult, transcription_result_from_dict
+from dubbing.transcription.quality import evaluate_transcript_quality
 from dubbing.media import ffmpeg_executable
 
 
@@ -516,8 +518,39 @@ def evaluate_candidate(
     all_candidate_chars = [item for row in rows for item in character_tokens(row["candidate"])]
     overall_wer = error_rate(all_reference_words, all_candidate_words)
     overall_cer = error_rate(all_reference_chars, all_candidate_chars)
+    per_language = {}
+    for language, values in sorted(aggregate.items()):
+        language_wer = error_rate(
+            values["reference_words"], values["candidate_words"]
+        )
+        language_cer = error_rate(
+            values["reference_chars"], values["candidate_chars"]
+        )
+        per_language[language] = {
+            "wer": language_wer,
+            "cer": language_cer,
+            "word_accuracy": max(0.0, 1.0 - language_wer["rate"]),
+            "character_accuracy": max(0.0, 1.0 - language_cer["rate"]),
+            "word_accuracy_threshold": 0.9,
+            "word_accuracy_threshold_passed": language_wer["rate"] <= 0.1,
+            "character_accuracy_threshold": 0.9,
+            "character_accuracy_threshold_passed": language_cer["rate"] <= 0.1,
+        }
+    expected_duration_ms = candidate.duration_ms or max(
+        (int(span["end_ms"]) for span in fixture["spans"]), default=1
+    )
+    quality = evaluate_transcript_quality(
+        candidate, expected_duration_ms=expected_duration_ms
+    ).to_dict()
+    accuracy_gate = build_accuracy_gate(
+        fixture,
+        rows,
+        deployable_selector=False,
+        quality_gate_passed=quality["status"] == "PASS",
+        word_timestamp_gate_passed=False,
+    )
     report = {
-        "schema_version": "dubbing.operator-ground-truth-evaluation.v1",
+        "schema_version": "dubbing.operator-ground-truth-evaluation.v2",
         "fixture_sha256": _sha256(fixture_file),
         "candidate_sha256": _sha256(candidate_file),
         "source_sha256": expected_hash,
@@ -527,16 +560,14 @@ def evaluate_candidate(
             "cer": overall_cer,
             "word_accuracy": max(0.0, 1.0 - overall_wer["rate"]),
             "character_accuracy": max(0.0, 1.0 - overall_cer["rate"]),
-            "target_word_accuracy": 0.9,
-            "target_passed": overall_wer["rate"] <= 0.1,
+            "word_accuracy_threshold": 0.9,
+            "aggregate_word_accuracy_threshold_passed": overall_wer["rate"] <= 0.1,
+            "character_accuracy_threshold": 0.9,
+            "aggregate_character_accuracy_threshold_passed": (
+                overall_cer["rate"] <= 0.1
+            ),
         },
-        "per_language": {
-            language: {
-                "wer": error_rate(values["reference_words"], values["candidate_words"]),
-                "cer": error_rate(values["reference_chars"], values["candidate_chars"]),
-            }
-            for language, values in sorted(aggregate.items())
-        },
+        "per_language": per_language,
         "coverage_gaps": fixture["coverage_gaps"],
         "span_count": len(rows),
         "spans": rows,
@@ -545,6 +576,11 @@ def evaluate_candidate(
         "accuracy_certification_eligible": fixture.get("selection_policy", {}).get(
             "accuracy_certification_eligible", False
         ),
+        "quality": quality,
+        "accuracy_gate": accuracy_gate,
+        "measurement_gate_passed": accuracy_gate["measurement_gate"]["passed"],
+        "benchmark_claim_passed": accuracy_gate["benchmark_claim"]["passed"],
+        "production_claim_passed": False,
         "full_recording_accuracy_certified": False,
         "giga_admission_emitted": False,
     }

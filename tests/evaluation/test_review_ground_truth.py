@@ -108,7 +108,12 @@ def test_evaluate_candidate_uses_word_timestamps(tmp_path):
     candidate_path.write_text(json.dumps(result.to_dict()))
     report = evaluate_candidate(fixture_path, candidate_path, tmp_path / "report.json")
     assert report["metrics"]["word_accuracy"] == 1.0
-    assert report["metrics"]["target_passed"]
+    assert report["metrics"]["aggregate_word_accuracy_threshold_passed"]
+    assert not report["measurement_gate_passed"]
+    assert (
+        report["accuracy_gate"]["measurement_gate"]["status"]
+        == "INSUFFICIENT_EVIDENCE"
+    )
 
 
 def test_build_conditioned_fixture_rejects_modified_source_clip(tmp_path):
