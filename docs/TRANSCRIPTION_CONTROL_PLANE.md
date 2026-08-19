@@ -189,6 +189,13 @@ clip, applies an explicit similarity threshold and inter-candidate margin, and r
 `UNKNOWN` rather than guessing. Manual corrections append lineage. DER, JER and
 speaker-attributed WER evaluators run only when suitable reference labels exist.
 
+The recording-global reconciliation gate is reproducible with
+`scripts/verify_diarization_reconciliation.py`. It derives a multi-chunk fixture from one
+source-bound real speaker interval, runs diarization twice, and emits zero-collar single-speaker
+DER/JER, cross-chunk identity coverage, checkpoint replay equality, hashes, configuration and
+provenance. This is an engineering regression gate; it does not substitute for natural
+multi-speaker human labels.
+
 ## Current measured fixture result
 
 The 4,987.833-second fixture planned into 19 adaptive chunks: 16 silence boundaries, two
