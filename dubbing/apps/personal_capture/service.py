@@ -543,6 +543,15 @@ class CaptureService:
             if refreshed.to_dict() != quality_report.to_dict():
                 _atomic_text(quality_path, _json(refreshed.to_dict()))
                 quality_report = refreshed
+            quality_manifest = manifest["quality"]
+            if (
+                quality_manifest.get("status") != quality_report.status.value
+                or quality_manifest.get("policy_version")
+                != quality_report.policy_version
+            ):
+                quality_manifest["status"] = quality_report.status.value
+                quality_manifest["policy_version"] = quality_report.policy_version
+                _atomic_text(manifest_path, _json(manifest))
             quality_status = quality_report.status.value
             if quality_report.status in {
                 TranscriptQualityStatus.FAILED,
