@@ -80,7 +80,9 @@ coordinator evaluates every eligible primary and independent candidate, retains 
 quality report, model identity and language in the receipt, and requires token agreement of at
 least 0.75 before a replacement becomes clean. A same-model retry cannot self-corroborate. If
 the independent model is unavailable or unhealthy the span becomes a failed marker; if healthy
-models disagree, the selected independent text remains explicitly uncertain. Both outcomes are
+models disagree, the transcript receives an explicit disagreement marker while every candidate
+remains in the receipt. A plausible-looking model guess never becomes authoritative text merely
+because it carries an uncertainty flag. Both outcomes are
 blocked by the existing approval and GIGA admission gates.
 Because the rejected text may itself be a wrong-language hallucination, its script only
 prioritizes the retry order; it never removes English, Russian, Romanian or Korean from the

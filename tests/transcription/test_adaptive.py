@@ -432,6 +432,9 @@ def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):
 
     assert replacement is not None
     assert all(segment.uncertain for segment in replacement)
+    assert [segment.text for segment in replacement] == [
+        "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
+    ]
     assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
     assert attempts[-1]["agreement"] == 0.0
 

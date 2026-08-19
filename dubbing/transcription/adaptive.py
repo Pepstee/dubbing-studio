@@ -33,6 +33,7 @@ from dubbing.transcription.quality import (
 
 
 _FAILED_SPAN_TEXT = "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]"
+_DISAGREEMENT_SPAN_TEXT = "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
 _TARGET_RETRY_MIN_MS = 20_000
 _TARGET_RETRY_TARGET_MS = 45_000
 _TARGET_RETRY_MAX_MS = 60_000
@@ -852,8 +853,13 @@ class AdaptiveLongFormCoordinator:
         )
         selected_segments = selected.segments
         if not consensus:
-            selected_segments = tuple(
-                replace(item, uncertain=True) for item in selected_segments
+            selected_segments = (
+                TranscriptSegment(
+                    start_ms,
+                    end_ms,
+                    _DISAGREEMENT_SPAN_TEXT,
+                    uncertain=True,
+                ),
             )
         attempts[selected.attempt_index]["selected"] = True
         attempts.append(
