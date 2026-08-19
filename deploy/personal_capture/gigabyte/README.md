@@ -89,6 +89,8 @@ than being silently treated as no speech. The thresholds and detector identity
 are checkpoint-bound in the deployment config. Exact text agreement is also
 rejected when both models expose acoustic confidence and either falls below the
 control plane's `0.35` minimum.
+One-token agreement also remains uncertain because two Whisper-family models
+can confidently agree on the wrong short phonetic neighbor.
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after
 that process acquires the exclusive watcher lock.

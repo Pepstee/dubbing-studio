@@ -101,6 +101,9 @@ allowed to erase possibly quiet speech merely because it failed to detect it.
 Text agreement alone is insufficient for micro-regions: when both providers expose acoustic
 confidence, their lower confidence must be at least `0.35`. This prevents exact agreement on
 low-confidence phonetic guesses such as `Oh` from becoming clean transcript text.
+Local consensus must also contain at least two normalized tokens. A one-token utterance such as
+Korean `어?`/`응?` is too vulnerable to phonetic-neighbor errors to become authoritative merely
+because two related ASR models agree; it remains explicit uncertainty for later adjudication.
 
 ## Provider boundaries
 

@@ -405,6 +405,8 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
             "agreement_threshold": 0.75,
             "acoustic_confidence_floor": None,
             "minimum_acoustic_confidence": 0.35,
+            "consensus_token_count": 3,
+            "minimum_consensus_tokens": 2,
             "selected_uncertain": False,
         }
     ]
@@ -510,6 +512,47 @@ def test_exact_low_confidence_agreement_cannot_become_clean_text(tmp_path):
     assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
     assert attempts[-1]["agreement"] == 1.0
     assert attempts[-1]["acoustic_confidence_floor"] == 0.08
+
+
+def test_exact_single_token_agreement_remains_uncertain_even_at_high_confidence(tmp_path):
+    class _SingleTokenBackend(_ConstantBackend):
+        def transcribe(self, audio, options=None):
+            return TranscriptionResult(
+                segments=(TranscriptSegment(0, 300, "응?", confidence=0.9),),
+                text="응?",
+                backend="fixture",
+                model=self.identity,
+                device="test",
+                language="ko",
+                duration_ms=300,
+                confidence_available=True,
+            )
+
+    coordinator = AdaptiveLongFormCoordinator(
+        _SingleTokenBackend("fixture:primary"),
+        tmp_path / "job",
+        retry_backend=_SingleTokenBackend("fixture:independent"),
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 1000),
+            "failed hallucination",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is not None
+    assert replacement[0].uncertain is True
+    assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
+    assert attempts[-1]["agreement"] == 1.0
+    assert attempts[-1]["acoustic_confidence_floor"] == 0.9
+    assert attempts[-1]["consensus_token_count"] == 1
 
 
 def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(tmp_path):

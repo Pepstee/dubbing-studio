@@ -12,7 +12,7 @@ from array import array
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from dubbing.evaluation.metrics import token_agreement
+from dubbing.evaluation.metrics import token_agreement, word_tokens
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.job import source_sha256
@@ -42,6 +42,7 @@ _TARGET_RETRY_MAX_MS = 60_000
 _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
+_INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
 
 
 @dataclass(frozen=True)
@@ -551,6 +552,9 @@ class AdaptiveLongFormCoordinator:
                 "independent_minimum_acoustic_confidence": (
                     _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
                 ),
+                "independent_minimum_consensus_tokens": (
+                    _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
+                ),
             },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
@@ -970,6 +974,9 @@ class AdaptiveLongFormCoordinator:
                     "minimum_acoustic_confidence": (
                         _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
                     ),
+                    "minimum_consensus_tokens": (
+                        _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
+                    ),
                     "selected": False,
                 }
             )
@@ -995,10 +1002,19 @@ class AdaptiveLongFormCoordinator:
                 and independent_candidate.average_acoustic_confidence is not None
                 else None
             )
+            consensus_token_count = (
+                min(
+                    len(word_tokens(primary_candidate.text)),
+                    len(word_tokens(independent_candidate.text)),
+                )
+                if primary_candidate is not None
+                else 0
+            )
             paired_candidates.append(
                 (
                     agreement,
                     confidence_floor,
+                    consensus_token_count,
                     primary_candidate,
                     independent_candidate,
                 )
@@ -1012,14 +1028,22 @@ class AdaptiveLongFormCoordinator:
                 item[1] is None
                 or item[1] >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
             )
+            and item[2] >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
         ]
         ranked = corroborated or paired_candidates
-        agreement, confidence_floor, primary_candidate, selected = max(
+        (
+            agreement,
+            confidence_floor,
+            consensus_token_count,
+            primary_candidate,
+            selected,
+        ) = max(
             ranked,
             key=lambda item: (
                 item[0] if item[0] is not None else -1.0,
                 item[1] if item[1] is not None else -1.0,
-                item[3].score,
+                item[2],
+                item[4].score,
             ),
         )
         consensus = (
@@ -1029,6 +1053,7 @@ class AdaptiveLongFormCoordinator:
                 confidence_floor is None
                 or confidence_floor >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
             )
+            and consensus_token_count >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
         )
         status = (
             "CONSENSUS_PASS"
@@ -1074,6 +1099,10 @@ class AdaptiveLongFormCoordinator:
                 ),
                 "minimum_acoustic_confidence": (
                     _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+                ),
+                "consensus_token_count": consensus_token_count,
+                "minimum_consensus_tokens": (
+                    _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
                 ),
                 "selected_uncertain": not consensus,
             }
