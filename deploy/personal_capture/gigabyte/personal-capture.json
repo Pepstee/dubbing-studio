@@ -45,6 +45,8 @@
     "translation_device": "cuda",
     "diarization_device": "cpu",
     "diarization_chunk_seconds": 7200,
+    "diarization_global_speaker_threshold": 0.65,
+    "diarization_global_speaker_margin": 0.05,
     "minimum_free_bytes": 5368709120,
     "segmentation_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx",
     "embedding_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/nemo_en_titanet_small.onnx",

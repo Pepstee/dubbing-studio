@@ -72,3 +72,17 @@ def test_cuda_request_rejects_cpu_only_wheel(tmp_path):
     ):
         with pytest.raises(DiarizationError, match="CPU-only"):
             backend._dependencies()
+
+
+def test_embedding_audio_excludes_cross_speaker_overlap(tmp_path):
+    backend = _backend(tmp_path)
+    assert backend._subtract_overlaps(
+        0,
+        3_000,
+        ((1_000, 2_000),),
+    ) == ((0, 1_000), (2_000, 3_000))
+    assert backend._subtract_overlaps(
+        0,
+        1_000,
+        ((250, 750),),
+    ) == ()

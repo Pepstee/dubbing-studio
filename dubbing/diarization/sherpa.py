@@ -51,6 +51,7 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
         self.cluster_threshold = cluster_threshold
         self.min_duration_on = min_duration_on
         self.min_duration_off = min_duration_off
+        self._embedding_extractor = None
 
     @property
     def identity(self) -> str:
@@ -305,3 +306,98 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
             device=self.device,
             confidence_available=False,
         )
+
+    @staticmethod
+    def _subtract_overlaps(
+        start_ms: int,
+        end_ms: int,
+        blockers: tuple[tuple[int, int], ...],
+    ) -> tuple[tuple[int, int], ...]:
+        pieces = [(start_ms, end_ms)]
+        for blocker_start, blocker_end in blockers:
+            revised = []
+            for piece_start, piece_end in pieces:
+                if blocker_end <= piece_start or blocker_start >= piece_end:
+                    revised.append((piece_start, piece_end))
+                    continue
+                if piece_start < blocker_start:
+                    revised.append((piece_start, blocker_start))
+                if blocker_end < piece_end:
+                    revised.append((blocker_end, piece_end))
+            pieces = revised
+        return tuple(piece for piece in pieces if piece[1] - piece[0] >= 500)
+
+    def _speaker_embedding_extractor(self, sherpa_onnx):
+        if self._embedding_extractor is None:
+            config = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
+                model=str(self.embedding_model),
+                num_threads=self.num_threads,
+                provider=self.device,
+            )
+            if not config.validate():
+                raise DiarizationError("Sherpa-ONNX rejected the speaker embedding model")
+            self._embedding_extractor = sherpa_onnx.SpeakerEmbeddingExtractor(config)
+        return self._embedding_extractor
+
+    def speaker_embeddings(
+        self,
+        audio: str | Path,
+        diarization: DiarizationResult,
+        *,
+        maximum_speech_seconds: int = 30,
+    ) -> dict[str, tuple[float, ...]]:
+        """Extract one overlap-free TitaNet embedding per anonymous speaker."""
+
+        if maximum_speech_seconds < 1:
+            raise ValueError("maximum_speech_seconds must be positive")
+        audio_path = Path(audio)
+        if not audio_path.is_file():
+            raise DiarizationError(f"audio input not found: {audio_path}")
+        self._validate_models()
+        sherpa_onnx, numpy = self._dependencies()
+        samples = self._load_audio(audio_path, numpy)
+        extractor = self._speaker_embedding_extractor(sherpa_onnx)
+        maximum_samples = maximum_speech_seconds * _TARGET_SAMPLE_RATE
+        result: dict[str, tuple[float, ...]] = {}
+        for speaker in diarization.speakers:
+            blockers = tuple(
+                (turn.start_ms, turn.end_ms)
+                for turn in diarization.turns
+                if turn.speaker != speaker
+            )
+            clean_intervals = tuple(
+                interval
+                for turn in diarization.turns
+                if turn.speaker == speaker
+                for interval in self._subtract_overlaps(
+                    turn.start_ms, turn.end_ms, blockers
+                )
+            )
+            pieces = []
+            remaining = maximum_samples
+            for start_ms, end_ms in sorted(
+                clean_intervals,
+                key=lambda item: (-(item[1] - item[0]), item[0]),
+            ):
+                start_sample = max(0, round(start_ms * _TARGET_SAMPLE_RATE / 1000))
+                end_sample = min(
+                    len(samples), round(end_ms * _TARGET_SAMPLE_RATE / 1000)
+                )
+                if end_sample <= start_sample or remaining <= 0:
+                    continue
+                piece = samples[start_sample : min(end_sample, start_sample + remaining)]
+                if len(piece):
+                    pieces.append(piece)
+                    remaining -= len(piece)
+            if not pieces:
+                continue
+            speech = numpy.concatenate(pieces).astype(numpy.float32, copy=False)
+            stream = extractor.create_stream()
+            stream.accept_waveform(_TARGET_SAMPLE_RATE, speech)
+            stream.input_finished()
+            if not extractor.is_ready(stream):
+                continue
+            embedding = tuple(float(value) for value in extractor.compute(stream))
+            if embedding:
+                result[speaker] = embedding
+        return result

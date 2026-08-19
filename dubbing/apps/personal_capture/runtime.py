@@ -94,6 +94,12 @@ def build_service(config: dict) -> CaptureService:
         diarization_chunk_seconds=defaults.get(
             "diarization_chunk_seconds", 2 * 60 * 60
         ),
+        diarization_global_speaker_threshold=defaults.get(
+            "diarization_global_speaker_threshold", 0.65
+        ),
+        diarization_global_speaker_margin=defaults.get(
+            "diarization_global_speaker_margin", 0.05
+        ),
         minimum_free_bytes=defaults.get("minimum_free_bytes", 0),
         maximum_audio_seconds=defaults.get("maximum_audio_seconds", 24 * 60 * 60),
         outbox_dir=config.get("giga_outbox", {}).get("path"),

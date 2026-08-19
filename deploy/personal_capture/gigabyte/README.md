@@ -91,6 +91,15 @@ rejected when both models expose acoustic confidence and either falls below the
 control plane's `0.35` minimum.
 One-token agreement also remains uncertain because two Whisper-family models
 can confidently agree on the wrong short phonetic neighbor.
+
+Diarization remains resumable in two-hour chunks, but anonymous speaker labels are reconciled
+across the whole recording. Sherpa's already-installed TitaNet model extracts embeddings only
+from non-overlapping speech; the global reconciler requires cosine similarity `0.65`, a
+best-vs-second margin of `0.05`, and never maps two local speakers from the same chunk to one
+global label. Missing or ambiguous evidence creates a new `SPEAKER_XX` identity instead of a
+guess. These settings are checkpoint-bound and the complete mapping decision is retained in the
+diarization result provenance.
+
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after
 that process acquires the exclusive watcher lock.

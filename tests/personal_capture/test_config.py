@@ -38,6 +38,8 @@ def deployment_config(tmp_path: Path) -> dict:
             "vad_speech_pad_ms": 150,
             "vad_maximum_region_seconds": 8.0,
             "diarization_chunk_seconds": 7200,
+            "diarization_global_speaker_threshold": 0.65,
+            "diarization_global_speaker_margin": 0.05,
             "maximum_audio_seconds": 86400,
             "minimum_free_bytes": 0,
             "asr_model": str(tmp_path / "asr-model"),

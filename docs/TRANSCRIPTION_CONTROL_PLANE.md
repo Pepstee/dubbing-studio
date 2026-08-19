@@ -160,6 +160,20 @@ or presenting a transcript from another source terminates before network upload.
 Diarization asks whether two regions contain the same voice. Identity asks whose voice that
 is. They remain separate.
 
+Long recordings are diarized in resumable chunks, but speaker labels are recording-global.
+For the production Sherpa path, each chunk now extracts one TitaNet embedding per anonymous
+speaker from speech that does not overlap another detected speaker. A conservative incremental
+clusterer reconciles those embeddings across every chunk. It cannot merge two speakers detected
+inside the same chunk, requires both a similarity threshold and an ambiguity margin, and assigns
+a new anonymous label when evidence is missing or ambiguous. The result preserves overlapping
+turns and carries the complete chunk-label → global-label mapping, scores and reasons in its
+provenance receipt. `CHUNK_000N_SPEAKER_XX` is therefore checkpoint evidence only; review and
+transcript attribution receive stable `SPEAKER_XX` labels across the recording.
+
+This is anonymous consistency, not automatic identity. No person is named from embedding
+similarity alone. The production defaults are a `0.65` cosine threshold and `0.05` best-vs-second
+margin; both are source-bound checkpoint configuration and changing either invalidates reuse.
+
 The voiceprint registry accepts multiple consented reference clips per person, hashes every
 clip, applies an explicit similarity threshold and inter-candidate margin, and returns
 `UNKNOWN` rather than guessing. Manual corrections append lineage. DER, JER and

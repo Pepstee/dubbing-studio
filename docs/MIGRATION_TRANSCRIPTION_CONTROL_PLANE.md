@@ -42,6 +42,12 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
     still needs its exact SHA-256, an operator authorization ID, an explicit `--cloud-allowed`
     invocation and a locally configured credential. Rollback is simply to omit this separate
     stage; the certified local capture/review/outbox path is unchanged.
+12. Long-form diarization now reconciles chunk-local Sherpa labels through overlap-free TitaNet
+    embeddings and conservative recording-global clustering. Old v1 chunk-local diarization
+    checkpoints are intentionally incompatible with this stronger semantic contract; existing
+    review packages remain readable, while a re-run must use a fresh/global checkpoint. Rolling
+    back to the previous commit restores chunk-local labels but does not change transcript text,
+    source media, approval state or outbox records.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.

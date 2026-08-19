@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 
 class DiarizationError(RuntimeError):
@@ -78,6 +78,7 @@ class DiarizationResult:
     model: str
     device: str
     confidence_available: bool = False
+    provenance: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         ordered = tuple(sorted(self.turns, key=lambda turn: (turn.start_ms, turn.end_ms, turn.speaker)))
@@ -89,7 +90,7 @@ class DiarizationResult:
         return tuple(dict.fromkeys(turn.speaker for turn in self.turns))
 
     def to_dict(self) -> dict:
-        return {
+        document = {
             "backend": self.backend,
             "model": self.model,
             "device": self.device,
@@ -97,6 +98,9 @@ class DiarizationResult:
             "speakers": list(self.speakers),
             "turns": [turn.to_dict() for turn in self.turns],
         }
+        if self.provenance is not None:
+            document["provenance"] = self.provenance
+        return document
 
 
 @dataclass(frozen=True)

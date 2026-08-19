@@ -133,6 +133,8 @@ class CaptureService:
         transcription_overlap_seconds: int = 5,
         transcription_minimum_silence_seconds: float = 0.7,
         diarization_chunk_seconds: int = 2 * 60 * 60,
+        diarization_global_speaker_threshold: float = 0.65,
+        diarization_global_speaker_margin: float = 0.05,
         minimum_free_bytes: int = 0,
         maximum_audio_seconds: int = 24 * 60 * 60,
         outbox_dir: str | Path | None = None,
@@ -159,6 +161,10 @@ class CaptureService:
             transcription_minimum_silence_seconds
         )
         self.diarization_chunk_seconds = diarization_chunk_seconds
+        self.diarization_global_speaker_threshold = (
+            diarization_global_speaker_threshold
+        )
+        self.diarization_global_speaker_margin = diarization_global_speaker_margin
         if minimum_free_bytes < 0:
             raise ValueError("minimum_free_bytes cannot be negative")
         self.minimum_free_bytes = minimum_free_bytes
@@ -258,8 +264,16 @@ class CaptureService:
                         else None
                     ),
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
+                    "diarization_global_speaker_threshold": (
+                        self.diarization_global_speaker_threshold
+                    ),
+                    "diarization_global_speaker_margin": (
+                        self.diarization_global_speaker_margin
+                    ),
                     "speaker_identity_scope": (
-                        "chunk-local" if self.resumable and self.diarizer else "recording"
+                        "recording-global-embedding-cluster"
+                        if self.resumable and self.diarizer
+                        else "recording"
                     ),
                 },
                 "transcript": {
@@ -433,6 +447,10 @@ class CaptureService:
                         self.diarizer,
                         checkpoint_root / "diarization",
                         chunk_seconds=self.diarization_chunk_seconds,
+                        global_speaker_threshold=(
+                            self.diarization_global_speaker_threshold
+                        ),
+                        global_speaker_margin=self.diarization_global_speaker_margin,
                     ).run(
                         path,
                         constraints=self.speaker_constraints,

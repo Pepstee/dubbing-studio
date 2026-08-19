@@ -130,6 +130,16 @@ def validate_config(document: dict) -> dict:
     diarization_chunk = int(defaults.get("diarization_chunk_seconds", 0))
     if not 60 <= diarization_chunk <= 10_800:
         raise ValueError("diarization_chunk_seconds must be between 60 and 10800")
+    global_speaker_threshold = float(
+        defaults.get("diarization_global_speaker_threshold", 0)
+    )
+    if not 0 < global_speaker_threshold <= 1:
+        raise ValueError("diarization_global_speaker_threshold must be in (0, 1]")
+    global_speaker_margin = float(
+        defaults.get("diarization_global_speaker_margin", -1)
+    )
+    if not 0 <= global_speaker_margin < 1:
+        raise ValueError("diarization_global_speaker_margin must be in [0, 1)")
     maximum_duration = int(defaults.get("maximum_audio_seconds", 0))
     if not 1 <= maximum_duration <= 86_400:
         raise ValueError("maximum_audio_seconds must be between 1 and 86400")

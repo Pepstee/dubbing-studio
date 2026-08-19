@@ -68,6 +68,8 @@
         "vad_speech_pad_ms",
         "vad_maximum_region_seconds",
         "diarization_chunk_seconds",
+        "diarization_global_speaker_threshold",
+        "diarization_global_speaker_margin",
         "maximum_audio_seconds",
         "minimum_free_bytes",
         "translation_target",
@@ -137,6 +139,16 @@
           "type": "integer",
           "minimum": 60,
           "maximum": 10800
+        },
+        "diarization_global_speaker_threshold": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "diarization_global_speaker_margin": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1
         },
         "maximum_audio_seconds": {
           "type": "integer",
