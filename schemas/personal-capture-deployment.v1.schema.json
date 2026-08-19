@@ -60,6 +60,8 @@
         "transcription_maximum_chunk_seconds",
         "transcription_overlap_seconds",
         "transcription_minimum_silence_seconds",
+        "audio_candidate_policies",
+        "maximum_audio_candidate_channels",
         "vad_backend",
         "vad_strict_threshold",
         "vad_sensitive_threshold",
@@ -117,6 +119,20 @@
         "transcription_minimum_silence_seconds": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "audio_candidate_policies": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "prefixItems": [{"const": "raw"}],
+          "items": {
+            "enum": ["raw", "downmix", "channels", "speech-band-normalized"]
+          }
+        },
+        "maximum_audio_candidate_channels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
         },
         "vad_backend": {"const": "faster-whisper-silero"},
         "vad_strict_threshold": {

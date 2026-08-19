@@ -39,7 +39,9 @@ hidden .partial transfer
 → SHA-256 claim in SQLite
 → free-space and duration gates
 → automatic media probe and silence-aware adaptive ASR chunks
+→ all-stream/discrete-channel preservation
 → bounded overlap reconciliation and failed-span-only retries
+→ raw-first, independently corroborated channel/enhancement candidates for rejected spans
 → 2-hour diarization chunks
 → per-segment translation checkpoints
 → source snapshot and SHA-256 re-verification
@@ -56,6 +58,14 @@ reuses completed work. ASR options and language-detector identity are part of
 the checkpoint key. Adaptive checkpoints use a separate namespace from the
 retained legacy fixed-job checkpoints, so migration and rollback cannot confuse
 the two formats. Malformed or mismatched checkpoints fail closed.
+
+Audio preprocessing is an adjudication boundary, not a destructive normalization stage. Every
+source audio stream is merged into a lossless working chunk with discrete channels retained.
+Alternate downmix and per-channel WAVs exist only inside a failed-span retry workspace. An
+experimental speech-normalized policy is implemented but disabled after a failed benchmark.
+Candidate source and output hashes plus processing graph are
+recorded. Raw cross-model consensus has precedence; processed evidence requires two-model
+agreement and conflicting processed consensuses remain uncertain.
 
 Review edits regenerate the canonical JSON, plain-text and SRT projections.
 Editing source text invalidates word-level text evidence for that segment and

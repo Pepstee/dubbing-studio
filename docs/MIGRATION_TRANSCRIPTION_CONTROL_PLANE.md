@@ -55,6 +55,14 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
     v2 binds both the diarizer and independent embedding provider. pyannote Community-1 is wired
     as the preferred local backend but remains fail-closed until an absolute local gated-model
     path exists; no terms or private-audio upload are performed by migration.
+14. Adaptive extraction now preserves every source audio stream as discrete lossless channels.
+    Only rejected spans receive bounded raw/downmix/channel candidates. A speech-normalized
+    candidate exists for experiments but is disabled after reducing accuracy on both local
+    models. Raw
+    two-model consensus has precedence; a processed rescue needs independent agreement on the
+    same candidate, and divergent processed consensuses fail closed. Candidate hashes and exact
+    processing policy are checkpoint-bound. Rollback restores first-stream-only extraction and
+    removes processed retry candidates without modifying source recordings or old packages.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.

@@ -133,6 +133,12 @@ class CaptureService:
         transcription_maximum_chunk_seconds: int = 8 * 60,
         transcription_overlap_seconds: int = 5,
         transcription_minimum_silence_seconds: float = 0.7,
+        audio_candidate_policies: tuple[str, ...] = (
+            "raw",
+            "downmix",
+            "channels",
+        ),
+        maximum_audio_candidate_channels: int = 4,
         diarization_chunk_seconds: int = 2 * 60 * 60,
         diarization_global_speaker_threshold: float = 0.80,
         diarization_global_speaker_margin: float = 0.05,
@@ -161,6 +167,8 @@ class CaptureService:
         self.transcription_minimum_silence_seconds = (
             transcription_minimum_silence_seconds
         )
+        self.audio_candidate_policies = audio_candidate_policies
+        self.maximum_audio_candidate_channels = maximum_audio_candidate_channels
         self.diarization_chunk_seconds = diarization_chunk_seconds
         self.diarization_global_speaker_threshold = (
             diarization_global_speaker_threshold
@@ -250,6 +258,8 @@ class CaptureService:
                     "transcription_maximum_chunk_seconds": self.transcription_maximum_chunk_seconds,
                     "transcription_overlap_seconds": self.transcription_overlap_seconds,
                     "transcription_minimum_silence_seconds": self.transcription_minimum_silence_seconds,
+                    "audio_candidate_policies": list(self.audio_candidate_policies),
+                    "maximum_audio_candidate_channels": self.maximum_audio_candidate_channels,
                     "transcription_backend": (
                         self.transcription_backend.identity
                         if self.transcription_backend is not None
@@ -420,6 +430,10 @@ class CaptureService:
                         language_retry_policy={"ko": "always"},
                         retry_backend=self.transcription_retry_backend,
                         speech_region_detector=self.speech_region_detector,
+                        audio_candidate_policies=self.audio_candidate_policies,
+                        maximum_audio_candidate_channels=(
+                            self.maximum_audio_candidate_channels
+                        ),
                     ).run(
                         path,
                         self.transcription_options,

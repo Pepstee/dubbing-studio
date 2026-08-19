@@ -14,6 +14,7 @@ from pathlib import Path
 
 from dubbing.evaluation.metrics import token_agreement, word_tokens
 from dubbing.media import ffmpeg_executable
+from dubbing.transcription.audio_candidates import build_audio_candidates
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.job import source_sha256
 from dubbing.transcription.language import annotate_transcript_languages, script_evidence
@@ -90,6 +91,9 @@ class AdaptiveChunk:
 
 @dataclass(frozen=True)
 class _SpanCandidate:
+    audio_candidate_id: str
+    audio_candidate_sha256: str
+    audio_processing: dict
     backend_identity: str
     language: str | None
     segments: tuple[TranscriptSegment, ...]
@@ -468,6 +472,12 @@ class AdaptiveLongFormCoordinator:
         candidate_languages: tuple[str, ...] = ("en", "ru", "ro", "ko"),
         minimum_silence_seconds: float = 0.7,
         language_retry_policy: dict[str, str] | None = None,
+        audio_candidate_policies: tuple[str, ...] = (
+            "raw",
+            "downmix",
+            "channels",
+        ),
+        maximum_audio_candidate_channels: int = 4,
     ) -> None:
         if minimum_silence_seconds <= 0:
             raise ValueError("minimum_silence_seconds must be positive")
@@ -482,42 +492,73 @@ class AdaptiveLongFormCoordinator:
         self.candidate_languages = candidate_languages
         self.minimum_silence_seconds = minimum_silence_seconds
         self.language_retry_policy = dict(sorted(retry_policy.items()))
+        if (
+            not audio_candidate_policies
+            or audio_candidate_policies[0] != "raw"
+            or len(set(audio_candidate_policies)) != len(audio_candidate_policies)
+        ):
+            raise ValueError("audio candidate policies must start with unique raw")
+        if not 1 <= maximum_audio_candidate_channels <= 8:
+            raise ValueError("maximum_audio_candidate_channels must be between 1 and 8")
+        self.audio_candidate_policies = audio_candidate_policies
+        self.maximum_audio_candidate_channels = maximum_audio_candidate_channels
 
     @staticmethod
-    def _extract(source: Path, stream: AudioStream, chunk: AdaptiveChunk, output: Path) -> None:
+    def _extract(
+        source: Path,
+        streams: tuple[AudioStream, ...],
+        chunk: AdaptiveChunk,
+        output: Path,
+    ) -> None:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
-            if source.suffix.casefold() == ".wav":
+            if source.suffix.casefold() == ".wav" and len(streams) == 1:
                 _extract_pcm_wave(
                     source, chunk.extract_start_ms, chunk.extract_end_ms, output
                 )
                 return
             raise TranscriptionError("ffmpeg is required for non-WAV adaptive transcription")
-        process = subprocess.run(
-            [
-                ffmpeg,
-                "-nostdin",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-ss",
-                f"{chunk.extract_start_ms / 1000:.3f}",
-                "-i",
-                str(source),
-                "-t",
-                f"{(chunk.extract_end_ms - chunk.extract_start_ms) / 1000:.3f}",
-                "-map",
-                f"0:{stream.index}",
+        command = [
+            ffmpeg,
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{chunk.extract_start_ms / 1000:.3f}",
+            "-i",
+            str(source),
+            "-t",
+            f"{(chunk.extract_end_ms - chunk.extract_start_ms) / 1000:.3f}",
+        ]
+        if len(streams) == 1:
+            stream = streams[0]
+            command.extend(("-map", f"0:{stream.index}"))
+        else:
+            inputs = "".join(f"[0:{stream.index}]" for stream in streams)
+            command.extend(
+                (
+                    "-filter_complex",
+                    f"{inputs}amerge=inputs={len(streams)}[all_audio]",
+                    "-map",
+                    "[all_audio]",
+                )
+            )
+        command.extend(
+            (
                 "-vn",
                 "-ac",
-                str(stream.channels),
+                str(sum(stream.channels for stream in streams)),
                 "-ar",
-                str(stream.sample_rate_hz),
+                str(max(stream.sample_rate_hz for stream in streams)),
                 "-c:a",
                 "pcm_s16le",
                 "-y",
                 str(output),
-            ],
+            )
+        )
+        process = subprocess.run(
+            command,
             capture_output=True,
             text=True,
             timeout=max(300, (chunk.extract_end_ms - chunk.extract_start_ms) // 1000),
@@ -528,7 +569,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v9",
+            "coordinator_version": "adaptive-long-form-v10",
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
             "source_sha256": digest,
@@ -541,6 +582,11 @@ class AdaptiveLongFormCoordinator:
                 else None
             ),
             "candidate_languages": list(self.candidate_languages),
+            "audio_candidates": {
+                "policies": list(self.audio_candidate_policies),
+                "maximum_channels": self.maximum_audio_candidate_channels,
+                "promotion_policy": "raw-consensus-first-else-independent-unanimity-v1",
+            },
             "targeted_retry": {
                 "minimum_ms": _TARGET_RETRY_MIN_MS,
                 "target_ms": _TARGET_RETRY_TARGET_MS,
@@ -881,85 +927,115 @@ class AdaptiveLongFormCoordinator:
                             key=lambda item: (item.start_ms, item.end_ms),
                         )
                     )
-            for backend, retry_options in candidates:
-                candidate = annotate_transcript_languages(
-                    backend.transcribe(retry_audio, retry_options)
-                )
-                quality = evaluate_transcript_quality(
-                    candidate, expected_duration_ms=end_ms - start_ms
-                )
-                attempts.append(
-                    {
-                        "kind": "targeted-span-redecode",
-                        "source_start_ms": start_ms,
-                        "source_end_ms": end_ms,
-                        "backend": backend.identity,
-                        "language": retry_options.language,
-                        "quality": quality.to_dict(),
-                        "candidate_text": candidate.text,
-                    }
-                )
-                if (
-                    not candidate.segments
-                    or quality.status is not TranscriptQualityStatus.PASS
-                    or any(item.uncertain for item in candidate.segments)
-                ):
-                    continue
-                log_probabilities = [
-                    item.diagnostics.avg_log_probability
-                    for item in candidate.segments
-                    if item.diagnostics and item.diagnostics.avg_log_probability is not None
-                ]
-                average_log_probability = (
-                    sum(log_probabilities) / len(log_probabilities)
-                    if log_probabilities
-                    else -10.0
-                )
-                word_confidences = [
-                    word.confidence
-                    for item in candidate.segments
-                    for word in item.words
-                    if word.confidence is not None
-                ]
-                segment_confidences = [
-                    item.confidence
-                    for item in candidate.segments
-                    if item.confidence is not None
-                ]
-                acoustic_confidences = word_confidences or segment_confidences
-                average_acoustic_confidence = (
-                    sum(acoustic_confidences) / len(acoustic_confidences)
-                    if acoustic_confidences
-                    else None
-                )
-                attempts[-1]["average_acoustic_confidence"] = (
-                    round(average_acoustic_confidence, 6)
-                    if average_acoustic_confidence is not None
-                    else None
-                )
-                shifted = tuple(item.shifted(start_ms) for item in candidate.segments)
-                eligible.append(
-                    _SpanCandidate(
-                        backend.identity,
-                        candidate.language or retry_options.language,
-                        shifted,
-                        candidate.text,
-                        quality,
-                        average_log_probability,
-                        average_acoustic_confidence,
-                        len(attempts) - 1,
+            audio_candidates = build_audio_candidates(
+                retry_audio,
+                Path(directory) / "audio-candidates",
+                policies=self.audio_candidate_policies,
+                maximum_channels=self.maximum_audio_candidate_channels,
+            )
+            attempts.append(
+                {
+                    "kind": "targeted-audio-candidate-plan",
+                    "source_start_ms": start_ms,
+                    "source_end_ms": end_ms,
+                    **audio_candidates.to_dict(),
+                }
+            )
+            for audio_candidate in audio_candidates.candidates:
+                for backend, retry_options in candidates:
+                    candidate = annotate_transcript_languages(
+                        backend.transcribe(audio_candidate.path, retry_options)
                     )
-                )
+                    quality = evaluate_transcript_quality(
+                        candidate, expected_duration_ms=end_ms - start_ms
+                    )
+                    attempts.append(
+                        {
+                            "kind": "targeted-span-redecode",
+                            "source_start_ms": start_ms,
+                            "source_end_ms": end_ms,
+                            "backend": backend.identity,
+                            "language": retry_options.language,
+                            "audio_candidate": audio_candidate.identifier,
+                            "audio_candidate_sha256": audio_candidate.candidate_sha256,
+                            "audio_processing": audio_candidate.processing,
+                            "quality": quality.to_dict(),
+                            "candidate_text": candidate.text,
+                        }
+                    )
+                    if (
+                        not candidate.segments
+                        or quality.status is not TranscriptQualityStatus.PASS
+                        or any(item.uncertain for item in candidate.segments)
+                    ):
+                        continue
+                    log_probabilities = [
+                        item.diagnostics.avg_log_probability
+                        for item in candidate.segments
+                        if item.diagnostics
+                        and item.diagnostics.avg_log_probability is not None
+                    ]
+                    average_log_probability = (
+                        sum(log_probabilities) / len(log_probabilities)
+                        if log_probabilities
+                        else -10.0
+                    )
+                    word_confidences = [
+                        word.confidence
+                        for item in candidate.segments
+                        for word in item.words
+                        if word.confidence is not None
+                    ]
+                    segment_confidences = [
+                        item.confidence
+                        for item in candidate.segments
+                        if item.confidence is not None
+                    ]
+                    acoustic_confidences = word_confidences or segment_confidences
+                    average_acoustic_confidence = (
+                        sum(acoustic_confidences) / len(acoustic_confidences)
+                        if acoustic_confidences
+                        else None
+                    )
+                    attempts[-1]["average_acoustic_confidence"] = (
+                        round(average_acoustic_confidence, 6)
+                        if average_acoustic_confidence is not None
+                        else None
+                    )
+                    shifted = tuple(
+                        item.shifted(start_ms) for item in candidate.segments
+                    )
+                    eligible.append(
+                        _SpanCandidate(
+                            audio_candidate.identifier,
+                            audio_candidate.candidate_sha256,
+                            audio_candidate.processing,
+                            backend.identity,
+                            candidate.language or retry_options.language,
+                            shifted,
+                            candidate.text,
+                            quality,
+                            average_log_probability,
+                            average_acoustic_confidence,
+                            len(attempts) - 1,
+                        )
+                    )
 
-        best_by_backend_language: dict[tuple[str, str | None], _SpanCandidate] = {}
+        best_by_backend_language: dict[
+            tuple[str, str, str | None], _SpanCandidate
+        ] = {}
         for candidate in eligible:
-            key = (candidate.backend_identity, candidate.language)
+            key = (
+                candidate.audio_candidate_id,
+                candidate.backend_identity,
+                candidate.language,
+            )
             previous = best_by_backend_language.get(key)
             if previous is None or candidate.score > previous.score:
                 best_by_backend_language[key] = candidate
         healthy_independent = [
             candidate
-            for (identity, _), candidate in best_by_backend_language.items()
+            for (_, identity, _), candidate in best_by_backend_language.items()
             if identity != self.backend.identity
         ]
         if not healthy_independent:
@@ -985,7 +1061,11 @@ class AdaptiveLongFormCoordinator:
         paired_candidates = []
         for independent_candidate in healthy_independent:
             primary_candidate = best_by_backend_language.get(
-                (self.backend.identity, independent_candidate.language)
+                (
+                    independent_candidate.audio_candidate_id,
+                    self.backend.identity,
+                    independent_candidate.language,
+                )
             )
             agreement = (
                 token_agreement(primary_candidate.text, independent_candidate.text)
@@ -1030,7 +1110,46 @@ class AdaptiveLongFormCoordinator:
             )
             and item[2] >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
         ]
-        ranked = corroborated or paired_candidates
+        best_corroborated_by_audio = {}
+        for item in corroborated:
+            audio_candidate_id = item[4].audio_candidate_id
+            incumbent = best_corroborated_by_audio.get(audio_candidate_id)
+            ranking = (
+                item[0] if item[0] is not None else -1.0,
+                item[1] if item[1] is not None else -1.0,
+                item[2],
+                item[4].score,
+            )
+            if incumbent is None or ranking > (
+                incumbent[0] if incumbent[0] is not None else -1.0,
+                incumbent[1] if incumbent[1] is not None else -1.0,
+                incumbent[2],
+                incumbent[4].score,
+            ):
+                best_corroborated_by_audio[audio_candidate_id] = item
+        raw_corroborated = [
+            item
+            for audio_candidate_id, item in best_corroborated_by_audio.items()
+            if audio_candidate_id == "raw"
+        ]
+        processed_corroborated = [
+            item
+            for audio_candidate_id, item in best_corroborated_by_audio.items()
+            if audio_candidate_id != "raw"
+        ]
+        divergent_audio_candidates = False
+        if raw_corroborated:
+            ranked = raw_corroborated
+        elif processed_corroborated:
+            for index, left in enumerate(processed_corroborated):
+                for right in processed_corroborated[index + 1 :]:
+                    if token_agreement(left[4].text, right[4].text) < (
+                        _INDEPENDENT_AGREEMENT_THRESHOLD
+                    ):
+                        divergent_audio_candidates = True
+            ranked = processed_corroborated
+        else:
+            ranked = paired_candidates
         (
             agreement,
             confidence_floor,
@@ -1054,12 +1173,15 @@ class AdaptiveLongFormCoordinator:
                 or confidence_floor >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
             )
             and consensus_token_count >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
+            and not divergent_audio_candidates
         )
         status = (
             "CONSENSUS_PASS"
             if consensus
             else (
-                "INDEPENDENT_DISAGREEMENT"
+                "AUDIO_CANDIDATE_DISAGREEMENT"
+                if divergent_audio_candidates
+                else "INDEPENDENT_DISAGREEMENT"
                 if primary_candidate is not None
                 else "INDEPENDENT_CANDIDATE_UNCORROBORATED"
             )
@@ -1087,6 +1209,12 @@ class AdaptiveLongFormCoordinator:
                 ),
                 "selected_backend": selected.backend_identity,
                 "selected_language": selected.language,
+                "selected_audio_candidate": selected.audio_candidate_id,
+                "selected_audio_candidate_sha256": selected.audio_candidate_sha256,
+                "selected_audio_processing": selected.audio_processing,
+                "raw_consensus_available": bool(raw_corroborated),
+                "processed_consensus_count": len(processed_corroborated),
+                "divergent_audio_candidates": divergent_audio_candidates,
                 "independent_backend_count": len(
                     {item.backend_identity for item in healthy_independent}
                 ),
@@ -1466,7 +1594,7 @@ class AdaptiveLongFormCoordinator:
         )
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._admit_manifest(self._manifest(source, digest, probe, chunks))
-        stream = probe.audio_streams[0]
+        streams = probe.audio_streams
         completed: list[tuple[AdaptiveChunk, TranscriptionResult]] = []
         for chunk in chunks:
             checkpoint = self.checkpoint_dir / "chunks" / f"{chunk.index:06d}.json"
@@ -1485,7 +1613,7 @@ class AdaptiveLongFormCoordinator:
             if result is None:
                 with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
                     audio = Path(directory) / f"{chunk.index:06d}.wav"
-                    self._extract(source, stream, chunk, audio)
+                    self._extract(source, streams, chunk, audio)
                     result, receipt = self._decode_chunk(audio, chunk, options)
                 _atomic_json(checkpoint, result.to_dict())
                 _atomic_json(receipt_path, receipt)
@@ -1511,9 +1639,10 @@ class AdaptiveLongFormCoordinator:
             confidence_available=any(item.confidence is not None for item in segments),
             source_sha256=digest,
             provenance={
-                "coordinator": "adaptive-long-form-v5",
+                "coordinator": "adaptive-long-form-v10",
                 "chunk_count": len(chunks),
-                "audio_stream": stream.to_dict(),
+                "audio_streams": [stream.to_dict() for stream in streams],
+                "channel_preservation": "all-streams-merged-with-discrete-channels-v1",
             },
         )
         quality = evaluate_transcript_quality(result, expected_duration_ms=probe.duration_ms)

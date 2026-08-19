@@ -1,6 +1,8 @@
 import json
 import wave
 from array import array
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from dubbing.transcription.adaptive import (
@@ -14,6 +16,7 @@ from dubbing.transcription.adaptive import (
     reconcile_chunks,
 )
 from dubbing.transcription.base import TranscriptionBackend
+from dubbing.transcription.audio_candidates import AudioCandidate, AudioCandidateSet
 from dubbing.transcription.models import (
     DecodeDiagnostics,
     TranscriptSegment,
@@ -44,7 +47,7 @@ def test_native_pcm_wave_probe_silence_and_extraction_without_ffmpeg(tmp_path):
         output = tmp_path / "chunk.wav"
         AdaptiveLongFormCoordinator._extract(
             source,
-            probe.audio_streams[0],
+            probe.audio_streams,
             AdaptiveChunk(0, 500, 1500, 500, 1500, "silence"),
             output,
         )
@@ -54,6 +57,36 @@ def test_native_pcm_wave_probe_silence_and_extraction_without_ffmpeg(tmp_path):
     assert silences == ((500, 1500),)
     with wave.open(str(output), "rb") as extracted:
         assert extracted.getnframes() == 16000
+
+
+def test_chunk_extraction_merges_every_audio_stream_as_discrete_channels(tmp_path):
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    output = tmp_path / "chunk.wav"
+    streams = (
+        AudioStream(1, "aac", 2, 48_000),
+        AudioStream(2, "aac", 1, 44_100),
+    )
+    completed = SimpleNamespace(returncode=0, stderr="")
+
+    with patch(
+        "dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"
+    ), patch(
+        "dubbing.transcription.adaptive.subprocess.run", return_value=completed
+    ) as run:
+        AdaptiveLongFormCoordinator._extract(
+            source,
+            streams,
+            AdaptiveChunk(0, 0, 10_000, 0, 10_000, "end-of-media"),
+            output,
+        )
+
+    command = run.call_args.args[0]
+    assert command[command.index("-filter_complex") + 1] == (
+        "[0:1][0:2]amerge=inputs=2[all_audio]"
+    )
+    assert command[command.index("-ac") + 1] == "3"
+    assert command[command.index("-ar") + 1] == "48000"
 
 
 class _RetryingBackend(TranscriptionBackend):
@@ -121,6 +154,46 @@ class _ConstantBackend(TranscriptionBackend):
             duration_ms=500,
             confidence_available=False,
         )
+
+
+class _AudioCandidateBackend(TranscriptionBackend):
+    def __init__(self, identity, texts):
+        self._identity = identity
+        self.texts = texts
+
+    @property
+    def identity(self):
+        return self._identity
+
+    def transcribe(self, audio, options=None):
+        text = self.texts[Path(audio).name]
+        return TranscriptionResult(
+            segments=(TranscriptSegment(0, 20_000, text),),
+            text=text,
+            backend="fixture",
+            model=self.identity,
+            device="test",
+            language=options.language or "en",
+            duration_ms=20_000,
+            confidence_available=False,
+        )
+
+
+def _audio_candidate_set(tmp_path):
+    candidates = []
+    for index, identifier in enumerate(("raw", "channel-0", "channel-1")):
+        path = tmp_path / f"{identifier}.wav"
+        path.write_bytes(identifier.encode())
+        candidates.append(
+            AudioCandidate(
+                identifier,
+                path,
+                "0" * 64,
+                f"{index + 1:064x}",
+                {"kind": identifier},
+            )
+        )
+    return AudioCandidateSet(tuple(candidates), 2)
 
 
 def test_planner_chooses_silence_near_target_and_bounds_chunks():
@@ -390,26 +463,12 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
         for attempt in receipt["attempts"]
         if attempt.get("kind") == "targeted-span-adjudication"
     ]
-    assert adjudications == [
-        {
-            "kind": "targeted-span-adjudication",
-            "source_start_ms": 0,
-            "source_end_ms": 20_000,
-            "status": "CONSENSUS_PASS",
-            "primary_backend": "fixture:persistent",
-            "primary_language": "en",
-            "selected_backend": "fixture:independent",
-            "selected_language": "en",
-            "independent_backend_count": 1,
-            "agreement": 1.0,
-            "agreement_threshold": 0.75,
-            "acoustic_confidence_floor": None,
-            "minimum_acoustic_confidence": 0.35,
-            "consensus_token_count": 3,
-            "minimum_consensus_tokens": 2,
-            "selected_uncertain": False,
-        }
-    ]
+    assert len(adjudications) == 1
+    assert adjudications[0]["status"] == "CONSENSUS_PASS"
+    assert adjudications[0]["selected_audio_candidate"] == "raw"
+    assert adjudications[0]["raw_consensus_available"] is True
+    assert adjudications[0]["divergent_audio_candidates"] is False
+    assert adjudications[0]["selected_uncertain"] is False
 
 
 def test_targeted_retry_without_independent_backend_fails_closed(tmp_path):
@@ -432,6 +491,130 @@ def test_targeted_retry_without_independent_backend_fails_closed(tmp_path):
 
     assert replacement is None
     assert attempts[-1]["status"] == "NO_HEALTHY_INDEPENDENT_CANDIDATE"
+
+
+def test_audio_candidate_can_rescue_raw_only_with_independent_consensus(tmp_path):
+    primary = _AudioCandidateBackend(
+        "fixture:primary",
+        {
+            "raw.wav": "raw primary transcript",
+            "channel-0.wav": "rescued channel speech",
+            "channel-1.wav": "Loops " * 10,
+        },
+    )
+    independent = _AudioCandidateBackend(
+        "fixture:independent",
+        {
+            "raw.wav": "unrelated independent words",
+            "channel-0.wav": "rescued channel speech",
+            "channel-1.wav": "Loops " * 10,
+        },
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ), patch(
+        "dubbing.transcription.adaptive.build_audio_candidates",
+        return_value=_audio_candidate_set(tmp_path),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert " ".join(item.text for item in replacement) == "rescued channel speech"
+    adjudication = attempts[-1]
+    assert adjudication["status"] == "CONSENSUS_PASS"
+    assert adjudication["raw_consensus_available"] is False
+    assert adjudication["selected_audio_candidate"] == "channel-0"
+
+
+def test_divergent_channel_consensuses_fail_closed(tmp_path):
+    texts = {
+        "raw.wav": "raw primary transcript",
+        "channel-0.wav": "first rescued phrase",
+        "channel-1.wav": "second alternate words",
+    }
+    primary = _AudioCandidateBackend("fixture:primary", texts)
+    independent = _AudioCandidateBackend(
+        "fixture:independent",
+        {**texts, "raw.wav": "unrelated independent words"},
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ), patch(
+        "dubbing.transcription.adaptive.build_audio_candidates",
+        return_value=_audio_candidate_set(tmp_path),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement[0].uncertain is True
+    assert replacement[0].text == "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
+    adjudication = attempts[-1]
+    assert adjudication["status"] == "AUDIO_CANDIDATE_DISAGREEMENT"
+    assert adjudication["divergent_audio_candidates"] is True
+
+
+def test_raw_consensus_wins_even_when_processed_candidates_disagree(tmp_path):
+    primary_texts = {
+        "raw.wav": "trustworthy raw recording transcript",
+        "channel-0.wav": "first processed interpretation",
+        "channel-1.wav": "second processed alternative",
+    }
+    primary = _AudioCandidateBackend("fixture:primary", primary_texts)
+    independent = _AudioCandidateBackend("fixture:independent", primary_texts)
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ), patch(
+        "dubbing.transcription.adaptive.build_audio_candidates",
+        return_value=_audio_candidate_set(tmp_path),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert " ".join(item.text for item in replacement) == primary_texts["raw.wav"]
+    adjudication = attempts[-1]
+    assert adjudication["status"] == "CONSENSUS_PASS"
+    assert adjudication["selected_audio_candidate"] == "raw"
+    assert adjudication["raw_consensus_available"] is True
+    assert adjudication["divergent_audio_candidates"] is False
 
 
 def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):

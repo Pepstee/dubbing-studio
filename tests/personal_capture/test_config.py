@@ -30,6 +30,13 @@ def deployment_config(tmp_path: Path) -> dict:
             "transcription_maximum_chunk_seconds": 480,
             "transcription_overlap_seconds": 2,
             "transcription_minimum_silence_seconds": 0.7,
+            "audio_candidate_policies": [
+                "raw",
+                "downmix",
+                "channels",
+                "speech-band-normalized",
+            ],
+            "maximum_audio_candidate_channels": 4,
             "vad_backend": "faster-whisper-silero",
             "vad_strict_threshold": 0.2,
             "vad_sensitive_threshold": 0.1,
@@ -111,6 +118,12 @@ def test_canonical_config_is_valid(tmp_path):
                 diarization_cluster_threshold=0,
             ),
             "diarization_cluster_threshold",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                audio_candidate_policies=["channels", "raw"],
+            ),
+            "audio_candidate_policies",
         ),
         (
             lambda config: config["defaults"].update(

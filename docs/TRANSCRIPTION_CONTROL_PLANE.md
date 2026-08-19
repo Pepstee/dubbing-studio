@@ -31,8 +31,9 @@ dubbing-long-transcribe \
   --dry-run
 ```
 
-The production path probes media, preserves the selected audio stream's channel count and
-sample rate, selects silence-aware 1–8 minute chunks, applies deterministic overlap
+The production path probes media and preserves every audio stream as discrete channels in the
+lossless PCM working chunk. It preserves the highest source sample rate, selects silence-aware
+1–8 minute chunks, applies deterministic overlap
 reconciliation, checkpoints every span atomically and retries only rejected spans. The
 WhisperKit local-server process remains alive across all chunks, so the model is loaded once.
 MLX remains an experimental fallback.
@@ -89,6 +90,20 @@ prioritizes the retry order; it never removes English, Russian, Romanian or Kore
 search. Agreement is calculated only between candidates decoded under the same language
 constraint, preventing a high-confidence wrong-language candidate from being compared with a
 different decoding condition.
+
+Rejected spans also have a bounded, source-preserving audio-candidate stage. The production
+set is raw audio, a multichannel downmix and up to four discrete source channels. The engine
+also exposes an opt-in speech-band/dynamic-normalization candidate, but it is not enabled in the
+Gigabyte deployment. No candidate overwrites the source or a raw
+checkpoint. Each candidate is hash-bound with its exact FFmpeg processing policy in the retry
+receipt. Raw cross-model consensus always wins. A processed candidate may rescue a span only
+when raw audio has no valid consensus and both independent ASR models corroborate that same
+candidate. If independently corroborated processed candidates disagree, the span stays
+explicitly uncertain. Multiple language decodes of one channel remain one audio candidate and
+cannot manufacture cross-channel corroboration. Broad FFT denoising and aggressive speech
+expansion are intentionally excluded. The conservative normalization candidate also failed its
+promotion loop: under identical beam-5 settings it reduced turbo accuracy from 57.58% to 48.48%
+and full-large-v3 accuracy from 58.59% to 47.47% on 26 human-corrected difficult lesson spans.
 
 Sparse-speech repair adds a semantic speech-region stage before re-decoding. The production
 Gigabyte provider is the local Silero VAD already bundled with Faster-Whisper, so it needs no

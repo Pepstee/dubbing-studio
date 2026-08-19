@@ -61,6 +61,10 @@ systemctl --user restart dubbing-capture-watch
 ```
 
 Completed ASR, diarization and translation checkpoints are reused.
+The watcher preserves all source audio streams and channels internally. If a rejected span may
+benefit from a downmix or isolated channel, it creates and adjudicates those candidates itself;
+the operator must not pre-process or split the recording. Normalization is not enabled in the
+production policy because it failed the human-corrected difficult-span benchmark.
 
 ## 4. Review
 
@@ -95,6 +99,8 @@ consumer remains responsible for any later promotion.
 
 - Never delete checkpoints to “make it retry.”
 - Never edit the source recording in place.
+- Never denoise, normalize, downmix or extract channels before admission; retain the recorder's
+  original file so the control plane can compare raw and derived evidence.
 - Never replace a final inbox file while processing is active.
 - Preserve failed packages and error state.
 - Failed captures stay failed until the operator presses **Retry processing**.

@@ -127,6 +127,28 @@ def validate_config(document: dict) -> dict:
     )
     if minimum_silence <= 0:
         raise ValueError("transcription_minimum_silence_seconds must be positive")
+    audio_candidate_policies = defaults.get("audio_candidate_policies")
+    allowed_audio_candidates = {
+        "raw",
+        "downmix",
+        "channels",
+        "speech-band-normalized",
+    }
+    if (
+        not isinstance(audio_candidate_policies, list)
+        or not audio_candidate_policies
+        or audio_candidate_policies[0] != "raw"
+        or len(set(audio_candidate_policies)) != len(audio_candidate_policies)
+        or set(audio_candidate_policies) - allowed_audio_candidates
+    ):
+        raise ValueError(
+            "audio_candidate_policies must start with unique raw and contain only supported modes"
+        )
+    maximum_candidate_channels = int(
+        defaults.get("maximum_audio_candidate_channels", 0)
+    )
+    if not 1 <= maximum_candidate_channels <= 8:
+        raise ValueError("maximum_audio_candidate_channels must be between 1 and 8")
     diarization_chunk = int(defaults.get("diarization_chunk_seconds", 0))
     if not 60 <= diarization_chunk <= 10_800:
         raise ValueError("diarization_chunk_seconds must be between 60 and 10800")

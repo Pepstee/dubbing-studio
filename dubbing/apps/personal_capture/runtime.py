@@ -102,6 +102,15 @@ def build_service(config: dict) -> CaptureService:
         transcription_minimum_silence_seconds=defaults.get(
             "transcription_minimum_silence_seconds", 0.7
         ),
+        audio_candidate_policies=tuple(
+            defaults.get(
+                "audio_candidate_policies",
+                ("raw", "downmix", "channels"),
+            )
+        ),
+        maximum_audio_candidate_channels=defaults.get(
+            "maximum_audio_candidate_channels", 4
+        ),
         diarization_chunk_seconds=defaults.get(
             "diarization_chunk_seconds", 2 * 60 * 60
         ),

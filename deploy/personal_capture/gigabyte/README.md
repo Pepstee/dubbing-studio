@@ -92,6 +92,15 @@ control plane's `0.35` minimum.
 One-token agreement also remains uncertain because two Whisper-family models
 can confidently agree on the wrong short phonetic neighbor.
 
+Every source audio stream is retained as discrete channels in the lossless working chunk. For a
+rejected span the watcher can compare raw audio, downmix and up to four individual channels.
+The implemented speech-normalization experiment is disabled because it reduced accuracy on
+both production ASR models. Raw cross-model consensus always wins.
+A processed candidate is clean only when both pinned ASR models agree on that same candidate;
+disagreement between independently corroborated processed candidates remains explicit
+uncertainty. The original recording is never rewritten, and every derived candidate is
+hash-bound with its processing graph in the retry receipt.
+
 Diarization remains resumable in two-hour chunks, but anonymous speaker labels are reconciled
 across the whole recording. The offline Sherpa fallback uses an explicit `0.85` clustering
 distance threshold. Its already-installed TitaNet model extracts embeddings only from
