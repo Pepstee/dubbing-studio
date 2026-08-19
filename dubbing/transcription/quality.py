@@ -234,8 +234,19 @@ def detect_repetition_pathologies(
         ),
     ):
         if any(
-            candidate.token_start >= existing.token_start
-            and candidate.token_end <= existing.token_end
+            (
+                candidate.token_start >= existing.token_start
+                and candidate.token_end <= existing.token_end
+            )
+            or (
+                max(
+                    0,
+                    min(candidate.token_end, existing.token_end)
+                    - max(candidate.token_start, existing.token_start),
+                )
+                / min(candidate.repeated_token_count, existing.repeated_token_count)
+                >= 0.8
+            )
             for existing in selected
         ):
             continue

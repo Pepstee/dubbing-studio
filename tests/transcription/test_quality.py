@@ -136,6 +136,24 @@ def test_decoder_loop_split_across_segments_keeps_full_retry_interval():
     assert issue.evidence["repeat_count"] == 5
 
 
+def test_rotated_phrase_candidate_is_deduplicated_from_the_same_loop():
+    phrase = "I don't know what to do"
+    loop = " ".join([phrase] * 28)
+    segments = (
+        TranscriptSegment(1000, 10_000, loop),
+        TranscriptSegment(10_000, 11_000, "I am ready now"),
+    )
+
+    report = evaluate_transcript_quality(
+        _result(f"{loop} I am ready now", segments)
+    )
+    findings = report.metrics["repetition_findings"]
+
+    assert len(findings) == 1
+    assert findings[0]["phrase"] == "i don t know what to do"
+    assert (findings[0]["start_ms"], findings[0]["end_ms"]) == (1000, 10_000)
+
+
 def test_failed_span_placeholder_requires_reprocessing():
     segment = TranscriptSegment(
         0, 1000, "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]", uncertain=True
