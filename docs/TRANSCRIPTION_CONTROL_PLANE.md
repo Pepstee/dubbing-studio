@@ -125,6 +125,36 @@ ID, named provider and a credential already configured in the local environment.
 bind provider/model, span hash, retention configuration, request receipt and reported cost.
 No account, payment method, API key or private upload is created by the repository.
 
+### Targeted cloud adjudication
+
+Cloud adjudication is a separate, explicit stage after the local long-form run. The operator
+does not cut audio manually. The command discovers only segments still marked uncertain,
+merges and bounds them, extracts the minimum 20-second source context needed by the cloud
+boundary, and never uploads the full recording. The source file, local transcript and
+authorization must all carry the same SHA-256 digest.
+
+The first live transport is the official OpenAI audio-transcriptions endpoint using
+`gpt-4o-transcribe-diarize`. Its API key must already exist in `OPENAI_API_KEY`; the command
+never accepts a credential argument. Returned segments must carry timestamps, and every request
+produces a provider/model/configuration/span/candidate-hash receipt. The amended whole transcript
+is evaluated again under the normal quality contract. Malformed output, an empty target, any
+remaining uncertainty or a non-PASS quality result stays `FAIL_CLOSED`. The report always keeps
+`giga_admission_allowed=false`; normal review and approval remain separate gates.
+
+```bash
+dubbing-adjudicate-cloud \
+  /path/to/source.mov \
+  --local-result /path/to/transcription-adaptive/result.json \
+  --output /path/to/transcription-cloud \
+  --recording-sha256 <exact-source-sha256> \
+  --operator-authorization-id <recording-specific-id> \
+  --provider openai \
+  --cloud-allowed
+```
+
+Omitting `--cloud-allowed`, omitting the locally configured credential, changing the recording,
+or presenting a transcript from another source terminates before network upload.
+
 ## Diarization and identity
 
 Diarization asks whether two regions contain the same voice. Identity asks whose voice that

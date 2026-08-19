@@ -37,6 +37,11 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 10. A standalone source-bound faster-whisper GPU runner and pathology-targeted local fusion path
     were added for the Gigabyte RTX 4060. The runner does not require deploying the full repository
     to that laptop and never uploads audio to a cloud provider.
+11. Targeted cloud adjudication now has an executable OpenAI transport and automatic unresolved-
+    interval packetization. It is deliberately not part of the unattended watcher: each recording
+    still needs its exact SHA-256, an operator authorization ID, an explicit `--cloud-allowed`
+    invocation and a locally configured credential. Rollback is simply to omit this separate
+    stage; the certified local capture/review/outbox path is unchanged.
 
 Older already-certified packages remain readable because the added transcript fields are
 optional and quality gating is activated by the package's quality manifest entry.

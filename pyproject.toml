@@ -18,6 +18,7 @@ dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:m
 dubbing-long-transcribe = "dubbing.control_plane.cli:main"
 dubbing-evaluate-transcript = "dubbing.evaluation.cli:main"
 dubbing-adjudicate-local = "dubbing.evaluation.adjudication_cli:main"
+dubbing-adjudicate-cloud = "dubbing.transcription.cloud_cli:main"
 dubbing-fuse-local-transcripts = "dubbing.evaluation.local_fusion:main"
 dubbing-review-ground-truth = "dubbing.evaluation.review_ground_truth:main"
 dubbing-evaluate-language-sweep = "dubbing.evaluation.language_sweep:main"
