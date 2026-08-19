@@ -5,6 +5,11 @@ For provider-neutral, fail-closed long-video transcription, see
 rollback boundary from the certified personal-capture baseline is documented in
 [`docs/MIGRATION_TRANSCRIPTION_CONTROL_PLANE.md`](docs/MIGRATION_TRANSCRIPTION_CONTROL_PLANE.md).
 
+The optional first-month local/cloud learning path is documented under “Month-one cloud teacher
+programme” in `docs/TRANSCRIPTION_CONTROL_PLANE.md`. Its `dubbing-cloud-teacher` command keeps
+local and cloud transcripts separate and produces only agreement-qualified silver ASR examples;
+it never promotes cloud output to GIGA memory.
+
 Architecture, certification and the first real recording procedure are in:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)

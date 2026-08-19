@@ -101,8 +101,15 @@ PROVIDERS = {
         "scribe-v2",
         "ELEVENLABS_API_KEY",
         "https://api.elevenlabs.io/v1/speech-to-text",
-        "provider-default; operator must verify current project retention",
-        {"model_id": "scribe_v2", "diarize": True, "tag_audio_events": True},
+        "provider-default; model-improvement opt-out must be attested before upload",
+        {
+            "model_id": "scribe_v2",
+            "diarize": True,
+            "tag_audio_events": False,
+            "timestamps_granularity": "word",
+            "temperature": 0,
+            "seed": 0,
+        },
     ),
     "openai": CloudProviderAdapter(
         "openai",
@@ -307,6 +314,138 @@ class OpenAIHTTPTransport:
             },
         }
 
+
+class ElevenLabsHTTPTransport:
+    """Official synchronous Scribe v2 multipart transport.
+
+    The provider response is normalized into the same timestamped candidate shape
+    used by the existing cloud policy boundary. Credentials are accepted only by
+    the callable interface and are never serialized into receipts.
+    """
+
+    def __init__(self, *, timeout_seconds: int = 7_200) -> None:
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        self.timeout_seconds = timeout_seconds
+
+    @staticmethod
+    def _multipart(request: dict, audio: bytes) -> tuple[bytes, str]:
+        boundary = f"dubbing-{uuid.uuid4().hex}"
+        body = bytearray()
+
+        def field(name: str, value: object) -> None:
+            body.extend(f"--{boundary}\r\n".encode())
+            body.extend(
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
+            )
+            if isinstance(value, bool):
+                value = str(value).lower()
+            body.extend(str(value).encode("utf-8"))
+            body.extend(b"\r\n")
+
+        for name, value in request["options"].items():
+            if value is not None:
+                field(name, value)
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(
+            b'Content-Disposition: form-data; name="file"; filename="recording.flac"\r\n'
+        )
+        body.extend(b"Content-Type: audio/flac\r\n\r\n")
+        body.extend(audio)
+        body.extend(b"\r\n")
+        body.extend(f"--{boundary}--\r\n".encode())
+        return bytes(body), boundary
+
+    @staticmethod
+    def _candidate(document: dict) -> dict:
+        raw_words = document.get("words")
+        if not isinstance(raw_words, list):
+            raise TranscriptionError(
+                "ElevenLabs Scribe response did not contain timestamped words"
+            )
+        segments = []
+        for item in raw_words:
+            if not isinstance(item, dict) or item.get("type", "word") != "word":
+                continue
+            try:
+                start_ms = round(float(item["start"]) * 1000)
+                end_ms = round(float(item["end"]) * 1000)
+                value = str(item["text"]).strip()
+            except (KeyError, TypeError, ValueError) as exc:
+                raise TranscriptionError(
+                    "ElevenLabs returned a malformed timestamped word"
+                ) from exc
+            if start_ms < 0 or end_ms <= start_ms or not value:
+                raise TranscriptionError("ElevenLabs returned invalid word content")
+            segments.append(
+                {
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "text": value,
+                    "speaker": item.get("speaker_id"),
+                    "language": item.get("language_code")
+                    or document.get("language_code"),
+                    "confidence": (
+                        None
+                        if item.get("logprob") is None
+                        else min(1.0, max(0.0, pow(2.718281828, float(item["logprob"]))))
+                    ),
+                }
+            )
+        if not segments:
+            raise TranscriptionError("ElevenLabs returned no timestamped speech words")
+        return {
+            "text": str(document.get("text", "")).strip()
+            or " ".join(item["text"] for item in segments),
+            "segments": segments,
+            "language": document.get("language_code"),
+            "language_probability": document.get("language_probability"),
+        }
+
+    def __call__(self, request: dict, audio: bytes, credential: str) -> dict:
+        if request.get("provider") != "elevenlabs":
+            raise TranscriptionError("ElevenLabs transport cannot call another provider")
+        body, boundary = self._multipart(request, audio)
+        http_request = urllib.request.Request(
+            request["endpoint"],
+            data=body,
+            headers={
+                "xi-api-key": credential,
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "User-Agent": "dubbing-studio/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(
+                http_request, timeout=self.timeout_seconds
+            ) as response:
+                response_bytes = response.read()
+                document = json.loads(response_bytes.decode("utf-8"))
+                request_id = response.headers.get("request-id") or response.headers.get(
+                    "x-request-id"
+                )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read(2048).decode("utf-8", errors="replace")
+            raise TranscriptionError(
+                f"ElevenLabs transcription request failed with HTTP {exc.code}: {detail}"
+            ) from exc
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise TranscriptionError("ElevenLabs transcription request failed") from exc
+        response_sha256 = hashlib.sha256(response_bytes).hexdigest()
+        return {
+            "candidate": self._candidate(document),
+            "request_receipt": request_id or f"response-sha256:{response_sha256}",
+            "cost": None,
+            "free_credit_consumed": None,
+            "provenance": {
+                "transport": "elevenlabs-speech-to-text-http",
+                "timestamps_granularity": request["options"].get(
+                    "timestamps_granularity"
+                ),
+                "response_sha256": response_sha256,
+            },
+        }
 
 def unresolved_intervals(result: TranscriptionResult) -> tuple[tuple[int, int], ...]:
     """Return merged source intervals that remain explicitly uncertain."""

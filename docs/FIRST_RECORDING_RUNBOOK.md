@@ -66,7 +66,26 @@ benefit from a downmix or isolated channel, it creates and adjudicates those can
 the operator must not pre-process or split the recording. Normalization is not enabled in the
 production policy because it failed the human-corrected difficult-span benchmark.
 
-## 4. Review
+## 4. Run the authorized month-one cloud shadow
+
+For recordings made during the month-one programme, run Scribe v2 only after the local
+`transcript.json` exists. Dubbing Studio performs all lossless chunking and checkpointing; the
+operator does not cut the recording.
+
+```bash
+dubbing-cloud-teacher "$inbox/2026-07-30-full-day.wav" \
+  --local-result "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outputs/packages/<capture-id>/transcript.json" \
+  --policy /home/gutua/software-factory/dubbing-studio/deploy/cloud_teacher/month-one-2026-08.json \
+  --programme-state /home/gutua/software-factory/giga-user/life-logging/audio-processing/state/cloud-teacher-usage.json \
+  --output "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outputs/cloud-teacher/<capture-id>"
+```
+
+This command remains blocked until the provider data-use opt-out is attested in the policy and
+`ELEVENLABS_API_KEY` exists only in the local service environment. A failure leaves the local
+package untouched. Review `report.json`, both candidate transcripts and the excluded disagreement
+set; do not interpret a cloud-only span as ground truth.
+
+## 5. Review
 
 Open the private review interface through Tailscale. Verify:
 
@@ -81,7 +100,7 @@ If source transcript text changes while its English translation remains
 unchanged, the translation is visibly marked for another review and approval
 is blocked until it is saved again as reviewed.
 
-## 5. Approve
+## 6. Approve
 
 Approval:
 

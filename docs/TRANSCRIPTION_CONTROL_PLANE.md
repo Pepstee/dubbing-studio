@@ -192,6 +192,46 @@ dubbing-adjudicate-cloud \
 Omitting `--cloud-allowed`, omitting the locally configured credential, changing the recording,
 or presenting a transcript from another source terminates before network upload.
 
+### Month-one cloud teacher programme
+
+The full-recording cloud teacher is a separate, temporary learning programme. It does not
+weaken the failed-span-only adjudication boundary above. During an explicitly dated period it
+runs ElevenLabs Scribe v2 beside the completed local transcript, automatically extracts
+one-hour lossless FLAC chunks, and checkpoints each provider response. The original local
+transcript and the cloud transcript remain separate immutable candidates.
+
+The programme policy binds the provider, 31-day maximum window, operator authorization,
+privacy attestation, audio ceiling, estimated-cost ceiling, chunk size and training thresholds.
+Before the first upload, the operator must disable ElevenLabs model-improvement data use in the
+provider account, change `model_improvement_opt_out_attested` to `true`, and configure
+`ELEVENLABS_API_KEY` locally. The key is never accepted as a command-line argument or written to
+a receipt. The committed policy starts fail-closed until that account-side action is attested.
+
+```bash
+dubbing-cloud-teacher /path/to/full-recording.wav \
+  --local-result /path/to/local/result.json \
+  --policy deploy/cloud_teacher/month-one-2026-08.json \
+  --programme-state /private/state/cloud-teacher-usage.json \
+  --output /private/outputs/cloud-teacher/<recording-id>
+```
+
+The command is resumable and source-bound. It records provider/model/configuration, chunk audio
+hash, request receipt, candidate provenance and estimated cost. Replaying a completed chunk does
+not upload or bill it again. A policy change invalidates checkpoint reuse; exhausted programme
+audio or cost stops before the next upload.
+
+Training data is deliberately stricter than transcript review. Cloud-only text is never a
+label. A span becomes `CONSENSUS_SILVER` only when local and cloud text meet both the configured
+WER and CER bounds, contains at least three tokens, is 0.4–30 seconds, contains no explicit
+uncertainty or overlapping speakers, stays within English/Russian/Romanian/Korean, and does not
+carry weak cloud acoustic confidence. All other spans are retained in `excluded.jsonl` as an
+active-learning/evaluation set. Splits are recording-level, so adjacent spans from one recording
+cannot leak across train, validation and locked test. These labels are silver evidence—not human
+ground truth—and can never emit a GIGA event.
+
+OpenAI remains the independent second opinion for disputed 20–60 second spans through
+`dubbing-adjudicate-cloud`; the entire recording is not sent to a second provider by default.
+
 ## Diarization and identity
 
 Diarization asks whether two regions contain the same voice. Identity asks whose voice that

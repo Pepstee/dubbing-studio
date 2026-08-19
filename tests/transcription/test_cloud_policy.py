@@ -1,4 +1,6 @@
 import hashlib
+import json
+from datetime import datetime, timezone
 import wave
 from unittest.mock import patch
 
@@ -8,6 +10,7 @@ from dubbing.transcription.cloud import (
     CloudAdjudicator,
     CloudAuthorization,
     CloudSpan,
+    ElevenLabsHTTPTransport,
     OfflineMockTransport,
     OpenAIHTTPTransport,
     TargetedCloudAdjudication,
@@ -15,6 +18,7 @@ from dubbing.transcription.cloud import (
     plan_context_packets,
     unresolved_intervals,
 )
+from dubbing.transcription.teacher import CloudTeacherPolicy, CloudTeacherRunner
 from dubbing.transcription.models import (
     TranscriptSegment,
     TranscriptionError,
@@ -269,3 +273,162 @@ def test_pathological_cloud_repetition_cannot_unlock_admission(tmp_path):
     assert report["admission_status"] == "FAIL_CLOSED"
     assert report["quality"]["status"] != "PASS"
     assert any("repetition" in item["code"] for item in report["quality"]["issues"])
+
+
+def _teacher_policy(**overrides):
+    document = {
+        "schema_version": "dubbing.cloud-teacher-policy.v1",
+        "programme_id": "month-one-2026-08",
+        "provider": "elevenlabs",
+        "begins_at": "2026-08-20T00:00:00Z",
+        "ends_at": "2026-09-19T00:00:00Z",
+        "operator_authorization_id": "operator-month-one",
+        "cloud_allowed": True,
+        "training_corpus_allowed": True,
+        "privacy": {
+            "model_improvement_opt_out_attested": True,
+            "retention_mode": "provider-storage; model-improvement-opt-out",
+        },
+        "limits": {
+            "max_total_audio_seconds": 1_260_000,
+            "max_estimated_cost_usd": 100,
+            "estimated_price_per_hour_usd": 0.22,
+            "chunk_seconds": 3600,
+        },
+        "training": {
+            "maximum_agreement_wer": 0.05,
+            "maximum_agreement_cer": 0.08,
+        },
+    }
+    for key, value in overrides.items():
+        document[key] = value
+    return document
+
+
+def test_teacher_policy_requires_privacy_opt_out_attestation():
+    document = _teacher_policy()
+    document["privacy"]["model_improvement_opt_out_attested"] = False
+    with pytest.raises(ValueError, match="opt-out"):
+        CloudTeacherPolicy.from_dict(document)
+
+
+def test_elevenlabs_parser_preserves_word_evidence():
+    candidate = ElevenLabsHTTPTransport._candidate(
+        {
+            "language_code": "ru",
+            "language_probability": 0.97,
+            "text": "Привет мир",
+            "words": [
+                {
+                    "type": "word",
+                    "text": "Привет",
+                    "start": 0.1,
+                    "end": 0.6,
+                    "speaker_id": "speaker_0",
+                    "logprob": -0.1,
+                },
+                {"type": "spacing", "text": " "},
+                {
+                    "type": "word",
+                    "text": "мир",
+                    "start": 0.7,
+                    "end": 1.0,
+                    "speaker_id": "speaker_0",
+                    "logprob": -0.2,
+                },
+            ],
+        }
+    )
+    assert candidate["language"] == "ru"
+    assert [item["text"] for item in candidate["segments"]] == ["Привет", "мир"]
+    assert candidate["segments"][0]["speaker"] == "speaker_0"
+    assert candidate["segments"][0]["confidence"] > 0.8
+
+
+def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=5)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(500, 3_500, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=5_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+    transport = OfflineMockTransport(
+        {
+            "text": "hello careful world",
+            "segments": [
+                {
+                    "start_ms": 500,
+                    "end_ms": 1_100,
+                    "text": "hello",
+                    "speaker": "speaker_0",
+                    "language": "en",
+                    "confidence": 0.95,
+                },
+                {
+                    "start_ms": 1_200,
+                    "end_ms": 2_100,
+                    "text": "careful",
+                    "speaker": "speaker_0",
+                    "language": "en",
+                    "confidence": 0.94,
+                },
+                {
+                    "start_ms": 2_200,
+                    "end_ms": 3_500,
+                    "text": "world",
+                    "speaker": "speaker_0",
+                    "language": "en",
+                    "confidence": 0.96,
+                },
+                {
+                    "start_ms": 4_000,
+                    "end_ms": 4_500,
+                    "text": "uncorroborated",
+                    "speaker": "speaker_0",
+                    "language": "en",
+                    "confidence": 0.92,
+                },
+            ],
+        }
+    )
+
+    def fake_extract(_source, _start, _end, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    policy = CloudTeacherPolicy.from_dict(_teacher_policy())
+    runner = CloudTeacherRunner(
+        policy,
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=transport,
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    with patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}), patch(
+        "dubbing.transcription.teacher._extract_flac", side_effect=fake_extract
+    ):
+        report = runner.run(source, local)
+        replay = runner.run(source, local)
+
+    assert len(transport.calls) == 1
+    assert report["local_transcript_overwritten"] is False
+    assert report["giga_admission_allowed"] is False
+    assert report["silver_corpus"]["accepted_count"] == 1
+    assert report["silver_corpus"]["excluded_count"] == 1
+    assert replay["chunks"][0]["reused"] is True
+    accepted = (tmp_path / "teacher" / "silver-corpus" / "accepted.jsonl").read_text()
+    row = json.loads(accepted)
+    assert row["label_class"] == "CONSENSUS_SILVER"
+    assert row["split"] in {"train", "validation", "locked_test"}
+    excluded = json.loads(
+        (tmp_path / "teacher" / "silver-corpus" / "excluded.jsonl").read_text()
+    )
+    assert excluded["label_class"] == "CLOUD_ONLY_UNVERIFIED"
+    assert excluded["target_text"] is None

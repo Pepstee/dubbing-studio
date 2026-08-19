@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dubbing-studio.local/schemas/cloud-teacher-policy.v1.schema.json",
+  "title": "Month-one cloud teacher policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "programme_id",
+    "provider",
+    "begins_at",
+    "ends_at",
+    "operator_authorization_id",
+    "cloud_allowed",
+    "training_corpus_allowed",
+    "privacy",
+    "limits",
+    "training"
+  ],
+  "properties": {
+    "schema_version": {"const": "dubbing.cloud-teacher-policy.v1"},
+    "programme_id": {"type": "string", "minLength": 1},
+    "provider": {"const": "elevenlabs"},
+    "begins_at": {"type": "string", "format": "date-time"},
+    "ends_at": {"type": "string", "format": "date-time"},
+    "operator_authorization_id": {"type": "string", "minLength": 1},
+    "cloud_allowed": {"const": true},
+    "training_corpus_allowed": {"const": true},
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_improvement_opt_out_attested", "retention_mode"],
+      "properties": {
+        "model_improvement_opt_out_attested": {"type": "boolean"},
+        "retention_mode": {"type": "string", "minLength": 1}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_total_audio_seconds",
+        "max_estimated_cost_usd",
+        "estimated_price_per_hour_usd",
+        "chunk_seconds"
+      ],
+      "properties": {
+        "max_total_audio_seconds": {"type": "integer", "minimum": 1},
+        "max_estimated_cost_usd": {"type": "number", "exclusiveMinimum": 0},
+        "estimated_price_per_hour_usd": {"type": "number", "exclusiveMinimum": 0},
+        "chunk_seconds": {"type": "integer", "minimum": 60, "maximum": 7200}
+      }
+    },
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maximum_agreement_wer", "maximum_agreement_cer"],
+      "properties": {
+        "maximum_agreement_wer": {"type": "number", "minimum": 0, "maximum": 0.1},
+        "maximum_agreement_cer": {"type": "number", "minimum": 0, "maximum": 0.15}
+      }
+    }
+  }
+}
