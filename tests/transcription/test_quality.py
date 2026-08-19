@@ -54,6 +54,59 @@ def test_fallback_exhaustion_requires_reprocessing():
     assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Субтитры сделал DimaTorzok Продолжение следует",
+        "다음 영상에서 만나요. 시청해주셔서 감사합니다.",
+        "Nu uitați să vă abonați. Mulțumim pentru vizionare.",
+    ],
+)
+def test_stock_whisper_boilerplate_with_no_speech_evidence_fails_closed(text):
+    segment = TranscriptSegment(
+        0,
+        20_000,
+        text,
+        diagnostics=DecodeDiagnostics(
+            avg_log_probability=-0.35,
+            no_speech_probability=0.706,
+            temperature=0.0,
+        ),
+    )
+
+    report = evaluate_transcript_quality(_result(text, (segment,)))
+
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    issue = next(
+        item
+        for item in report.issues
+        if item.code == "stock_hallucination_under_no_speech"
+    )
+    assert issue.start_ms == 0
+    assert issue.end_ms == 20_000
+    assert issue.evidence["no_speech_probability"] == 0.706
+
+
+def test_legitimate_thanks_for_watching_without_no_speech_evidence_is_not_rejected():
+    text = "Thanks for watching the recording with me."
+    segment = TranscriptSegment(
+        0,
+        2000,
+        text,
+        diagnostics=DecodeDiagnostics(
+            avg_log_probability=-0.1,
+            no_speech_probability=0.02,
+            temperature=0.0,
+        ),
+    )
+
+    report = evaluate_transcript_quality(_result(text, (segment,)))
+
+    assert "stock_hallucination_under_no_speech" not in {
+        item.code for item in report.issues
+    }
+
+
 def test_uncertain_span_is_not_approval_ready():
     segment = TranscriptSegment(0, 1000, "unclear name", uncertain=True)
     report = evaluate_transcript_quality(_result(segment.text, (segment,)))

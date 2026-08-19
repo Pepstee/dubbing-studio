@@ -9,6 +9,9 @@ from typing import Iterable
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
 
 
+QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v3"
+
+
 class TranscriptQualityStatus(str, Enum):
     PASS = "PASS"
     PASS_WITH_UNCERTAIN_SPANS = "PASS_WITH_UNCERTAIN_SPANS"
@@ -42,7 +45,7 @@ class TranscriptQualityReport:
     status: TranscriptQualityStatus
     issues: tuple[QualityIssue, ...]
     metrics: dict
-    policy_version: str = "dubbing.transcript-quality-policy.v2"
+    policy_version: str = QUALITY_POLICY_VERSION
 
     @property
     def approval_allowed(self) -> bool:
@@ -90,6 +93,19 @@ def _normalize(value: str) -> str:
 def _tokens(value: str) -> list[str]:
     normalized = _normalize(value)
     return normalized.split() if normalized else []
+
+
+_STOCK_HALLUCINATION_PHRASES = (
+    "thanks for watching",
+    "thank you for watching",
+    "nu uitați să vă abonați",
+    "mulțumim pentru vizionare",
+    "субтитры сделал",
+    "продолжение следует",
+    "다음 영상에서 만나요",
+    "시청해주셔서 감사합니다",
+    "ご視聴ありがとうございました",
+)
 
 
 def _script_counts(value: str) -> dict[str, int]:
@@ -366,6 +382,7 @@ def evaluate_transcript_quality(
     large_gaps: list[tuple[int, int]] = []
     explained_silence_gaps: list[tuple[int, int, float]] = []
     previous: TranscriptSegment | None = None
+    stock_hallucination_count = 0
     for segment in segments:
         if previous is not None:
             if _normalize(previous.text) == _normalize(segment.text):
@@ -422,6 +439,37 @@ def evaluate_transcript_quality(
                     segment.start_ms,
                     segment.end_ms,
                     {"fallback_history": list(diagnostics.fallback_history)},
+                )
+            )
+        normalized_segment = _normalize(segment.text)
+        matched_stock_phrase = next(
+            (
+                phrase
+                for phrase in _STOCK_HALLUCINATION_PHRASES
+                if _normalize(phrase) in normalized_segment
+            ),
+            None,
+        )
+        if (
+            matched_stock_phrase is not None
+            and diagnostics is not None
+            and diagnostics.no_speech_probability is not None
+            and diagnostics.no_speech_probability >= 0.6
+        ):
+            stock_hallucination_count += 1
+            issues.append(
+                QualityIssue(
+                    "stock_hallucination_under_no_speech",
+                    "critical",
+                    "Decoder emitted known boilerplate despite strong no-speech evidence.",
+                    segment.start_ms,
+                    segment.end_ms,
+                    {
+                        "phrase": matched_stock_phrase,
+                        "no_speech_probability": round(
+                            diagnostics.no_speech_probability, 6
+                        ),
+                    },
                 )
             )
         previous = segment
@@ -543,6 +591,7 @@ def evaluate_transcript_quality(
             "repetition_findings": [
                 finding.to_dict() for finding in repetition_findings
             ],
+            "stock_hallucination_under_no_speech_count": stock_hallucination_count,
             "timestamp_overlap_count": timestamp_overlaps,
             "large_gap_count": len(large_gaps),
             "explained_silence_gap_count": len(explained_silence_gaps),

@@ -64,9 +64,9 @@ def test_approval_refreshes_stale_quality_policy_before_blocking(tmp_path):
 
     refreshed_quality = json.loads(quality_path.read_text())
     refreshed_manifest = json.loads(manifest_path.read_text())
-    assert refreshed_quality["policy_version"] == "dubbing.transcript-quality-policy.v2"
+    assert refreshed_quality["policy_version"] == "dubbing.transcript-quality-policy.v3"
     assert refreshed_manifest["quality"]["policy_version"] == (
-        "dubbing.transcript-quality-policy.v2"
+        "dubbing.transcript-quality-policy.v3"
     )
 
 

@@ -25,6 +25,7 @@ from dubbing.transcription.models import (
     transcription_result_from_dict,
 )
 from dubbing.transcription.quality import (
+    QUALITY_POLICY_VERSION,
     TranscriptQualityReport,
     TranscriptQualityStatus,
     evaluate_transcript_quality,
@@ -519,6 +520,7 @@ class AdaptiveLongFormCoordinator:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
             "coordinator_version": "adaptive-long-form-v7",
+            "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
