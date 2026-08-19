@@ -81,9 +81,12 @@ dubbing-cloud-teacher "$inbox/2026-07-30-full-day.wav" \
 ```
 
 This command remains blocked until the provider data-use opt-out is attested in the policy and
-`ELEVENLABS_API_KEY` exists only in the local service environment. A failure leaves the local
-package untouched. Review `report.json`, both candidate transcripts and the excluded disagreement
-set; do not interpret a cloud-only span as ground truth.
+`ELEVENLABS_API_KEY` exists only in the local service environment. It automatically removes
+VAD-confirmed long silence while retaining padded speech context; the operator must not cut the
+recording. `compaction-plan.json` preserves the exact reversible source-time map and reports the
+duration sent for billing. A failure leaves the local package untouched. Review `report.json`,
+both candidate transcripts and the excluded disagreement set; do not interpret a cloud-only span
+as ground truth.
 
 ## 5. Review
 

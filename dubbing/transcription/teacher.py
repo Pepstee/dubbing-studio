@@ -3,18 +3,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dubbing.evaluation.metrics import character_tokens, levenshtein_distance, word_tokens
-from dubbing.media import ffmpeg_executable
 from dubbing.transcription.cloud import (
     CloudTransport,
     ElevenLabsHTTPTransport,
     PROVIDERS,
+)
+from dubbing.transcription.compaction import (
+    CompactionPacket,
+    CompactionSlice,
+    build_speech_compaction_plan,
+    extract_compacted_flac,
 )
 from dubbing.transcription.job import source_sha256
 from dubbing.transcription.models import (
@@ -24,6 +28,10 @@ from dubbing.transcription.models import (
     TranscriptionResult,
 )
 from dubbing.transcription.quality import evaluate_transcript_quality
+from dubbing.transcription.speech_regions import (
+    FasterWhisperSileroSpeechRegionDetector,
+    SpeechRegionDetector,
+)
 
 
 _POLICY_SCHEMA = "dubbing.cloud-teacher-policy.v1"
@@ -67,6 +75,11 @@ class CloudTeacherPolicy:
     max_estimated_cost_usd: float
     estimated_price_per_hour_usd: float
     chunk_seconds: int
+    compaction_enabled: bool
+    compaction_padding_ms: int
+    compaction_merge_gap_ms: int
+    compaction_separator_ms: int
+    compaction_maximum_slices_per_packet: int
     maximum_agreement_wer: float
     maximum_agreement_cer: float
 
@@ -77,8 +90,13 @@ class CloudTeacherPolicy:
         privacy = document.get("privacy")
         limits = document.get("limits")
         training = document.get("training")
-        if not all(isinstance(item, dict) for item in (privacy, limits, training)):
-            raise ValueError("policy privacy, limits and training must be objects")
+        compaction = document.get("compaction")
+        if not all(
+            isinstance(item, dict) for item in (privacy, limits, training, compaction)
+        ):
+            raise ValueError(
+                "policy privacy, limits, training and compaction must be objects"
+            )
         policy = cls(
             programme_id=str(document.get("programme_id", "")).strip(),
             provider=str(document.get("provider", "")).strip(),
@@ -99,6 +117,13 @@ class CloudTeacherPolicy:
                 limits.get("estimated_price_per_hour_usd", 0)
             ),
             chunk_seconds=int(limits.get("chunk_seconds", 0)),
+            compaction_enabled=compaction.get("enabled") is True,
+            compaction_padding_ms=int(compaction.get("padding_ms", -1)),
+            compaction_merge_gap_ms=int(compaction.get("merge_gap_ms", -1)),
+            compaction_separator_ms=int(compaction.get("separator_ms", -1)),
+            compaction_maximum_slices_per_packet=int(
+                compaction.get("maximum_slices_per_packet", 0)
+            ),
             maximum_agreement_wer=float(training.get("maximum_agreement_wer", -1)),
             maximum_agreement_cer=float(training.get("maximum_agreement_cer", -1)),
         )
@@ -128,6 +153,16 @@ class CloudTeacherPolicy:
             raise ValueError("positive estimated provider price is required")
         if not 60 <= self.chunk_seconds <= 7_200:
             raise ValueError("cloud chunks must be between 60 seconds and 2 hours")
+        if not self.compaction_enabled:
+            raise ValueError("month-one cloud teacher requires speech compaction")
+        if not 500 <= self.compaction_padding_ms <= 5_000:
+            raise ValueError("compaction padding must be between 500 and 5000 ms")
+        if not 0 <= self.compaction_merge_gap_ms <= 10_000:
+            raise ValueError("compaction merge gap must be between 0 and 10000 ms")
+        if not 100 <= self.compaction_separator_ms <= 2_000:
+            raise ValueError("compaction separator must be between 100 and 2000 ms")
+        if not 1 <= self.compaction_maximum_slices_per_packet <= 200:
+            raise ValueError("compaction maximum slices must be between 1 and 200")
         if not 0 <= self.maximum_agreement_wer <= 0.10:
             raise ValueError("silver-label WER threshold must be in [0, 0.10]")
         if not 0 <= self.maximum_agreement_cer <= 0.15:
@@ -150,6 +185,13 @@ class CloudTeacherPolicy:
             "max_estimated_cost_usd": self.max_estimated_cost_usd,
             "estimated_price_per_hour_usd": self.estimated_price_per_hour_usd,
             "chunk_seconds": self.chunk_seconds,
+            "compaction_enabled": self.compaction_enabled,
+            "compaction_padding_ms": self.compaction_padding_ms,
+            "compaction_merge_gap_ms": self.compaction_merge_gap_ms,
+            "compaction_separator_ms": self.compaction_separator_ms,
+            "compaction_maximum_slices_per_packet": (
+                self.compaction_maximum_slices_per_packet
+            ),
             "maximum_agreement_wer": self.maximum_agreement_wer,
             "maximum_agreement_cer": self.maximum_agreement_cer,
         }
@@ -168,45 +210,23 @@ def load_cloud_teacher_policy(path: str | Path) -> CloudTeacherPolicy:
     return CloudTeacherPolicy.from_dict(document)
 
 
-def _extract_flac(source: Path, start_ms: int, end_ms: int, destination: Path) -> None:
-    ffmpeg = ffmpeg_executable()
-    if ffmpeg is None:
-        raise TranscriptionError("ffmpeg is required for cloud teacher extraction")
-    process = subprocess.run(
-        [
-            ffmpeg,
-            "-nostdin",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-ss",
-            f"{start_ms / 1000:.3f}",
-            "-i",
-            str(source),
-            "-t",
-            f"{(end_ms - start_ms) / 1000:.3f}",
-            "-vn",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "flac",
-            "-y",
-            str(destination),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=max(180, (end_ms - start_ms) // 1000 + 120),
-    )
-    if process.returncode:
-        raise TranscriptionError(f"cloud FLAC extraction failed: {process.stderr.strip()}")
-
-
 def _error_rate(reference: list[str], candidate: list[str]) -> float:
     if not reference:
         return 0.0 if not candidate else 1.0
     return levenshtein_distance(reference, candidate) / len(reference)
+
+
+def _extract_training_flac(
+    source: Path, start_ms: int, end_ms: int, destination: Path
+) -> None:
+    duration_ms = end_ms - start_ms
+    packet = CompactionPacket(
+        0,
+        (CompactionSlice(start_ms, end_ms, 0, duration_ms),),
+        duration_ms,
+        0,
+    )
+    extract_compacted_flac(source, packet, destination)
 
 
 def _overlapping_text(result: TranscriptionResult, start_ms: int, end_ms: int) -> str:
@@ -236,12 +256,16 @@ class CloudTeacherRunner:
         programme_state: str | Path,
         *,
         transport: CloudTransport | None = None,
+        speech_region_detector: SpeechRegionDetector | None = None,
         now: datetime | None = None,
     ) -> None:
         self.policy = policy
         self.output_dir = Path(output_dir).resolve()
         self.programme_state = Path(programme_state).resolve()
         self.transport = transport or ElevenLabsHTTPTransport()
+        self.speech_region_detector = (
+            speech_region_detector or FasterWhisperSileroSpeechRegionDetector()
+        )
         self.now = now
 
     def _load_usage(self) -> dict:
@@ -271,23 +295,18 @@ class CloudTeacherRunner:
         if consumed_cost + requested_cost > self.policy.max_estimated_cost_usd:
             raise TranscriptionError("cloud teacher cost cap would be exceeded")
 
-    def _chunk_bounds(self, duration_ms: int) -> tuple[tuple[int, int], ...]:
-        chunk_ms = self.policy.chunk_seconds * 1000
-        return tuple(
-            (start, min(duration_ms, start + chunk_ms))
-            for start in range(0, duration_ms, chunk_ms)
-        )
-
     def _load_checkpoint(
-        self, path: Path, source_digest: str, start_ms: int, end_ms: int
+        self, path: Path, source_digest: str, packet: CompactionPacket, plan_sha256: str
     ) -> dict | None:
         if not path.is_file():
             return None
         document = json.loads(path.read_text(encoding="utf-8"))
         expected = {
             "recording_sha256": source_digest,
-            "start_ms": start_ms,
-            "end_ms": end_ms,
+            "packet_index": packet.index,
+            "compact_duration_ms": packet.compact_duration_ms,
+            "mapping_sha256": packet.mapping_sha256,
+            "compaction_plan_sha256": plan_sha256,
             "provider": self.policy.provider,
             "policy_sha256": self.policy.configuration_sha256,
         }
@@ -298,31 +317,38 @@ class CloudTeacherRunner:
         return document
 
     def _candidate_segments(
-        self, candidate: dict, offset_ms: int, chunk_duration_ms: int
-    ) -> tuple[TranscriptSegment, ...]:
+        self, candidate: dict, packet: CompactionPacket
+    ) -> tuple[tuple[TranscriptSegment, ...], int]:
         segments = []
+        unmapped = 0
         for item in candidate.get("segments", []):
             try:
-                start_ms = offset_ms + int(item["start_ms"])
-                end_ms = offset_ms + int(item["end_ms"])
+                compact_start_ms = int(item["start_ms"])
+                compact_end_ms = int(item["end_ms"])
                 text = str(item["text"]).strip()
             except (KeyError, TypeError, ValueError) as exc:
                 raise TranscriptionError("cloud teacher candidate is malformed") from exc
-            if (
-                start_ms < offset_ms
-                or end_ms > offset_ms + chunk_duration_ms
-                or end_ms <= start_ms
-                or not text
-            ):
+            if not text:
                 raise TranscriptionError("cloud teacher candidate contains invalid speech")
+            restored = packet.restore_interval(compact_start_ms, compact_end_ms)
+            if restored is None:
+                unmapped += 1
+                continue
+            start_ms, end_ms = restored
+            raw_speaker = item.get("speaker")
+            speaker = (
+                f"CLOUD_PACKET_{packet.index:06d}_{raw_speaker}"
+                if raw_speaker
+                else None
+            )
             segments.append(
                 TranscriptSegment(
                     start_ms,
                     end_ms,
                     text,
                     confidence=item.get("confidence"),
-                    speaker=item.get("speaker"),
-                    speaker_status=("attributed" if item.get("speaker") else "not_requested"),
+                    speaker=speaker,
+                    speaker_status=("attributed" if speaker else "not_requested"),
                     language=item.get("language"),
                     uncertain=False,
                     diagnostics=DecodeDiagnostics(
@@ -330,11 +356,63 @@ class CloudTeacherRunner:
                             "cloud_teacher": True,
                             "provider": self.policy.provider,
                             "model": PROVIDERS[self.policy.provider].model,
+                            "packet_index": packet.index,
+                            "compact_start_ms": compact_start_ms,
+                            "compact_end_ms": compact_end_ms,
+                            "mapping_sha256": packet.mapping_sha256,
                         }
                     ),
                 )
             )
-        return tuple(segments)
+        return tuple(segments), unmapped
+
+    def _candidate_packet_quality(
+        self, candidate: dict, packet: CompactionPacket, *, unmapped_count: int
+    ) -> dict:
+        compact_segments = []
+        for item in candidate.get("segments", []):
+            try:
+                start_ms = int(item["start_ms"])
+                end_ms = int(item["end_ms"])
+                text = str(item["text"]).strip()
+            except (KeyError, TypeError, ValueError) as exc:
+                raise TranscriptionError("cloud teacher candidate is malformed") from exc
+            if start_ms < 0 or end_ms <= start_ms or end_ms > packet.compact_duration_ms:
+                raise TranscriptionError("cloud teacher timestamp exceeds compact packet")
+            if text:
+                compact_segments.append(TranscriptSegment(start_ms, end_ms, text))
+        if not compact_segments:
+            raise TranscriptionError("cloud teacher returned no timestamped speech")
+        result = TranscriptionResult(
+            segments=tuple(
+                sorted(compact_segments, key=lambda item: (item.start_ms, item.end_ms))
+            ),
+            text=" ".join(item.text for item in compact_segments),
+            backend="cloud-teacher-compact",
+            model=PROVIDERS[self.policy.provider].model,
+            device="cloud",
+            language=None,
+            duration_ms=packet.compact_duration_ms,
+            confidence_available=False,
+        )
+        report = evaluate_transcript_quality(
+            result, expected_duration_ms=packet.compact_duration_ms
+        ).to_dict()
+        if unmapped_count:
+            report["status"] = "REPROCESS_REQUIRED"
+            report.setdefault("issues", []).append(
+                {
+                    "code": "speech_in_compaction_separator",
+                    "severity": "error",
+                    "message": (
+                        f"{unmapped_count} provider segment(s) landed in inserted silence."
+                    ),
+                    "start_ms": None,
+                    "end_ms": None,
+                    "details": {"unmapped_segment_count": unmapped_count},
+                }
+            )
+        return report
 
     def _build_silver_corpus(
         self,
@@ -419,7 +497,7 @@ class CloudTeacherRunner:
             evidence["target_text"] = cloud_text
             clip = audio_dir / f"{row_id}.flac"
             if not clip.is_file():
-                _extract_flac(source, segment.start_ms, segment.end_ms, clip)
+                _extract_training_flac(source, segment.start_ms, segment.end_ms, clip)
             evidence["audio"] = str(clip.relative_to(corpus))
             evidence["audio_sha256"] = source_sha256(clip)
             accepted.append(evidence)
@@ -511,31 +589,50 @@ class CloudTeacherRunner:
                 f"{provider.credential_environment_variable} is not configured locally; no upload occurred"
             )
         usage = self._load_usage()
+        region_plan = self.speech_region_detector.detect(source_path)
+        compaction = build_speech_compaction_plan(
+            region_plan,
+            local,
+            padding_ms=self.policy.compaction_padding_ms,
+            merge_gap_ms=self.policy.compaction_merge_gap_ms,
+            separator_ms=self.policy.compaction_separator_ms,
+            maximum_packet_ms=self.policy.chunk_seconds * 1000,
+            maximum_slices_per_packet=(
+                self.policy.compaction_maximum_slices_per_packet
+            ),
+        )
+        plan_sha256 = compaction.mapping_sha256
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_json(self.output_dir / "compaction-plan.json", compaction.to_dict())
+
+        def usage_key(packet: CompactionPacket) -> str:
+            return (
+                f"{digest}:{packet.index}:{packet.mapping_sha256}:{provider.name}"
+            )
+
         unseen_ms = sum(
-            end - start
-            for start, end in self._chunk_bounds(local.duration_ms)
-            if f"{digest}:{start}:{end}:{provider.name}" not in usage["chunks"]
+            packet.compact_duration_ms
+            for packet in compaction.packets
+            if usage_key(packet) not in usage["chunks"]
         )
         self._assert_budget(usage, unseen_ms)
 
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         checkpoints = self.output_dir / "checkpoints"
         checkpoints.mkdir(exist_ok=True)
         all_segments = []
         chunk_reports = []
+        packet_quality_reports = []
         with tempfile.TemporaryDirectory(prefix="dubbing-cloud-teacher-") as directory:
             temporary_dir = Path(directory)
-            for index, (start_ms, end_ms) in enumerate(
-                self._chunk_bounds(local.duration_ms)
-            ):
-                checkpoint_path = checkpoints / f"chunk-{index:06d}.json"
+            for packet in compaction.packets:
+                checkpoint_path = checkpoints / f"chunk-{packet.index:06d}.json"
                 checkpoint = self._load_checkpoint(
-                    checkpoint_path, digest, start_ms, end_ms
+                    checkpoint_path, digest, packet, plan_sha256
                 )
                 reused = checkpoint is not None
                 if checkpoint is None:
-                    audio = temporary_dir / f"chunk-{index:06d}.flac"
-                    _extract_flac(source_path, start_ms, end_ms, audio)
+                    audio = temporary_dir / f"chunk-{packet.index:06d}.flac"
+                    extract_compacted_flac(source_path, packet, audio)
                     audio_bytes = audio.read_bytes()
                     request = provider.build_request()
                     response = self.transport(request, audio_bytes, credential)
@@ -546,7 +643,7 @@ class CloudTeacherRunner:
                     if not isinstance(request_receipt, str) or not request_receipt.strip():
                         raise TranscriptionError("cloud teacher returned no request receipt")
                     estimated_cost = (
-                        (end_ms - start_ms)
+                        packet.compact_duration_ms
                         / 3_600_000
                         * self.policy.estimated_price_per_hour_usd
                     )
@@ -554,8 +651,12 @@ class CloudTeacherRunner:
                         "schema_version": "dubbing.cloud-teacher-checkpoint.v1",
                         "recording_sha256": digest,
                         "source_span_sha256": source_sha256(audio),
-                        "start_ms": start_ms,
-                        "end_ms": end_ms,
+                        "packet_index": packet.index,
+                        "compact_duration_ms": packet.compact_duration_ms,
+                        "original_retained_ms": packet.original_retained_ms,
+                        "mapping_sha256": packet.mapping_sha256,
+                        "compaction_plan_sha256": plan_sha256,
+                        "mapping": packet.to_dict(),
                         "provider": provider.name,
                         "model": provider.model,
                         "policy_sha256": self.policy.configuration_sha256,
@@ -569,25 +670,33 @@ class CloudTeacherRunner:
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     }
                     _atomic_json(checkpoint_path, checkpoint)
-                    usage_key = f"{digest}:{start_ms}:{end_ms}:{provider.name}"
-                    usage["chunks"][usage_key] = {
-                        "duration_ms": end_ms - start_ms,
+                    usage["chunks"][usage_key(packet)] = {
+                        "duration_ms": packet.compact_duration_ms,
+                        "original_retained_ms": packet.original_retained_ms,
                         "estimated_cost_usd": estimated_cost,
                         "checkpoint": str(checkpoint_path),
                     }
                     _atomic_json(self.programme_state, usage)
-                candidate_segments = self._candidate_segments(
-                    checkpoint["candidate"], start_ms, end_ms - start_ms
+                candidate_segments, unmapped_count = self._candidate_segments(
+                    checkpoint["candidate"], packet
+                )
+                packet_quality = self._candidate_packet_quality(
+                    checkpoint["candidate"], packet, unmapped_count=unmapped_count
+                )
+                packet_quality_reports.append(
+                    {"packet_index": packet.index, **packet_quality}
                 )
                 all_segments.extend(candidate_segments)
                 chunk_reports.append(
                     {
-                        "index": index,
-                        "start_ms": start_ms,
-                        "end_ms": end_ms,
+                        "index": packet.index,
+                        "compact_duration_ms": packet.compact_duration_ms,
+                        "original_retained_ms": packet.original_retained_ms,
+                        "mapping_sha256": packet.mapping_sha256,
                         "checkpoint": str(checkpoint_path),
                         "reused": reused,
                         "segment_count": len(candidate_segments),
+                        "unmapped_segment_count": unmapped_count,
                         "estimated_cost_usd": checkpoint["estimated_cost_usd"],
                     }
                 )
@@ -612,9 +721,27 @@ class CloudTeacherRunner:
                 "operator_authorization_id": self.policy.operator_authorization_id,
             },
         )
-        quality = evaluate_transcript_quality(
-            cloud, expected_duration_ms=local.duration_ms
-        ).to_dict()
+        quality_rank = {
+            "PASS": 0,
+            "PASS_WITH_UNCERTAIN_SPANS": 1,
+            "HUMAN_REVIEW_REQUIRED": 2,
+            "REPROCESS_REQUIRED": 3,
+            "FAILED": 4,
+        }
+        worst_quality = max(
+            packet_quality_reports,
+            key=lambda item: quality_rank.get(item.get("status", "FAILED"), 4),
+        )
+        quality = {
+            "status": worst_quality["status"],
+            "policy_version": "cloud-compact-packets-v1",
+            "issues": [
+                {"packet_index": report["packet_index"], **issue}
+                for report in packet_quality_reports
+                for issue in report.get("issues", [])
+            ],
+            "packet_reports": packet_quality_reports,
+        }
         local_quality = evaluate_transcript_quality(
             local, expected_duration_ms=local.duration_ms
         ).to_dict()
@@ -632,6 +759,20 @@ class CloudTeacherRunner:
             "model": provider.model,
             "policy_sha256": self.policy.configuration_sha256,
             "chunks": chunk_reports,
+            "compaction": {
+                **compaction.to_dict(),
+                "mapping_sha256": plan_sha256,
+                "estimated_original_cost_usd": (
+                    local.duration_ms
+                    / 3_600_000
+                    * self.policy.estimated_price_per_hour_usd
+                ),
+                "estimated_compacted_cost_usd": (
+                    compaction.uploaded_ms
+                    / 3_600_000
+                    * self.policy.estimated_price_per_hour_usd
+                ),
+            },
             "local_cloud_wer": _error_rate(local_text, cloud_text),
             "local_quality": local_quality,
             "cloud_quality": quality,

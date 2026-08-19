@@ -17,6 +17,13 @@
     "estimated_price_per_hour_usd": 0.22,
     "chunk_seconds": 3600
   },
+  "compaction": {
+    "enabled": true,
+    "padding_ms": 1500,
+    "merge_gap_ms": 2000,
+    "separator_ms": 500,
+    "maximum_slices_per_packet": 64
+  },
   "training": {
     "maximum_agreement_wer": 0.05,
     "maximum_agreement_cer": 0.08

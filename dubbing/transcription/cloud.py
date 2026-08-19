@@ -58,6 +58,14 @@ class CloudTransport(Protocol):
 _UNCERTAIN_PREFIX = "[UNCERTAIN:"
 _MINIMUM_PACKET_MS = 20_000
 _MAXIMUM_PACKET_MS = 60_000
+_LANGUAGE_ALIASES = {"eng": "en", "rus": "ru", "ron": "ro", "kor": "ko"}
+
+
+def _language_code(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower().replace("_", "-").split("-", 1)[0]
+    return _LANGUAGE_ALIASES.get(normalized, normalized or None)
 
 
 @dataclass(frozen=True)
@@ -383,8 +391,9 @@ class ElevenLabsHTTPTransport:
                     "end_ms": end_ms,
                     "text": value,
                     "speaker": item.get("speaker_id"),
-                    "language": item.get("language_code")
-                    or document.get("language_code"),
+                    "language": _language_code(
+                        item.get("language_code") or document.get("language_code")
+                    ),
                     "confidence": (
                         None
                         if item.get("logprob") is None
@@ -398,7 +407,7 @@ class ElevenLabsHTTPTransport:
             "text": str(document.get("text", "")).strip()
             or " ".join(item["text"] for item in segments),
             "segments": segments,
-            "language": document.get("language_code"),
+            "language": _language_code(document.get("language_code")),
             "language_probability": document.get("language_probability"),
         }
 

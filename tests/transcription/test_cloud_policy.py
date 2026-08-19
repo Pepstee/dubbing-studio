@@ -19,6 +19,8 @@ from dubbing.transcription.cloud import (
     unresolved_intervals,
 )
 from dubbing.transcription.teacher import CloudTeacherPolicy, CloudTeacherRunner
+from dubbing.transcription.compaction import CompactionPacket, CompactionSlice
+from dubbing.transcription.speech_regions import SpeechRegion, SpeechRegionPlan
 from dubbing.transcription.models import (
     TranscriptSegment,
     TranscriptionError,
@@ -295,6 +297,13 @@ def _teacher_policy(**overrides):
             "estimated_price_per_hour_usd": 0.22,
             "chunk_seconds": 3600,
         },
+        "compaction": {
+            "enabled": True,
+            "padding_ms": 1500,
+            "merge_gap_ms": 2000,
+            "separator_ms": 500,
+            "maximum_slices_per_packet": 64,
+        },
         "training": {
             "maximum_agreement_wer": 0.05,
             "maximum_agreement_cer": 0.08,
@@ -315,7 +324,7 @@ def test_teacher_policy_requires_privacy_opt_out_attestation():
 def test_elevenlabs_parser_preserves_word_evidence():
     candidate = ElevenLabsHTTPTransport._candidate(
         {
-            "language_code": "ru",
+            "language_code": "rus",
             "language_probability": 0.97,
             "text": "Привет мир",
             "words": [
@@ -400,8 +409,22 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
         }
     )
 
-    def fake_extract(_source, _start, _end, destination):
+    def fake_extract(_source, _packet, destination):
         destination.write_bytes(b"lossless-flac-fixture")
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            return SpeechRegionPlan(
+                self.identity,
+                5_000,
+                (SpeechRegion(500, 3_500, "strict"),),
+                (SpeechRegion(400, 3_600, "sensitive"),),
+                (SpeechRegion(500, 3_500, "strict"),),
+            )
 
     policy = CloudTeacherPolicy.from_dict(_teacher_policy())
     runner = CloudTeacherRunner(
@@ -409,10 +432,11 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
         tmp_path / "teacher",
         tmp_path / "programme-usage.json",
         transport=transport,
+        speech_region_detector=Detector(),
         now=datetime(2026, 8, 21, tzinfo=timezone.utc),
     )
     with patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}), patch(
-        "dubbing.transcription.teacher._extract_flac", side_effect=fake_extract
+        "dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract
     ):
         report = runner.run(source, local)
         replay = runner.run(source, local)
@@ -432,3 +456,122 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
     )
     assert excluded["label_class"] == "CLOUD_ONLY_UNVERIFIED"
     assert excluded["target_text"] is None
+    assert report["compaction"]["uploaded_ms"] == 5_000
+    assert report["chunks"][0]["mapping_sha256"]
+
+
+def test_cloud_teacher_restores_compacted_words_to_original_recording_time(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=20)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(5_000, 8_000, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=20_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+    transport = OfflineMockTransport(
+        {
+            "text": "hello careful world",
+            "segments": [
+                {"start_ms": 500, "end_ms": 1_000, "text": "hello", "language": "en"},
+                {
+                    "start_ms": 1_100,
+                    "end_ms": 2_000,
+                    "text": "careful",
+                    "language": "en",
+                },
+                {"start_ms": 2_100, "end_ms": 3_000, "text": "world", "language": "en"},
+            ],
+        }
+    )
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            speech = SpeechRegion(5_000, 8_000, "sensitive")
+            return SpeechRegionPlan(self.identity, 20_000, (), (speech,), (speech,))
+
+    policy_document = _teacher_policy()
+    policy_document["compaction"] = {
+        "enabled": True,
+        "padding_ms": 500,
+        "merge_gap_ms": 0,
+        "separator_ms": 500,
+        "maximum_slices_per_packet": 64,
+    }
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(policy_document),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=transport,
+        speech_region_detector=Detector(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+
+    def fake_extract(_source, _packet, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    with patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}), patch(
+        "dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract
+    ):
+        report = runner.run(source, local)
+
+    cloud = json.loads(
+        (tmp_path / "teacher" / "cloud-transcript.json").read_text(encoding="utf-8")
+    )
+    assert [(item["start_ms"], item["end_ms"]) for item in cloud["segments"]] == [
+        (5_000, 5_500),
+        (5_600, 6_500),
+        (6_600, 7_500),
+    ]
+    assert report["compaction"]["source_duration_ms"] == 20_000
+    assert report["compaction"]["uploaded_ms"] == 4_000
+    assert report["compaction"]["removed_ms"] == 16_000
+    usage = json.loads((tmp_path / "programme-usage.json").read_text())
+    assert next(iter(usage["chunks"].values()))["duration_ms"] == 4_000
+
+
+def test_provider_speech_in_inserted_silence_fails_compact_packet_quality(tmp_path):
+    packet = CompactionPacket(
+        0,
+        (
+            CompactionSlice(1_000, 2_000, 0, 1_000),
+            CompactionSlice(10_000, 11_000, 1_500, 2_500),
+        ),
+        2_500,
+        500,
+    )
+    candidate = {
+        "text": "real hallucinated",
+        "segments": [
+            {"start_ms": 100, "end_ms": 500, "text": "real"},
+            {"start_ms": 1_100, "end_ms": 1_300, "text": "hallucinated"},
+        ],
+    }
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        tmp_path / "usage.json",
+        transport=OfflineMockTransport(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    segments, unmapped = runner._candidate_segments(candidate, packet)
+    quality = runner._candidate_packet_quality(
+        candidate, packet, unmapped_count=unmapped
+    )
+    assert [item.text for item in segments] == ["real"]
+    assert unmapped == 1
+    assert quality["status"] == "REPROCESS_REQUIRED"
+    assert any(
+        issue["code"] == "speech_in_compaction_separator"
+        for issue in quality["issues"]
+    )

@@ -15,6 +15,7 @@
     "training_corpus_allowed",
     "privacy",
     "limits",
+    "compaction",
     "training"
   ],
   "properties": {
@@ -49,6 +50,24 @@
         "max_estimated_cost_usd": {"type": "number", "exclusiveMinimum": 0},
         "estimated_price_per_hour_usd": {"type": "number", "exclusiveMinimum": 0},
         "chunk_seconds": {"type": "integer", "minimum": 60, "maximum": 7200}
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "padding_ms",
+        "merge_gap_ms",
+        "separator_ms",
+        "maximum_slices_per_packet"
+      ],
+      "properties": {
+        "enabled": {"const": true},
+        "padding_ms": {"type": "integer", "minimum": 500, "maximum": 5000},
+        "merge_gap_ms": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "separator_ms": {"type": "integer", "minimum": 100, "maximum": 2000},
+        "maximum_slices_per_packet": {"type": "integer", "minimum": 1, "maximum": 200}
       }
     },
     "training": {

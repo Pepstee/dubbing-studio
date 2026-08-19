@@ -196,9 +196,25 @@ or presenting a transcript from another source terminates before network upload.
 
 The full-recording cloud teacher is a separate, temporary learning programme. It does not
 weaken the failed-span-only adjudication boundary above. During an explicitly dated period it
-runs ElevenLabs Scribe v2 beside the completed local transcript, automatically extracts
-one-hour lossless FLAC chunks, and checkpoints each provider response. The original local
-transcript and the cloud transcript remain separate immutable candidates.
+runs ElevenLabs Scribe v2 beside the completed local transcript, automatically constructs
+bounded lossless FLAC speech packets, and checkpoints each provider response. The original
+local transcript and the cloud transcript remain separate immutable candidates.
+
+Cloud packets are silence-compacted before upload. The existing local Faster-Whisper Silero
+detector supplies both strict and sensitive speech regions; compaction uses the inclusive union
+of both passes plus every local transcript interval. Each retained interval receives configurable
+context padding, and nearby intervals are merged so natural pauses are not cut. A short synthetic
+silence separates discontinuous source regions. Packets contain at most 64 source slices and one
+hour of compacted audio.
+
+Every retained slice records compact and original start/end times. Provider timestamps are
+accepted only when the complete provider segment lies within one retained slice, then restored to
+the untouched recording timeline. Speech attributed to an inserted separator, crossing an
+artificial join or outside the compacted duration forces `REPROCESS_REQUIRED`. Speaker labels are
+packet-namespaced; compaction never implies that provider speaker IDs are stable across packets.
+If neither sensitive VAD nor the local transcript finds any speech, compaction fails open on cost
+and retains the entire recording. It never turns an uncertain no-speech decision into a zero-byte
+upload.
 
 The programme policy binds the provider, 31-day maximum window, operator authorization,
 privacy attestation, audio ceiling, estimated-cost ceiling, chunk size and training thresholds.
@@ -215,10 +231,13 @@ dubbing-cloud-teacher /path/to/full-recording.wav \
   --output /private/outputs/cloud-teacher/<recording-id>
 ```
 
-The command is resumable and source-bound. It records provider/model/configuration, chunk audio
-hash, request receipt, candidate provenance and estimated cost. Replaying a completed chunk does
-not upload or bill it again. A policy change invalidates checkpoint reuse; exhausted programme
-audio or cost stops before the next upload.
+The command is resumable and source-bound. It records provider/model/configuration, compact audio
+hash, reversible mapping hash, request receipt, candidate provenance and estimated cost based on
+uploaded—not original—duration. Replaying a completed packet does not upload or bill it again. A
+policy or mapping change invalidates checkpoint reuse; exhausted programme audio or cost stops
+before the next upload. `compaction-plan.json` reports retained, removed and uploaded durations,
+estimated reduction, fallback reason and the known dual-miss limitation: sensitive VAD plus local
+transcript evidence reduces but cannot mathematically eliminate missed quiet speech.
 
 Training data is deliberately stricter than transcript review. Cloud-only text is never a
 label. A span becomes `CONSENSUS_SILVER` only when local and cloud text meet both the configured
