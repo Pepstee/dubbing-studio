@@ -10,8 +10,10 @@
 - Review packages: `<workspace>/outputs/packages`
 - State: `<workspace>/state`
 - GIGA transactional outbox: `<workspace>/outbox/giga`
-- Faster-Whisper model:
+- Primary Faster-Whisper model:
   `/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-turbo`
+- Independent retry Faster-Whisper model:
+  `/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-edaa852`
 - NLLB model:
   `/home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M`
 - FFmpeg and FFprobe:
@@ -27,7 +29,7 @@ there from one pinned release, verify its publisher-provided SHA-256 before
 extraction, and record the release tag, archive name and digest in the host
 release receipt.
 
-The two model settings in `personal-capture.json` are absolute local directories,
+The three model settings in `personal-capture.json` are absolute local directories,
 not registry identifiers. Production runtime sets local-only loading, so a cache
 miss cannot trigger a network download after audio is admitted.
 
@@ -38,6 +40,8 @@ moving branch or tag—create the approved manifest:
 dubbing-capture-model-manifest \
   --asr-directory /home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-turbo \
   --asr-revision ASR_COMMIT_SHA \
+  --asr-retry-directory /home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-edaa852 \
+  --asr-retry-revision edaa852ec7e145841d8ffdb056a99866b5f0a478 \
   --translation-directory /home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M \
   --translation-revision NLLB_COMMIT_SHA \
   --output /home/gutua/software-factory/.control/dubbing-models/personal-capture-model-manifest.json
@@ -70,7 +74,11 @@ The watcher has a filesystem lock, a 60-second stability window, bounded
 15-second polling, durable SQLite state and checkpointed long-audio stages.
 The operator uploads one original file. The watcher probes it, plans adaptive
 silence-aware chunks, reconciles contextual overlap and retries only rejected
-spans internally; no manual cutting is part of the operating procedure.
+spans internally; no manual cutting is part of the operating procedure. A
+targeted retry is never accepted on the primary model's evidence alone. The
+independent full `large-v3` model must return a healthy candidate. Cross-model
+agreement can produce a clean replacement; disagreement is retained as an
+explicitly uncertain span and remains blocked from GIGA admission.
 Failed captures remain failed until the operator explicitly queues a retry.
 Work interrupted by a dead watcher is requeued once by its replacement after
 that process acquires the exclusive watcher lock.

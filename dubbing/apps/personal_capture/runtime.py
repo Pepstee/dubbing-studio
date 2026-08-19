@@ -31,15 +31,26 @@ def build_service(config: dict) -> CaptureService:
             defaults["embedding_model"],
             device=defaults.get("diarization_device", "cpu"),
         )
+    primary_asr = FasterWhisperTranscriptionBackend(
+        defaults["asr_model"],
+        device=defaults.get("asr_device", "cuda"),
+        compute_type=defaults.get("asr_compute_type", "float16"),
+        local_files_only=defaults.get("offline_models_required", False),
+        model_revision=model_manifest["models"]["asr"]["revision"],
+    )
+    retry_asr = FasterWhisperTranscriptionBackend(
+        defaults["asr_retry_model"],
+        device=defaults.get("asr_retry_device", "cuda"),
+        compute_type=defaults.get("asr_retry_compute_type", "int8_float16"),
+        local_files_only=defaults.get("offline_models_required", False),
+        model_revision=model_manifest["models"]["asr_retry"]["revision"],
+    )
+    if retry_asr.identity == primary_asr.identity:
+        raise ValueError("production retry ASR must be independent from the primary ASR")
     return CaptureService(
         config["workspace"]["wsl_path"],
-        FasterWhisperTranscriptionBackend(
-            defaults["asr_model"],
-            device=defaults.get("asr_device", "cuda"),
-            compute_type=defaults.get("asr_compute_type", "float16"),
-            local_files_only=defaults.get("offline_models_required", False),
-            model_revision=model_manifest["models"]["asr"]["revision"],
-        ),
+        primary_asr,
+        transcription_retry_backend=retry_asr,
         diarizer=diarizer,
         language_detector=LinguaLanguageDetector(),
         translation_backend=NLLBTranslationBackend(

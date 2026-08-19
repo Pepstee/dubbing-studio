@@ -61,6 +61,9 @@ def validate_config(document: dict) -> dict:
         "asr_model",
         "asr_device",
         "asr_compute_type",
+        "asr_retry_model",
+        "asr_retry_device",
+        "asr_retry_compute_type",
         "translation_target",
         "translation_model",
         "translation_device",
@@ -75,9 +78,11 @@ def validate_config(document: dict) -> dict:
         raise ValueError("production Personal Capture requires asr_backend=faster-whisper")
     if defaults.get("offline_models_required") is not True:
         raise ValueError("production Personal Capture requires offline_models_required=true")
-    for key in ("asr_model", "translation_model"):
+    for key in ("asr_model", "asr_retry_model", "translation_model"):
         if not Path(defaults[key]).is_absolute():
             raise ValueError(f"defaults.{key} must be an absolute local model directory")
+    if Path(defaults["asr_model"]).resolve() == Path(defaults["asr_retry_model"]).resolve():
+        raise ValueError("defaults.asr_retry_model must be independent from defaults.asr_model")
     if not Path(defaults["model_manifest"]).is_absolute():
         raise ValueError("defaults.model_manifest must be an absolute path")
     if defaults.get("resumable") is not True:

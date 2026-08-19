@@ -48,6 +48,17 @@ def error_rate(reference: Sequence[str], candidate: Sequence[str]) -> dict:
     }
 
 
+def token_agreement(left: str, right: str) -> float:
+    """Symmetric token agreement where 1 is identical and 0 is total disagreement."""
+    left_tokens = word_tokens(left)
+    right_tokens = word_tokens(right)
+    denominator = max(len(left_tokens), len(right_tokens))
+    if denominator == 0:
+        return 1.0
+    edits = levenshtein_distance(left_tokens, right_tokens)
+    return max(0.0, 1.0 - edits / denominator)
+
+
 def script_of_token(token: str) -> str:
     counts = defaultdict(int)
     for character in token:

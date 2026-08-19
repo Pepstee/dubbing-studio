@@ -78,6 +78,29 @@ class _RetryingBackend(TranscriptionBackend):
         )
 
 
+class _IndependentBackend(TranscriptionBackend):
+    def __init__(self, text="clean ordinary phrase"):
+        self.calls = 0
+        self.text = text
+
+    @property
+    def identity(self):
+        return "fixture:independent"
+
+    def transcribe(self, audio, options=None):
+        self.calls += 1
+        return TranscriptionResult(
+            segments=(TranscriptSegment(0, 10_000, self.text),),
+            text=self.text,
+            backend="fixture",
+            model="independent",
+            device="test",
+            language=options.language or "en",
+            duration_ms=10_000,
+            confidence_available=False,
+        )
+
+
 def test_planner_chooses_silence_near_target_and_bounds_chunks():
     planner = AdaptiveChunkPlanner(
         target_seconds=120, minimum_seconds=60, maximum_seconds=180, overlap_seconds=2
@@ -299,9 +322,11 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     source = tmp_path / "source.mov"
     source.write_bytes(b"source")
     backend = _RetryingBackend()
+    retry_backend = _IndependentBackend()
     coordinator = AdaptiveLongFormCoordinator(
         backend,
         tmp_path / "job",
+        retry_backend=retry_backend,
         planner=AdaptiveChunkPlanner(
             target_seconds=60, minimum_seconds=60, maximum_seconds=60, overlap_seconds=0
         ),
@@ -323,7 +348,8 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     ):
         result, quality = coordinator.run(source)
         coordinator.run(source)
-    assert backend.calls == 2
+    assert backend.calls == 4
+    assert retry_backend.calls == 3
     assert result.text == "clean ordinary phrase"
     assert quality["status"] == "PASS"
     assert (tmp_path / "job" / "chunks" / "000000.json").is_file()
@@ -335,8 +361,78 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
         for attempt in receipt["attempts"]
         if attempt.get("kind") == "targeted-span-redecode"
     ]
-    assert len(targeted) == 1
+    assert len(targeted) == 6
     assert targeted[0]["source_end_ms"] == 20_000
+    adjudications = [
+        attempt
+        for attempt in receipt["attempts"]
+        if attempt.get("kind") == "targeted-span-adjudication"
+    ]
+    assert adjudications == [
+        {
+            "kind": "targeted-span-adjudication",
+            "source_start_ms": 0,
+            "source_end_ms": 20_000,
+            "status": "CONSENSUS_PASS",
+            "primary_backend": "fixture:persistent",
+            "selected_backend": "fixture:independent",
+            "selected_language": None,
+            "independent_backend_count": 1,
+            "agreement": 1.0,
+            "agreement_threshold": 0.75,
+            "selected_uncertain": False,
+        }
+    ]
+
+
+def test_targeted_retry_without_independent_backend_fails_closed(tmp_path):
+    coordinator = AdaptiveLongFormCoordinator(
+        _RetryingBackend(), tmp_path / "job"
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "Loops Loops Loops",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is None
+    assert attempts[-1]["status"] == "NO_HEALTHY_INDEPENDENT_CANDIDATE"
+
+
+def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):
+    primary = _RetryingBackend()
+    primary.calls = 1
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=_IndependentBackend("entirely different testimony today"),
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "Loops Loops Loops",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is not None
+    assert all(segment.uncertain for segment in replacement)
+    assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
+    assert attempts[-1]["agreement"] == 0.0
 
 
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):

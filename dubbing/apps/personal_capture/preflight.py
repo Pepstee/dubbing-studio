@@ -122,7 +122,12 @@ def inspect_environment(
 
     cuda_requested = any(
         config["defaults"].get(key) == "cuda"
-        for key in ("asr_device", "translation_device", "diarization_device")
+        for key in (
+            "asr_device",
+            "asr_retry_device",
+            "translation_device",
+            "diarization_device",
+        )
     )
     if cuda_requested:
         nvidia_smi = shutil.which("nvidia-smi")
@@ -166,6 +171,13 @@ def inspect_environment(
     )
     _check_model_directory(
         checks,
+        "asr_retry_model",
+        Path(config["defaults"]["asr_retry_model"]),
+        required=("config.json", "model.bin"),
+        alternatives=(("tokenizer.json", "vocabulary.txt"),),
+    )
+    _check_model_directory(
+        checks,
         "translation_model",
         Path(config["defaults"]["translation_model"]),
         required=("config.json",),
@@ -201,6 +213,16 @@ def inspect_environment(
                     device=defaults["asr_device"],
                     compute_type=defaults["asr_compute_type"],
                     local_files_only=True,
+                )._load_model(),
+            ),
+            (
+                "asr-retry-load",
+                lambda: FasterWhisperTranscriptionBackend(
+                    defaults["asr_retry_model"],
+                    device=defaults["asr_retry_device"],
+                    compute_type=defaults["asr_retry_compute_type"],
+                    local_files_only=True,
+                    model_revision=model_manifest["models"]["asr_retry"]["revision"],
                 )._load_model(),
             ),
             (

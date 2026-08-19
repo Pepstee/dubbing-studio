@@ -113,6 +113,7 @@ class CaptureService:
         workspace: str | Path,
         transcription_backend: TranscriptionBackend | None = None,
         *,
+        transcription_retry_backend: TranscriptionBackend | None = None,
         diarizer: DiarizationBackend | None = None,
         speaker_constraints: SpeakerConstraints | None = None,
         transcription_options: TranscriptionOptions | None = None,
@@ -142,6 +143,7 @@ class CaptureService:
         state.mkdir(parents=True, exist_ok=True)
         self.store = CaptureStore(state / "capture.sqlite3")
         self.transcription_backend = transcription_backend
+        self.transcription_retry_backend = transcription_retry_backend
         self.resumable = resumable
         if transcription_strategy not in {"adaptive", "fixed"}:
             raise ValueError("transcription_strategy must be adaptive or fixed")
@@ -237,6 +239,16 @@ class CaptureService:
                     "transcription_maximum_chunk_seconds": self.transcription_maximum_chunk_seconds,
                     "transcription_overlap_seconds": self.transcription_overlap_seconds,
                     "transcription_minimum_silence_seconds": self.transcription_minimum_silence_seconds,
+                    "transcription_backend": (
+                        self.transcription_backend.identity
+                        if self.transcription_backend is not None
+                        else None
+                    ),
+                    "transcription_retry_backend": (
+                        self.transcription_retry_backend.identity
+                        if self.transcription_retry_backend is not None
+                        else None
+                    ),
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
                     "speaker_identity_scope": (
                         "chunk-local" if self.resumable and self.diarizer else "recording"
@@ -382,6 +394,7 @@ class CaptureService:
                             self.transcription_minimum_silence_seconds
                         ),
                         language_retry_policy={"ko": "always"},
+                        retry_backend=self.transcription_retry_backend,
                     ).run(
                         path,
                         self.transcription_options,

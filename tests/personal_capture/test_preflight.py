@@ -18,6 +18,10 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     asr_model.mkdir()
     for name in ("config.json", "model.bin", "tokenizer.json"):
         (asr_model / name).write_bytes(b"model")
+    asr_retry_model = tmp_path / "asr-retry-model"
+    asr_retry_model.mkdir()
+    for name in ("config.json", "model.bin", "tokenizer.json"):
+        (asr_retry_model / name).write_bytes(b"retry-model")
     translation_model = tmp_path / "translation-model"
     translation_model.mkdir()
     for name in ("config.json", "model.safetensors", "sentencepiece.bpe.model"):
@@ -25,6 +29,8 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     create_model_manifest(
         asr_directory=asr_model,
         asr_revision="a" * 40,
+        asr_retry_directory=asr_retry_model,
+        asr_retry_revision="c" * 40,
         translation_directory=translation_model,
         translation_revision="b" * 40,
         output=config["defaults"]["model_manifest"],

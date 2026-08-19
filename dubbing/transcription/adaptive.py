@@ -12,6 +12,7 @@ from array import array
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from dubbing.evaluation.metrics import token_agreement
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.job import source_sha256
@@ -35,6 +36,7 @@ _TARGET_RETRY_MIN_MS = 20_000
 _TARGET_RETRY_TARGET_MS = 45_000
 _TARGET_RETRY_MAX_MS = 60_000
 _TARGET_RETRY_PADDING_MS = 2_000
+_INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,25 @@ class AdaptiveChunk:
 
     def to_dict(self) -> dict:
         return self.__dict__.copy()
+
+
+@dataclass(frozen=True)
+class _SpanCandidate:
+    backend_identity: str
+    language: str | None
+    segments: tuple[TranscriptSegment, ...]
+    text: str
+    quality: TranscriptQualityReport
+    average_log_probability: float
+    attempt_index: int
+
+    @property
+    def score(self) -> tuple[float, ...]:
+        return (
+            2.0 if self.quality.status is TranscriptQualityStatus.PASS else 1.0,
+            -float(sum(item.uncertain for item in self.segments)),
+            self.average_log_probability,
+        )
 
 
 def probe_media(path: str | Path) -> MediaProbe:
@@ -497,7 +518,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v5",
+            "coordinator_version": "adaptive-long-form-v6",
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
@@ -510,6 +531,8 @@ class AdaptiveLongFormCoordinator:
                 "maximum_ms": _TARGET_RETRY_MAX_MS,
                 "padding_ms": _TARGET_RETRY_PADDING_MS,
                 "maximum_rounds": 2,
+                "independent_backend_required": True,
+                "independent_agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
             },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
@@ -684,18 +707,26 @@ class AdaptiveLongFormCoordinator:
         candidates: list[tuple[TranscriptionBackend, TranscriptionOptions]] = [
             (self.backend, options)
         ]
-        if self.retry_backend is not None:
+        independent_retry = (
+            self.retry_backend
+            if self.retry_backend is not None
+            and self.retry_backend.identity != self.backend.identity
+            else None
+        )
+        if independent_retry is not None:
             candidates.append((self.retry_backend, options))
-        retry_backend = self.retry_backend or self.backend
+        retry_backend = independent_retry or self.backend
         for language in self._target_languages(original_text):
             candidate_options = replace(options, language=language)
-            if not any(
-                backend.identity == retry_backend.identity and existing == candidate_options
-                for backend, existing in candidates
-            ):
-                candidates.append((retry_backend, candidate_options))
+            for backend in (self.backend, retry_backend):
+                if not any(
+                    existing_backend.identity == backend.identity
+                    and existing_options == candidate_options
+                    for existing_backend, existing_options in candidates
+                ):
+                    candidates.append((backend, candidate_options))
 
-        eligible: list[tuple[tuple[float, ...], int, tuple[TranscriptSegment, ...]]] = []
+        eligible: list[_SpanCandidate] = []
         with tempfile.TemporaryDirectory(prefix="dubbing-targeted-retry-") as directory:
             retry_audio = Path(directory) / "span.wav"
             marker = TranscriptSegment(start_ms, end_ms, "targeted retry span")
@@ -715,14 +746,15 @@ class AdaptiveLongFormCoordinator:
                         "backend": backend.identity,
                         "language": retry_options.language,
                         "quality": quality.to_dict(),
+                        "candidate_text": candidate.text,
                     }
                 )
-                if not candidate.segments or quality.status in {
-                    TranscriptQualityStatus.FAILED,
-                    TranscriptQualityStatus.REPROCESS_REQUIRED,
-                }:
+                if (
+                    not candidate.segments
+                    or quality.status is not TranscriptQualityStatus.PASS
+                    or any(item.uncertain for item in candidate.segments)
+                ):
                     continue
-                uncertain_count = sum(item.uncertain for item in candidate.segments)
                 log_probabilities = [
                     item.diagnostics.avg_log_probability
                     for item in candidate.segments
@@ -733,20 +765,88 @@ class AdaptiveLongFormCoordinator:
                     if log_probabilities
                     else -10.0
                 )
-                score = (
-                    2.0 if quality.status is TranscriptQualityStatus.PASS else 1.0,
-                    -float(uncertain_count),
-                    average_log_probability,
-                )
                 shifted = tuple(item.shifted(start_ms) for item in candidate.segments)
-                eligible.append((score, len(attempts) - 1, shifted))
-                if quality.status is TranscriptQualityStatus.PASS and not uncertain_count:
-                    break
-        if not eligible:
+                eligible.append(
+                    _SpanCandidate(
+                        backend.identity,
+                        retry_options.language,
+                        shifted,
+                        candidate.text,
+                        quality,
+                        average_log_probability,
+                        len(attempts) - 1,
+                    )
+                )
+
+        best_by_backend: dict[str, _SpanCandidate] = {}
+        for candidate in eligible:
+            previous = best_by_backend.get(candidate.backend_identity)
+            if previous is None or candidate.score > previous.score:
+                best_by_backend[candidate.backend_identity] = candidate
+        healthy_independent = [
+            candidate
+            for identity, candidate in best_by_backend.items()
+            if identity != self.backend.identity
+        ]
+        if not healthy_independent:
+            attempts.append(
+                {
+                    "kind": "targeted-span-adjudication",
+                    "source_start_ms": start_ms,
+                    "source_end_ms": end_ms,
+                    "status": "NO_HEALTHY_INDEPENDENT_CANDIDATE",
+                    "independent_backend_count": 0,
+                    "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
+                    "selected": False,
+                }
+            )
             return None
-        _, selected_attempt, selected = max(eligible, key=lambda item: item[0])
-        attempts[selected_attempt]["selected"] = True
-        return selected
+
+        primary_candidate = best_by_backend.get(self.backend.identity)
+        selected = max(
+            healthy_independent,
+            key=lambda item: item.score,
+        )
+        agreement = (
+            token_agreement(primary_candidate.text, selected.text)
+            if primary_candidate is not None
+            else None
+        )
+        consensus = (
+            agreement is not None
+            and agreement >= _INDEPENDENT_AGREEMENT_THRESHOLD
+        )
+        status = (
+            "CONSENSUS_PASS"
+            if consensus
+            else (
+                "INDEPENDENT_DISAGREEMENT"
+                if primary_candidate is not None
+                else "INDEPENDENT_CANDIDATE_UNCORROBORATED"
+            )
+        )
+        selected_segments = selected.segments
+        if not consensus:
+            selected_segments = tuple(
+                replace(item, uncertain=True) for item in selected_segments
+            )
+        attempts[selected.attempt_index]["selected"] = True
+        attempts.append(
+            {
+                "kind": "targeted-span-adjudication",
+                "source_start_ms": start_ms,
+                "source_end_ms": end_ms,
+                "status": status,
+                "primary_backend": self.backend.identity,
+                "selected_backend": selected.backend_identity,
+                "selected_language": selected.language,
+                "independent_backend_count": len(healthy_independent),
+                "agreement": round(agreement, 6) if agreement is not None else None,
+                "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
+                "selected_uncertain": not consensus,
+            }
+        )
+        return selected_segments
 
     def _repair_rejected_spans(
         self,

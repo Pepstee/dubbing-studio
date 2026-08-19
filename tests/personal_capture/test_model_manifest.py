@@ -32,11 +32,17 @@ def test_model_manifest_binds_exact_revisions_and_file_hashes(tmp_path):
             "sentencepiece.bpe.model": b"tokenizer",
         },
     )
+    retry = _model(
+        tmp_path / "asr-retry-model",
+        {"config.json": b"{}", "model.bin": b"retry", "tokenizer.json": b"{}"},
+    )
     output = create_model_manifest(
         asr_directory=asr,
         asr_revision="a" * 40,
         translation_directory=translation,
         translation_revision="b" * 40,
+        asr_retry_directory=retry,
+        asr_retry_revision="c" * 40,
         output=config["defaults"]["model_manifest"],
     )
 
@@ -54,11 +60,14 @@ def test_model_manifest_rejects_changed_weights(tmp_path):
         tmp_path / "translation-model",
         {"model.safetensors": b"approved"},
     )
+    retry = _model(tmp_path / "asr-retry-model", {"model.bin": b"approved"})
     create_model_manifest(
         asr_directory=asr,
         asr_revision="a" * 40,
         translation_directory=translation,
         translation_revision="b" * 40,
+        asr_retry_directory=retry,
+        asr_retry_revision="c" * 40,
         output=config["defaults"]["model_manifest"],
     )
     (asr / "model.bin").write_bytes(b"changed")
@@ -73,6 +82,7 @@ def test_model_manifest_rejects_moving_revision_labels(tmp_path):
         tmp_path / "translation-model",
         {"model.safetensors": b"approved"},
     )
+    retry = _model(tmp_path / "asr-retry-model", {"model.bin": b"approved"})
 
     with pytest.raises(ValueError, match="exact 40-character"):
         create_model_manifest(
@@ -80,6 +90,8 @@ def test_model_manifest_rejects_moving_revision_labels(tmp_path):
             asr_revision="main",
             translation_directory=translation,
             translation_revision="b" * 40,
+            asr_retry_directory=retry,
+            asr_retry_revision="c" * 40,
             output=tmp_path / "manifest.json",
         )
 
@@ -91,11 +103,14 @@ def test_model_manifest_rejects_unapproved_extra_file(tmp_path):
         tmp_path / "translation-model",
         {"model.safetensors": b"approved"},
     )
+    retry = _model(tmp_path / "asr-retry-model", {"model.bin": b"approved"})
     create_model_manifest(
         asr_directory=asr,
         asr_revision="a" * 40,
         translation_directory=translation,
         translation_revision="b" * 40,
+        asr_retry_directory=retry,
+        asr_retry_revision="c" * 40,
         output=config["defaults"]["model_manifest"],
     )
     (translation / "unexpected.json").write_text(json.dumps({"new": True}))

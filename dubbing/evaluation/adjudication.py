@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from dubbing.evaluation.metrics import levenshtein_distance, word_tokens
+from dubbing.evaluation.metrics import token_agreement, word_tokens
 from dubbing.transcription.models import TranscriptionResult, transcription_result_from_dict
 from dubbing.transcription.adaptive import detect_silence_intervals
 from dubbing.transcription.quality import (
@@ -66,17 +66,6 @@ def _quality_evidence(
         return report.to_dict(), {"path": str(path), "sha256": _sha256(path)}
     report = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
     return report.to_dict(), {"path": None, "sha256": None, "recomputed": True}
-
-
-def token_agreement(left: str, right: str) -> float:
-    """Symmetric token agreement where 1 is identical and 0 is total disagreement."""
-    left_tokens = word_tokens(left)
-    right_tokens = word_tokens(right)
-    denominator = max(len(left_tokens), len(right_tokens))
-    if denominator == 0:
-        return 1.0
-    edits = levenshtein_distance(left_tokens, right_tokens)
-    return max(0.0, 1.0 - edits / denominator)
 
 
 def _window_text(result: TranscriptionResult, start_ms: int, end_ms: int) -> str:

@@ -54,6 +54,8 @@ def create_model_manifest(
     translation_directory: str | Path,
     translation_revision: str,
     output: str | Path,
+    asr_retry_directory: str | Path | None = None,
+    asr_retry_revision: str | None = None,
 ) -> Path:
     """Hash every self-contained model file and bind it to an exact revision."""
     document = {
@@ -66,6 +68,12 @@ def create_model_manifest(
             ),
         },
     }
+    if (asr_retry_directory is None) != (asr_retry_revision is None):
+        raise ValueError("retry model directory and revision must be provided together")
+    if asr_retry_directory is not None and asr_retry_revision is not None:
+        document["models"]["asr_retry"] = _model_entry(
+            asr_retry_directory, asr_retry_revision
+        )
     destination = Path(output).resolve()
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
@@ -95,6 +103,7 @@ def verify_model_manifest(config: dict) -> dict:
         raise ValueError("model manifest is missing its models object")
     expected_directories = {
         "asr": Path(config["defaults"]["asr_model"]).resolve(),
+        "asr_retry": Path(config["defaults"]["asr_retry_model"]).resolve(),
         "translation": Path(config["defaults"]["translation_model"]).resolve(),
     }
     for name, expected_directory in expected_directories.items():
@@ -121,6 +130,8 @@ def main() -> None:
     )
     parser.add_argument("--asr-directory", required=True)
     parser.add_argument("--asr-revision", required=True)
+    parser.add_argument("--asr-retry-directory", required=True)
+    parser.add_argument("--asr-retry-revision", required=True)
     parser.add_argument("--translation-directory", required=True)
     parser.add_argument("--translation-revision", required=True)
     parser.add_argument("--output", required=True)
@@ -128,6 +139,8 @@ def main() -> None:
     destination = create_model_manifest(
         asr_directory=args.asr_directory,
         asr_revision=args.asr_revision,
+        asr_retry_directory=args.asr_retry_directory,
+        asr_retry_revision=args.asr_retry_revision,
         translation_directory=args.translation_directory,
         translation_revision=args.translation_revision,
         output=args.output,

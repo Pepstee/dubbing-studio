@@ -70,6 +70,15 @@ still rejecting eight identical tokens, six short phrases, or four longer phrase
 at least 24 repeated tokens. The observed seven-token `I don't know what to do` decoder loop
 is a permanent regression fixture.
 
+Production targeted repair uses two pinned, local models. `large-v3-turbo` remains the fast
+primary decoder; full `large-v3` is loaded lazily only for rejected 20–60 second spans. The
+coordinator evaluates every eligible primary and independent candidate, retains their text,
+quality report, model identity and language in the receipt, and requires token agreement of at
+least 0.75 before a replacement becomes clean. A same-model retry cannot self-corroborate. If
+the independent model is unavailable or unhealthy the span becomes a failed marker; if healthy
+models disagree, the selected independent text remains explicitly uncertain. Both outcomes are
+blocked by the existing approval and GIGA admission gates.
+
 ## Provider boundaries
 
 - **WhisperKit:** official `argmax-cli`/`whisperkit-cli` OpenAI-compatible local server,
