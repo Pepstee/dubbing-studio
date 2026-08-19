@@ -518,7 +518,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v6",
+            "coordinator_version": "adaptive-long-form-v7",
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
@@ -687,13 +687,18 @@ class AdaptiveLongFormCoordinator:
 
     def _target_languages(self, text: str) -> tuple[str, ...]:
         evidence = script_evidence(text)
+        preferred: tuple[str, ...] = ()
         if evidence["cyrillic"] > evidence["latin"]:
-            return ("ru",)
-        if evidence["hangul"] > evidence["latin"]:
-            return ("ko",)
-        if evidence["latin"]:
-            return ("en", "ro")
-        return self.candidate_languages
+            preferred = ("ru",)
+        elif evidence["hangul"] > evidence["latin"]:
+            preferred = ("ko",)
+        elif evidence["latin"]:
+            preferred = ("en", "ro")
+        return preferred + tuple(
+            language
+            for language in self.candidate_languages
+            if language not in preferred
+        )
 
     def _decode_target_span(
         self,
@@ -778,14 +783,15 @@ class AdaptiveLongFormCoordinator:
                     )
                 )
 
-        best_by_backend: dict[str, _SpanCandidate] = {}
+        best_by_backend_language: dict[tuple[str, str | None], _SpanCandidate] = {}
         for candidate in eligible:
-            previous = best_by_backend.get(candidate.backend_identity)
+            key = (candidate.backend_identity, candidate.language)
+            previous = best_by_backend_language.get(key)
             if previous is None or candidate.score > previous.score:
-                best_by_backend[candidate.backend_identity] = candidate
+                best_by_backend_language[key] = candidate
         healthy_independent = [
             candidate
-            for identity, candidate in best_by_backend.items()
+            for (identity, _), candidate in best_by_backend_language.items()
             if identity != self.backend.identity
         ]
         if not healthy_independent:
@@ -802,15 +808,32 @@ class AdaptiveLongFormCoordinator:
             )
             return None
 
-        primary_candidate = best_by_backend.get(self.backend.identity)
-        selected = max(
-            healthy_independent,
-            key=lambda item: item.score,
-        )
-        agreement = (
-            token_agreement(primary_candidate.text, selected.text)
-            if primary_candidate is not None
-            else None
+        paired_candidates = []
+        for independent_candidate in healthy_independent:
+            primary_candidate = best_by_backend_language.get(
+                (self.backend.identity, independent_candidate.language)
+            )
+            agreement = (
+                token_agreement(primary_candidate.text, independent_candidate.text)
+                if primary_candidate is not None
+                else None
+            )
+            paired_candidates.append(
+                (agreement, primary_candidate, independent_candidate)
+            )
+        corroborated = [
+            item
+            for item in paired_candidates
+            if item[0] is not None
+            and item[0] >= _INDEPENDENT_AGREEMENT_THRESHOLD
+        ]
+        ranked = corroborated or paired_candidates
+        agreement, primary_candidate, selected = max(
+            ranked,
+            key=lambda item: (
+                item[0] if item[0] is not None else -1.0,
+                item[2].score,
+            ),
         )
         consensus = (
             agreement is not None
@@ -838,9 +861,14 @@ class AdaptiveLongFormCoordinator:
                 "source_end_ms": end_ms,
                 "status": status,
                 "primary_backend": self.backend.identity,
+                "primary_language": (
+                    primary_candidate.language if primary_candidate is not None else None
+                ),
                 "selected_backend": selected.backend_identity,
                 "selected_language": selected.language,
-                "independent_backend_count": len(healthy_independent),
+                "independent_backend_count": len(
+                    {item.backend_identity for item in healthy_independent}
+                ),
                 "agreement": round(agreement, 6) if agreement is not None else None,
                 "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
                 "selected_uncertain": not consensus,

@@ -78,6 +78,11 @@ least 0.75 before a replacement becomes clean. A same-model retry cannot self-co
 the independent model is unavailable or unhealthy the span becomes a failed marker; if healthy
 models disagree, the selected independent text remains explicitly uncertain. Both outcomes are
 blocked by the existing approval and GIGA admission gates.
+Because the rejected text may itself be a wrong-language hallucination, its script only
+prioritizes the retry order; it never removes English, Russian, Romanian or Korean from the
+search. Agreement is calculated only between candidates decoded under the same language
+constraint, preventing a high-confidence wrong-language candidate from being compared with a
+different decoding condition.
 
 ## Provider boundaries
 

@@ -348,8 +348,8 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     ):
         result, quality = coordinator.run(source)
         coordinator.run(source)
-    assert backend.calls == 4
-    assert retry_backend.calls == 3
+    assert backend.calls == 6
+    assert retry_backend.calls == 5
     assert result.text == "clean ordinary phrase"
     assert quality["status"] == "PASS"
     assert (tmp_path / "job" / "chunks" / "000000.json").is_file()
@@ -361,7 +361,7 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
         for attempt in receipt["attempts"]
         if attempt.get("kind") == "targeted-span-redecode"
     ]
-    assert len(targeted) == 6
+    assert len(targeted) == 10
     assert targeted[0]["source_end_ms"] == 20_000
     adjudications = [
         attempt
@@ -375,6 +375,7 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
             "source_end_ms": 20_000,
             "status": "CONSENSUS_PASS",
             "primary_backend": "fixture:persistent",
+            "primary_language": None,
             "selected_backend": "fixture:independent",
             "selected_language": None,
             "independent_backend_count": 1,
@@ -433,6 +434,25 @@ def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):
     assert all(segment.uncertain for segment in replacement)
     assert attempts[-1]["status"] == "INDEPENDENT_DISAGREEMENT"
     assert attempts[-1]["agreement"] == 0.0
+
+
+def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(tmp_path):
+    coordinator = AdaptiveLongFormCoordinator(
+        _RetryingBackend(), tmp_path / "job"
+    )
+
+    assert coordinator._target_languages("English hallucination") == (
+        "en",
+        "ro",
+        "ru",
+        "ko",
+    )
+    assert coordinator._target_languages("ошибочная расшифровка") == (
+        "ru",
+        "en",
+        "ro",
+        "ko",
+    )
 
 
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):
