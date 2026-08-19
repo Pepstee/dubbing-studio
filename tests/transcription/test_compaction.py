@@ -75,6 +75,7 @@ def test_inserted_separator_has_no_original_time_and_cannot_be_admitted():
         merge_gap_ms=0,
         separator_ms=500,
         maximum_packet_ms=60_000,
+        preserve_diarization_context=False,
     )
     packet = plan.packets[0]
     assert packet.compact_duration_ms == 2_500
@@ -134,9 +135,56 @@ def test_packet_slice_count_is_bounded_for_highly_fragmented_speech():
         separator_ms=100,
         maximum_packet_ms=60_000,
         maximum_slices_per_packet=64,
+        preserve_diarization_context=False,
     )
     assert [len(item.slices) for item in plan.packets] == [64, 1]
     assert [item.compact_duration_ms for item in plan.packets] == [38_300, 500]
+
+
+def test_diarization_safe_compaction_never_joins_discontiguous_source_audio():
+    regions = _regions(
+        30_000,
+        sensitive=(
+            SpeechRegion(1_000, 4_000, "sensitive"),
+            SpeechRegion(20_000, 23_000, "sensitive"),
+        ),
+    )
+    plan = build_speech_compaction_plan(
+        regions,
+        _local(30_000),
+        padding_ms=0,
+        merge_gap_ms=5_000,
+        separator_ms=500,
+        maximum_packet_ms=60_000,
+    )
+    assert plan.preserve_diarization_context is True
+    assert [len(item.slices) for item in plan.packets] == [1, 1]
+    assert [item.original_retained_ms for item in plan.packets] == [3_000, 3_000]
+    assert all(item.compact_duration_ms == item.original_retained_ms for item in plan.packets)
+
+
+def test_diarization_context_retains_natural_pause_as_contiguous_audio():
+    regions = _regions(
+        20_000,
+        sensitive=(
+            SpeechRegion(1_000, 3_000, "sensitive"),
+            SpeechRegion(10_000, 12_000, "sensitive"),
+        ),
+    )
+    plan = build_speech_compaction_plan(
+        regions,
+        _local(20_000),
+        padding_ms=0,
+        merge_gap_ms=15_000,
+        separator_ms=500,
+        maximum_packet_ms=60_000,
+    )
+    assert [(item.start_ms, item.end_ms) for item in plan.retained_intervals] == [
+        (1_000, 12_000)
+    ]
+    assert len(plan.packets) == 1
+    assert plan.packets[0].slices[0].original_start_ms == 1_000
+    assert plan.packets[0].slices[0].original_end_ms == 12_000
 
 
 def test_real_ffmpeg_compaction_matches_the_mapping_duration(tmp_path):
@@ -162,6 +210,7 @@ def test_real_ffmpeg_compaction_matches_the_mapping_duration(tmp_path):
         merge_gap_ms=0,
         separator_ms=500,
         maximum_packet_ms=60_000,
+        preserve_diarization_context=False,
     )
     output = tmp_path / "compact.flac"
     extract_compacted_flac(source, plan.packets[0], output)

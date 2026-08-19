@@ -60,14 +60,16 @@
         "padding_ms",
         "merge_gap_ms",
         "separator_ms",
-        "maximum_slices_per_packet"
+        "maximum_slices_per_packet",
+        "preserve_diarization_context"
       ],
       "properties": {
         "enabled": {"const": true},
         "padding_ms": {"type": "integer", "minimum": 500, "maximum": 5000},
-        "merge_gap_ms": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "merge_gap_ms": {"type": "integer", "minimum": 0, "maximum": 60000},
         "separator_ms": {"type": "integer", "minimum": 100, "maximum": 2000},
-        "maximum_slices_per_packet": {"type": "integer", "minimum": 1, "maximum": 200}
+        "maximum_slices_per_packet": {"const": 1},
+        "preserve_diarization_context": {"const": true}
       }
     },
     "training": {

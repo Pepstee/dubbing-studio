@@ -123,6 +123,7 @@ class SpeechCompactionPlan:
     merge_gap_ms: int
     separator_ms: int
     maximum_slices_per_packet: int
+    preserve_diarization_context: bool
     retained_intervals: tuple[RetainedInterval, ...]
     packets: tuple[CompactionPacket, ...]
     fallback_reason: str | None = None
@@ -156,6 +157,7 @@ class SpeechCompactionPlan:
             "merge_gap_ms": self.merge_gap_ms,
             "separator_ms": self.separator_ms,
             "maximum_slices_per_packet": self.maximum_slices_per_packet,
+            "preserve_diarization_context": self.preserve_diarization_context,
             "retained_ms": self.retained_ms,
             "removed_ms": self.removed_ms,
             "uploaded_ms": self.uploaded_ms,
@@ -213,6 +215,7 @@ def build_speech_compaction_plan(
     separator_ms: int = 500,
     maximum_packet_ms: int = 3_600_000,
     maximum_slices_per_packet: int = 64,
+    preserve_diarization_context: bool = True,
 ) -> SpeechCompactionPlan:
     if padding_ms < 0 or merge_gap_ms < 0 or separator_ms < 0:
         raise ValueError("compaction timing values cannot be negative")
@@ -276,6 +279,7 @@ def build_speech_compaction_plan(
         if packet_intervals and (
             packet_duration + addition > maximum_packet_ms
             or len(packet_intervals) >= maximum_slices_per_packet
+            or preserve_diarization_context
         ):
             finish_packet()
             addition = interval.duration_ms
@@ -290,6 +294,7 @@ def build_speech_compaction_plan(
         merge_gap_ms=merge_gap_ms,
         separator_ms=separator_ms,
         maximum_slices_per_packet=maximum_slices_per_packet,
+        preserve_diarization_context=preserve_diarization_context,
         retained_intervals=intervals,
         packets=tuple(packets),
         fallback_reason=fallback_reason,

@@ -20,9 +20,10 @@
   "compaction": {
     "enabled": true,
     "padding_ms": 1500,
-    "merge_gap_ms": 2000,
+    "merge_gap_ms": 15000,
     "separator_ms": 500,
-    "maximum_slices_per_packet": 64
+    "maximum_slices_per_packet": 1,
+    "preserve_diarization_context": true
   },
   "training": {
     "maximum_agreement_wer": 0.05,

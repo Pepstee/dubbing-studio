@@ -203,15 +203,17 @@ local transcript and the cloud transcript remain separate immutable candidates.
 Cloud packets are silence-compacted before upload. The existing local Faster-Whisper Silero
 detector supplies both strict and sensitive speech regions; compaction uses the inclusive union
 of both passes plus every local transcript interval. Each retained interval receives configurable
-context padding, and nearby intervals are merged so natural pauses are not cut. A short synthetic
-silence separates discontinuous source regions. Packets contain at most 64 source slices and one
-hour of compacted audio.
+context padding. Speech separated by at most 15 seconds remains one continuous source interval so
+natural conversational pauses and speaker evidence are not cut. Longer gaps create separate
+packets. The production policy requires exactly one contiguous source slice per packet and permits
+at most one hour per packet; it never makes unrelated scenes artificially adjacent for provider
+diarization.
 
 Every retained slice records compact and original start/end times. Provider timestamps are
-accepted only when the complete provider segment lies within one retained slice, then restored to
-the untouched recording timeline. Speech attributed to an inserted separator, crossing an
-artificial join or outside the compacted duration forces `REPROCESS_REQUIRED`. Speaker labels are
-packet-namespaced; compaction never implies that provider speaker IDs are stable across packets.
+accepted only when the complete provider segment lies within its retained slice, then restored to
+the untouched recording timeline. A provider timestamp outside the compacted interval fails
+closed. Speaker labels are packet-namespaced; compaction never implies that provider speaker IDs
+are stable across packets, while the original-audio local diarization remains separate.
 If neither sensitive VAD nor the local transcript finds any speech, compaction fails open on cost
 and retains the entire recording. It never turns an uncertain no-speech decision into a zero-byte
 upload.
@@ -238,6 +240,13 @@ policy or mapping change invalidates checkpoint reuse; exhausted programme audio
 before the next upload. `compaction-plan.json` reports retained, removed and uploaded durations,
 estimated reduction, fallback reason and the known dual-miss limitation: sensitive VAD plus local
 transcript evidence reduces but cannot mathematically eliminate missed quiet speech.
+
+Cost enforcement is transactional per programme-state file. An exclusive POSIX lock serializes
+budget decisions and uploads. Each packet's duration and estimated cost are reserved durably with
+status `uploading` before network transmission, then promoted to `completed` only after a bound
+provider checkpoint exists. A checkpoint that survived a ledger-write crash repairs the ledger on
+restart. An `uploading` reservation without a checkpoint is treated as an unknown potentially paid
+outcome: its cost remains counted and automatic re-upload is denied pending reconciliation.
 
 Training data is deliberately stricter than transcript review. Cloud-only text is never a
 label. A span becomes `CONSENSUS_SILVER` only when local and cloud text meet both the configured

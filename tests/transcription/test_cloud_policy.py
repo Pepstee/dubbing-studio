@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
+import threading
 import wave
 from unittest.mock import patch
 
@@ -302,7 +303,8 @@ def _teacher_policy(**overrides):
             "padding_ms": 1500,
             "merge_gap_ms": 2000,
             "separator_ms": 500,
-            "maximum_slices_per_packet": 64,
+            "maximum_slices_per_packet": 1,
+            "preserve_diarization_context": True,
         },
         "training": {
             "maximum_agreement_wer": 0.05,
@@ -319,6 +321,62 @@ def test_teacher_policy_requires_privacy_opt_out_attestation():
     document["privacy"]["model_improvement_opt_out_attested"] = False
     with pytest.raises(ValueError, match="opt-out"):
         CloudTeacherPolicy.from_dict(document)
+
+
+def test_teacher_policy_forbids_discontinuous_diarization_packets():
+    document = _teacher_policy()
+    document["compaction"]["maximum_slices_per_packet"] = 64
+    with pytest.raises(ValueError, match="exactly one source slice"):
+        CloudTeacherPolicy.from_dict(document)
+
+
+def test_programme_lock_serializes_budget_decisions(tmp_path):
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=OfflineMockTransport(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    started = threading.Event()
+    acquired = threading.Event()
+
+    def contender():
+        started.set()
+        with runner._programme_lock():
+            acquired.set()
+
+    with runner._programme_lock():
+        thread = threading.Thread(target=contender)
+        thread.start()
+        assert started.wait(1)
+        assert not acquired.wait(0.05)
+    assert acquired.wait(1)
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_uploading_reservation_counts_against_cost_cap(tmp_path):
+    document = _teacher_policy()
+    document["limits"]["max_estimated_cost_usd"] = 1.0
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(document),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=OfflineMockTransport(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    usage = {
+        "chunks": {
+            "possibly-paid": {
+                "status": "uploading",
+                "duration_ms": 1_000,
+                "estimated_cost_usd": 0.99,
+            }
+        }
+    }
+    with pytest.raises(TranscriptionError, match="cost cap"):
+        runner._assert_budget(usage, 3_600_000)
 
 
 def test_elevenlabs_parser_preserves_word_evidence():
@@ -439,6 +497,9 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
         "dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract
     ):
         report = runner.run(source, local)
+        # Simulate a crash after the provider-bound checkpoint was committed but
+        # before the programme ledger update became durable.
+        (tmp_path / "programme-usage.json").unlink()
         replay = runner.run(source, local)
 
     assert len(transport.calls) == 1
@@ -458,6 +519,69 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
     assert excluded["target_text"] is None
     assert report["compaction"]["uploaded_ms"] == 5_000
     assert report["chunks"][0]["mapping_sha256"]
+    repaired_usage = json.loads((tmp_path / "programme-usage.json").read_text())
+    assert next(iter(repaired_usage["chunks"].values()))["status"] == "completed"
+
+
+def test_unknown_upload_outcome_remains_reserved_and_cannot_be_retried(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=5)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(500, 3_500, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=5_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            speech = SpeechRegion(500, 3_500, "sensitive")
+            return SpeechRegionPlan(self.identity, 5_000, (), (speech,), (speech,))
+
+    class UnknownOutcomeTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, _request, _audio, _credential):
+            self.calls += 1
+            raise TranscriptionError("network outcome is unknown")
+
+    transport = UnknownOutcomeTransport()
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=transport,
+        speech_region_detector=Detector(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+
+    def fake_extract(_source, _packet, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    with patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}), patch(
+        "dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract
+    ):
+        with pytest.raises(TranscriptionError, match="network outcome is unknown"):
+            runner.run(source, local)
+        usage = json.loads((tmp_path / "programme-usage.json").read_text())
+        reservation = next(iter(usage["chunks"].values()))
+        assert reservation["status"] == "uploading"
+        assert reservation["estimated_cost_usd"] > 0
+        with pytest.raises(TranscriptionError, match="unknown outcome"):
+            runner.run(source, local)
+
+    assert transport.calls == 1
 
 
 def test_cloud_teacher_restores_compacted_words_to_original_recording_time(tmp_path):
@@ -506,7 +630,8 @@ def test_cloud_teacher_restores_compacted_words_to_original_recording_time(tmp_p
         "padding_ms": 500,
         "merge_gap_ms": 0,
         "separator_ms": 500,
-        "maximum_slices_per_packet": 64,
+        "maximum_slices_per_packet": 1,
+        "preserve_diarization_context": True,
     }
     runner = CloudTeacherRunner(
         CloudTeacherPolicy.from_dict(policy_document),

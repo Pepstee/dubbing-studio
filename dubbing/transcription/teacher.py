@@ -4,9 +4,15 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows must fail closed at runtime.
+    fcntl = None
 
 from dubbing.evaluation.metrics import character_tokens, levenshtein_distance, word_tokens
 from dubbing.transcription.cloud import (
@@ -80,6 +86,7 @@ class CloudTeacherPolicy:
     compaction_merge_gap_ms: int
     compaction_separator_ms: int
     compaction_maximum_slices_per_packet: int
+    compaction_preserve_diarization_context: bool
     maximum_agreement_wer: float
     maximum_agreement_cer: float
 
@@ -124,6 +131,9 @@ class CloudTeacherPolicy:
             compaction_maximum_slices_per_packet=int(
                 compaction.get("maximum_slices_per_packet", 0)
             ),
+            compaction_preserve_diarization_context=(
+                compaction.get("preserve_diarization_context") is True
+            ),
             maximum_agreement_wer=float(training.get("maximum_agreement_wer", -1)),
             maximum_agreement_cer=float(training.get("maximum_agreement_cer", -1)),
         )
@@ -157,12 +167,18 @@ class CloudTeacherPolicy:
             raise ValueError("month-one cloud teacher requires speech compaction")
         if not 500 <= self.compaction_padding_ms <= 5_000:
             raise ValueError("compaction padding must be between 500 and 5000 ms")
-        if not 0 <= self.compaction_merge_gap_ms <= 10_000:
-            raise ValueError("compaction merge gap must be between 0 and 10000 ms")
+        if not 0 <= self.compaction_merge_gap_ms <= 60_000:
+            raise ValueError("compaction merge gap must be between 0 and 60000 ms")
         if not 100 <= self.compaction_separator_ms <= 2_000:
             raise ValueError("compaction separator must be between 100 and 2000 ms")
         if not 1 <= self.compaction_maximum_slices_per_packet <= 200:
             raise ValueError("compaction maximum slices must be between 1 and 200")
+        if not self.compaction_preserve_diarization_context:
+            raise ValueError("cloud diarization requires contiguous-source packets")
+        if self.compaction_maximum_slices_per_packet != 1:
+            raise ValueError(
+                "diarization-safe compaction requires exactly one source slice per packet"
+            )
         if not 0 <= self.maximum_agreement_wer <= 0.10:
             raise ValueError("silver-label WER threshold must be in [0, 0.10]")
         if not 0 <= self.maximum_agreement_cer <= 0.15:
@@ -191,6 +207,9 @@ class CloudTeacherPolicy:
             "compaction_separator_ms": self.compaction_separator_ms,
             "compaction_maximum_slices_per_packet": (
                 self.compaction_maximum_slices_per_packet
+            ),
+            "compaction_preserve_diarization_context": (
+                self.compaction_preserve_diarization_context
             ),
             "maximum_agreement_wer": self.maximum_agreement_wer,
             "maximum_agreement_cer": self.maximum_agreement_cer,
@@ -284,6 +303,76 @@ class CloudTeacherRunner:
         if not isinstance(document.get("chunks"), dict):
             raise TranscriptionError("programme state is malformed")
         return document
+
+    @contextmanager
+    def _programme_lock(self):
+        """Serialize budget decisions and uploads sharing one programme ledger."""
+
+        if fcntl is None:
+            raise TranscriptionError(
+                "cloud teacher requires POSIX file locking for transaction-safe cost caps"
+            )
+        lock_path = self.programme_state.with_name(
+            f".{self.programme_state.name}.lock"
+        )
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _reconcile_usage(
+        self,
+        usage: dict,
+        packets: tuple[CompactionPacket, ...],
+        *,
+        source_digest: str,
+        plan_sha256: str,
+        checkpoints: Path,
+    ) -> None:
+        """Repair checkpoint-first crashes and block uncertain paid upload outcomes."""
+
+        provider = PROVIDERS[self.policy.provider]
+        changed = False
+        for packet in packets:
+            key = f"{source_digest}:{packet.index}:{packet.mapping_sha256}:{provider.name}"
+            checkpoint_path = checkpoints / f"chunk-{packet.index:06d}.json"
+            checkpoint = self._load_checkpoint(
+                checkpoint_path, source_digest, packet, plan_sha256
+            )
+            entry = usage["chunks"].get(key)
+            if checkpoint is not None:
+                completed = {
+                    "status": "completed",
+                    "duration_ms": packet.compact_duration_ms,
+                    "original_retained_ms": packet.original_retained_ms,
+                    "estimated_cost_usd": checkpoint["estimated_cost_usd"],
+                    "checkpoint": str(checkpoint_path),
+                    "request_receipt": checkpoint["request_receipt"],
+                    "completed_at": checkpoint.get("created_at"),
+                }
+                if entry != completed:
+                    usage["chunks"][key] = completed
+                    changed = True
+                continue
+            if entry is None:
+                continue
+            status = entry.get("status", "completed")
+            if status == "uploading":
+                raise TranscriptionError(
+                    "a previous cloud upload has an unknown outcome; its reserved cost "
+                    "remains counted and operator reconciliation is required"
+                )
+            if status == "completed":
+                raise TranscriptionError(
+                    "programme usage records a completed upload but its bound checkpoint "
+                    "is missing; automatic re-upload is denied"
+                )
+            raise TranscriptionError("programme usage contains an unsupported packet status")
+        if changed:
+            _atomic_json(self.programme_state, usage)
 
     def _assert_budget(self, usage: dict, duration_ms: int) -> None:
         consumed_seconds = sum(item["duration_ms"] for item in usage["chunks"].values()) / 1000
@@ -588,7 +677,6 @@ class CloudTeacherRunner:
             raise TranscriptionError(
                 f"{provider.credential_environment_variable} is not configured locally; no upload occurred"
             )
-        usage = self._load_usage()
         region_plan = self.speech_region_detector.detect(source_path)
         compaction = build_speech_compaction_plan(
             region_plan,
@@ -600,6 +688,9 @@ class CloudTeacherRunner:
             maximum_slices_per_packet=(
                 self.policy.compaction_maximum_slices_per_packet
             ),
+            preserve_diarization_context=(
+                self.policy.compaction_preserve_diarization_context
+            ),
         )
         plan_sha256 = compaction.mapping_sha256
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -610,96 +701,129 @@ class CloudTeacherRunner:
                 f"{digest}:{packet.index}:{packet.mapping_sha256}:{provider.name}"
             )
 
-        unseen_ms = sum(
-            packet.compact_duration_ms
-            for packet in compaction.packets
-            if usage_key(packet) not in usage["chunks"]
-        )
-        self._assert_budget(usage, unseen_ms)
-
         checkpoints = self.output_dir / "checkpoints"
         checkpoints.mkdir(exist_ok=True)
         all_segments = []
         chunk_reports = []
         packet_quality_reports = []
-        with tempfile.TemporaryDirectory(prefix="dubbing-cloud-teacher-") as directory:
-            temporary_dir = Path(directory)
-            for packet in compaction.packets:
-                checkpoint_path = checkpoints / f"chunk-{packet.index:06d}.json"
-                checkpoint = self._load_checkpoint(
-                    checkpoint_path, digest, packet, plan_sha256
-                )
-                reused = checkpoint is not None
-                if checkpoint is None:
-                    audio = temporary_dir / f"chunk-{packet.index:06d}.flac"
-                    extract_compacted_flac(source_path, packet, audio)
-                    audio_bytes = audio.read_bytes()
-                    request = provider.build_request()
-                    response = self.transport(request, audio_bytes, credential)
-                    candidate = response.get("candidate")
-                    if not isinstance(candidate, dict):
-                        raise TranscriptionError("cloud teacher returned no structured candidate")
-                    request_receipt = response.get("request_receipt")
-                    if not isinstance(request_receipt, str) or not request_receipt.strip():
-                        raise TranscriptionError("cloud teacher returned no request receipt")
-                    estimated_cost = (
-                        packet.compact_duration_ms
-                        / 3_600_000
-                        * self.policy.estimated_price_per_hour_usd
+        with self._programme_lock():
+            usage = self._load_usage()
+            self._reconcile_usage(
+                usage,
+                compaction.packets,
+                source_digest=digest,
+                plan_sha256=plan_sha256,
+                checkpoints=checkpoints,
+            )
+            unseen_ms = sum(
+                packet.compact_duration_ms
+                for packet in compaction.packets
+                if usage_key(packet) not in usage["chunks"]
+            )
+            self._assert_budget(usage, unseen_ms)
+
+            with tempfile.TemporaryDirectory(
+                prefix="dubbing-cloud-teacher-"
+            ) as directory:
+                temporary_dir = Path(directory)
+                for packet in compaction.packets:
+                    checkpoint_path = checkpoints / f"chunk-{packet.index:06d}.json"
+                    checkpoint = self._load_checkpoint(
+                        checkpoint_path, digest, packet, plan_sha256
                     )
-                    checkpoint = {
-                        "schema_version": "dubbing.cloud-teacher-checkpoint.v1",
-                        "recording_sha256": digest,
-                        "source_span_sha256": source_sha256(audio),
-                        "packet_index": packet.index,
-                        "compact_duration_ms": packet.compact_duration_ms,
-                        "original_retained_ms": packet.original_retained_ms,
-                        "mapping_sha256": packet.mapping_sha256,
-                        "compaction_plan_sha256": plan_sha256,
-                        "mapping": packet.to_dict(),
-                        "provider": provider.name,
-                        "model": provider.model,
-                        "policy_sha256": self.policy.configuration_sha256,
-                        "operator_authorization_id": self.policy.operator_authorization_id,
-                        "retention_mode": self.policy.retention_mode,
-                        "request_configuration": request["options"],
-                        "request_receipt": request_receipt,
-                        "estimated_cost_usd": estimated_cost,
-                        "candidate": candidate,
-                        "candidate_provenance": response.get("provenance"),
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                    _atomic_json(checkpoint_path, checkpoint)
-                    usage["chunks"][usage_key(packet)] = {
-                        "duration_ms": packet.compact_duration_ms,
-                        "original_retained_ms": packet.original_retained_ms,
-                        "estimated_cost_usd": estimated_cost,
-                        "checkpoint": str(checkpoint_path),
-                    }
-                    _atomic_json(self.programme_state, usage)
-                candidate_segments, unmapped_count = self._candidate_segments(
-                    checkpoint["candidate"], packet
-                )
-                packet_quality = self._candidate_packet_quality(
-                    checkpoint["candidate"], packet, unmapped_count=unmapped_count
-                )
-                packet_quality_reports.append(
-                    {"packet_index": packet.index, **packet_quality}
-                )
-                all_segments.extend(candidate_segments)
-                chunk_reports.append(
-                    {
-                        "index": packet.index,
-                        "compact_duration_ms": packet.compact_duration_ms,
-                        "original_retained_ms": packet.original_retained_ms,
-                        "mapping_sha256": packet.mapping_sha256,
-                        "checkpoint": str(checkpoint_path),
-                        "reused": reused,
-                        "segment_count": len(candidate_segments),
-                        "unmapped_segment_count": unmapped_count,
-                        "estimated_cost_usd": checkpoint["estimated_cost_usd"],
-                    }
-                )
+                    reused = checkpoint is not None
+                    if checkpoint is None:
+                        audio = temporary_dir / f"chunk-{packet.index:06d}.flac"
+                        extract_compacted_flac(source_path, packet, audio)
+                        estimated_cost = (
+                            packet.compact_duration_ms
+                            / 3_600_000
+                            * self.policy.estimated_price_per_hour_usd
+                        )
+                        usage["chunks"][usage_key(packet)] = {
+                            "status": "uploading",
+                            "duration_ms": packet.compact_duration_ms,
+                            "original_retained_ms": packet.original_retained_ms,
+                            "estimated_cost_usd": estimated_cost,
+                            "checkpoint": str(checkpoint_path),
+                            "reserved_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        _atomic_json(self.programme_state, usage)
+
+                        audio_bytes = audio.read_bytes()
+                        request = provider.build_request()
+                        response = self.transport(request, audio_bytes, credential)
+                        candidate = response.get("candidate")
+                        if not isinstance(candidate, dict):
+                            raise TranscriptionError(
+                                "cloud teacher returned no structured candidate"
+                            )
+                        request_receipt = response.get("request_receipt")
+                        if (
+                            not isinstance(request_receipt, str)
+                            or not request_receipt.strip()
+                        ):
+                            raise TranscriptionError(
+                                "cloud teacher returned no request receipt"
+                            )
+                        checkpoint = {
+                            "schema_version": "dubbing.cloud-teacher-checkpoint.v1",
+                            "recording_sha256": digest,
+                            "source_span_sha256": source_sha256(audio),
+                            "packet_index": packet.index,
+                            "compact_duration_ms": packet.compact_duration_ms,
+                            "original_retained_ms": packet.original_retained_ms,
+                            "mapping_sha256": packet.mapping_sha256,
+                            "compaction_plan_sha256": plan_sha256,
+                            "mapping": packet.to_dict(),
+                            "provider": provider.name,
+                            "model": provider.model,
+                            "policy_sha256": self.policy.configuration_sha256,
+                            "operator_authorization_id": (
+                                self.policy.operator_authorization_id
+                            ),
+                            "retention_mode": self.policy.retention_mode,
+                            "request_configuration": request["options"],
+                            "request_receipt": request_receipt,
+                            "estimated_cost_usd": estimated_cost,
+                            "candidate": candidate,
+                            "candidate_provenance": response.get("provenance"),
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        _atomic_json(checkpoint_path, checkpoint)
+                        usage["chunks"][usage_key(packet)] = {
+                            "status": "completed",
+                            "duration_ms": packet.compact_duration_ms,
+                            "original_retained_ms": packet.original_retained_ms,
+                            "estimated_cost_usd": estimated_cost,
+                            "checkpoint": str(checkpoint_path),
+                            "request_receipt": request_receipt,
+                            "completed_at": checkpoint["created_at"],
+                        }
+                        _atomic_json(self.programme_state, usage)
+                    candidate_segments, unmapped_count = self._candidate_segments(
+                        checkpoint["candidate"], packet
+                    )
+                    packet_quality = self._candidate_packet_quality(
+                        checkpoint["candidate"], packet, unmapped_count=unmapped_count
+                    )
+                    packet_quality_reports.append(
+                        {"packet_index": packet.index, **packet_quality}
+                    )
+                    all_segments.extend(candidate_segments)
+                    chunk_reports.append(
+                        {
+                            "index": packet.index,
+                            "compact_duration_ms": packet.compact_duration_ms,
+                            "original_retained_ms": packet.original_retained_ms,
+                            "mapping_sha256": packet.mapping_sha256,
+                            "checkpoint": str(checkpoint_path),
+                            "reused": reused,
+                            "segment_count": len(candidate_segments),
+                            "unmapped_segment_count": unmapped_count,
+                            "estimated_cost_usd": checkpoint["estimated_cost_usd"],
+                        }
+                    )
 
         ordered = tuple(sorted(all_segments, key=lambda item: (item.start_ms, item.end_ms)))
         cloud = TranscriptionResult(
