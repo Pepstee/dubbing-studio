@@ -430,6 +430,117 @@ def test_real_six_gap_near_silence_stops_after_empty_bounded_primary(tmp_path):
     }
 
 
+def test_near_silence_rechecks_after_confirmed_no_speech_turn_is_removed(tmp_path):
+    class _InBoundsAndOutOfBoundsStockHallucinationBackend(TranscriptionBackend):
+        def __init__(self):
+            self.calls = 0
+
+        @property
+        def identity(self):
+            return "fixture:in-and-out-of-bounds-stock-hallucination"
+
+        def transcribe(self, audio, options=None):
+            self.calls += 1
+            if options.language == "ru":
+                return TranscriptionResult(
+                    (),
+                    "",
+                    "fixture",
+                    "in-and-out-of-bounds-stock-hallucination",
+                    "test",
+                    "ru",
+                    65_407,
+                    False,
+                )
+            text = "Продолжение следует..."
+            return TranscriptionResult(
+                (
+                    TranscriptSegment(
+                        29_100,
+                        29_120,
+                        text,
+                        language="en",
+                        uncertain=True,
+                    ),
+                    TranscriptSegment(
+                        74_100,
+                        74_120,
+                        text,
+                        language="en",
+                        uncertain=True,
+                    ),
+                ),
+                f"{text} {text}",
+                "fixture",
+                "in-and-out-of-bounds-stock-hallucination",
+                "test",
+                "en",
+                65_407,
+                False,
+            )
+
+    chunk = _lesson_silence_chunk()
+    backend = _InBoundsAndOutOfBoundsStockHallucinationBackend()
+    retry_backend = _IndependentBackend()
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        retry_backend=retry_backend,
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"tascam-shaped near silence")
+    intervals = (
+        (0, 1_315),
+        (1_335, 2_664),
+        (2_684, 58_710),
+        (59_223, 61_700),
+        (62_908, 63_906),
+        (63_928, 65_091),
+    )
+
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, marker, destination: destination.write_bytes(
+            b"hash-bound-context"
+        ),
+    ):
+        result, receipt = coordinator._decode_chunk(
+            audio,
+            chunk,
+            TranscriptionOptions(),
+            energy_silence_coverage_ms=63_308,
+            energy_silence_intervals=intervals,
+        )
+
+    assert result.segments == ()
+    assert result.text == ""
+    assert result.provenance["classification"] == "confirmed_silence_after_empty_asr"
+    assert backend.calls == 2
+    assert retry_backend.calls == 0
+    assert detector.calls == 2
+    assert [item["kind"] for item in receipt["attempts"]] == [
+        "out-of-audio-segment-rejection",
+        "turn-language-redecode",
+        "uncertain-turn-silence-adjudication",
+        "chunk-silence-classification",
+    ]
+    assert receipt["attempts"][2]["status"] == "DROPPED_CONFIRMED_NO_SPEECH"
+    classification = receipt["attempts"][3]
+    assert classification["status"] == "CONFIRMED_SILENCE_AFTER_EMPTY_ASR"
+    assert classification["energy_silence_coverage_ms"] == 63_308
+    assert classification["total_uncovered_ms"] == 2_099
+    assert classification["maximum_uncovered_gap_ms"] == 1_208
+    assert receipt["selected_attempt"] == 3
+    assert receipt["targeted_retry_exhausted"] is False
+    assert not any(
+        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
+    )
+
+
 def test_near_silence_sensitive_vad_speech_preserves_fail_closed_retry(tmp_path):
     chunk = _lesson_silence_chunk()
     backend = _OutOfAudioBackend()

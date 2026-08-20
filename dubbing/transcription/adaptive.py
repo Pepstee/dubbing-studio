@@ -59,7 +59,7 @@ _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
 _UNCERTAIN_TURN_SILENCE_POLICY = (
     "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
 )
-_COORDINATOR_VERSION = "adaptive-long-form-v20"
+_COORDINATOR_VERSION = "adaptive-long-form-v21"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _NEAR_SILENCE_ADMISSION_POLICY = (
@@ -1685,64 +1685,24 @@ class AdaptiveLongFormCoordinator:
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
         raw_quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
         result = self._enforce_audio_bounds(result, duration_ms, raw_quality, attempts)
-        near_silence_candidate = (
-            not result.segments
-            and self.silence_verification_detector is not None
-            and 0 < energy_silence_coverage_ms < duration_ms
-            and covered_interval_ms == energy_silence_coverage_ms
-            and coverage_ratio >= _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
-            and total_uncovered_ms <= _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
-            and maximum_uncovered_gap_ms <= _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+        confirmed_silence = self._confirm_near_silence_after_empty_asr(
+            audio,
+            result,
+            duration_ms=duration_ms,
+            energy_silence_coverage_ms=energy_silence_coverage_ms,
+            covered_interval_ms=covered_interval_ms,
+            coverage_ratio=coverage_ratio,
+            total_uncovered_ms=total_uncovered_ms,
+            maximum_uncovered_gap_ms=maximum_uncovered_gap_ms,
+            energy_evidence=energy_evidence,
+            attempts=attempts,
         )
-        if near_silence_candidate:
-            plan = self.silence_verification_detector.detect(audio)
-            silence_attempt = {
-                "kind": "chunk-silence-classification",
-                "status": (
-                    "CONFIRMED_SILENCE_AFTER_EMPTY_ASR"
-                    if not plan.selected_regions
-                    else "SEMANTIC_SPEECH_DETECTED_AFTER_EMPTY_ASR"
-                ),
-                "policy": _NEAR_SILENCE_ADMISSION_POLICY,
-                **energy_evidence,
-                "minimum_energy_coverage_ratio": (
-                    _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
-                ),
-                "maximum_total_uncovered_ms": (
-                    _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
-                ),
-                "maximum_allowed_uncovered_gap_ms": (
-                    _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
-                ),
-                "primary_valid_segment_count": 0,
-                "speech_region_plan": plan.to_dict(),
+        if confirmed_silence is not None:
+            return confirmed_silence, {
+                "attempts": attempts,
+                "selected_attempt": len(attempts) - 1,
+                "targeted_retry_exhausted": False,
             }
-            attempts.append(silence_attempt)
-            if not plan.selected_regions:
-                return replace(
-                    result,
-                    segments=(),
-                    text="",
-                    provenance={
-                        **(result.provenance or {}),
-                        "coordinator": _COORDINATOR_VERSION,
-                        "classification": "confirmed_silence_after_empty_asr",
-                        "silence_admission_policy": (
-                            _NEAR_SILENCE_ADMISSION_POLICY
-                        ),
-                        "energy_silence_coverage_ms": (
-                            energy_silence_coverage_ms
-                        ),
-                        "energy_silence_coverage_ratio": round(coverage_ratio, 6),
-                        "total_uncovered_ms": total_uncovered_ms,
-                        "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
-                        "silence_verification_detector": plan.detector_identity,
-                    },
-                ), {
-                    "attempts": attempts,
-                    "selected_attempt": len(attempts) - 1,
-                    "targeted_retry_exhausted": False,
-                }
         result = self._retry_detected_chunk_language(audio, result, options, duration_ms, attempts)
         result = self._resolve_uncertain_turns(
             audio,
@@ -1752,6 +1712,24 @@ class AdaptiveLongFormCoordinator:
             attempts,
             energy_silence_intervals=energy_silence_intervals,
         )
+        confirmed_silence = self._confirm_near_silence_after_empty_asr(
+            audio,
+            result,
+            duration_ms=duration_ms,
+            energy_silence_coverage_ms=energy_silence_coverage_ms,
+            covered_interval_ms=covered_interval_ms,
+            coverage_ratio=coverage_ratio,
+            total_uncovered_ms=total_uncovered_ms,
+            maximum_uncovered_gap_ms=maximum_uncovered_gap_ms,
+            energy_evidence=energy_evidence,
+            attempts=attempts,
+        )
+        if confirmed_silence is not None:
+            return confirmed_silence, {
+                "attempts": attempts,
+                "selected_attempt": len(attempts) - 1,
+                "targeted_retry_exhausted": False,
+            }
         quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
         attempts.append(
             {
@@ -1780,6 +1758,77 @@ class AdaptiveLongFormCoordinator:
             "selected_attempt": selected_attempt,
             "targeted_retry_exhausted": selected_attempt is None,
         }
+
+    def _confirm_near_silence_after_empty_asr(
+        self,
+        audio: Path,
+        result: TranscriptionResult,
+        *,
+        duration_ms: int,
+        energy_silence_coverage_ms: int,
+        covered_interval_ms: int,
+        coverage_ratio: float,
+        total_uncovered_ms: int,
+        maximum_uncovered_gap_ms: int,
+        energy_evidence: dict,
+        attempts: list[dict],
+    ) -> TranscriptionResult | None:
+        already_evaluated = any(
+            attempt.get("kind") == "chunk-silence-classification"
+            and attempt.get("policy") == _NEAR_SILENCE_ADMISSION_POLICY
+            for attempt in attempts
+        )
+        near_silence_candidate = (
+            not already_evaluated
+            and not result.segments
+            and self.silence_verification_detector is not None
+            and 0 < energy_silence_coverage_ms < duration_ms
+            and covered_interval_ms == energy_silence_coverage_ms
+            and coverage_ratio >= _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
+            and total_uncovered_ms <= _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
+            and maximum_uncovered_gap_ms <= _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+        )
+        if not near_silence_candidate:
+            return None
+        plan = self.silence_verification_detector.detect(audio)
+        silence_attempt = {
+            "kind": "chunk-silence-classification",
+            "status": (
+                "CONFIRMED_SILENCE_AFTER_EMPTY_ASR"
+                if not plan.selected_regions
+                else "SEMANTIC_SPEECH_DETECTED_AFTER_EMPTY_ASR"
+            ),
+            "policy": _NEAR_SILENCE_ADMISSION_POLICY,
+            **energy_evidence,
+            "minimum_energy_coverage_ratio": (
+                _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
+            ),
+            "maximum_total_uncovered_ms": _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS,
+            "maximum_allowed_uncovered_gap_ms": (
+                _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+            ),
+            "primary_valid_segment_count": 0,
+            "speech_region_plan": plan.to_dict(),
+        }
+        attempts.append(silence_attempt)
+        if plan.selected_regions:
+            return None
+        return replace(
+            result,
+            segments=(),
+            text="",
+            provenance={
+                **(result.provenance or {}),
+                "coordinator": _COORDINATOR_VERSION,
+                "classification": "confirmed_silence_after_empty_asr",
+                "silence_admission_policy": _NEAR_SILENCE_ADMISSION_POLICY,
+                "energy_silence_coverage_ms": energy_silence_coverage_ms,
+                "energy_silence_coverage_ratio": round(coverage_ratio, 6),
+                "total_uncovered_ms": total_uncovered_ms,
+                "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
+                "silence_verification_detector": plan.detector_identity,
+            },
+        )
 
     @staticmethod
     def _enforce_audio_bounds(
