@@ -65,6 +65,10 @@ class _IndependentLocalBackend:
     identity = "faster-whisper:synthetic-independent"
 
 
+class _LocalSpeechDetector:
+    identity = "faster-whisper-silero:synthetic-test"
+
+
 def _install_fake_coordinator(monkeypatch, *, quality_status="PASS", mutate=False):
     class FakeCoordinator:
         calls = 0
@@ -358,16 +362,22 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
         output,
         _LocalBackend(),
         retry_backend=_IndependentLocalBackend(),
+        speech_region_detector=_LocalSpeechDetector(),
         selected_ids={"lesson-0"},
     )
 
     frozen = json.loads((output / "frozen-execution.json").read_text())
     assert frozen["retry_backend"]["identity"] == _IndependentLocalBackend.identity
+    assert frozen["speech_region_detector"]["identity"] == _LocalSpeechDetector.identity
+    assert len(frozen["speech_region_detector"]["implementation"]["source_sha256"]) == 64
     assert len(frozen["retry_backend"]["implementation"]["source_sha256"]) == 64
     assert frozen["execution"]["candidate_languages"] == ["en", "ru"]
     assert frozen["corpus"]["entries"][0]["source_evaluation_end_ms"] == 800
     assert coordinator.init_kwargs[0]["retry_backend"].identity == (
         _IndependentLocalBackend.identity
+    )
+    assert coordinator.init_kwargs[0]["speech_region_detector"].identity == (
+        _LocalSpeechDetector.identity
     )
     assert coordinator.init_kwargs[0]["candidate_languages"] == ("en", "ru")
 

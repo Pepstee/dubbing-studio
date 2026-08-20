@@ -21,6 +21,7 @@ from dubbing.transcription.models import (
     transcription_result_from_dict,
 )
 from dubbing.transcription.quality import evaluate_transcript_quality
+from dubbing.transcription.speech_regions import FasterWhisperSileroSpeechRegionDetector
 
 
 SCHEMA_VERSION = "dubbing.historical-canary.v1"
@@ -397,7 +398,33 @@ def _backend_evidence(backend, *, label: str) -> dict:
     return backend_evidence
 
 
-def _execution_fingerprint(manifest: dict, backend, retry_backend=None) -> tuple[dict, str]:
+def _detector_evidence(detector) -> dict | None:
+    if detector is None:
+        return None
+    identity = getattr(detector, "identity", None)
+    if not isinstance(identity, str) or not identity:
+        raise ValueError("historical canary speech detector requires a stable identity")
+    source = inspect.getsourcefile(type(detector))
+    source_path = Path(source).resolve() if source else None
+    if source_path is not None and not source_path.is_file():
+        source_path = None
+    return {
+        "identity": identity,
+        "implementation": {
+            "class": f"{type(detector).__module__}.{type(detector).__qualname__}",
+            "source_path": str(source_path) if source_path else None,
+            "source_sha256": _sha256(source_path) if source_path else None,
+        },
+        "local_only": True,
+    }
+
+
+def _execution_fingerprint(
+    manifest: dict,
+    backend,
+    retry_backend=None,
+    speech_region_detector=None,
+) -> tuple[dict, str]:
     backend_evidence = _backend_evidence(backend, label="transcription")
     retry_evidence = (
         _backend_evidence(retry_backend, label="retry") if retry_backend is not None else None
@@ -405,13 +432,16 @@ def _execution_fingerprint(manifest: dict, backend, retry_backend=None) -> tuple
     if retry_evidence is not None and retry_evidence["identity"] == backend_evidence["identity"]:
         raise ValueError("independent retry backend resolved to the primary backend identity")
     corpus, corpus_sha256 = _corpus_binding(manifest)
-    implementation, implementation_sha256 = _implementation_binding(backend, retry_backend)
+    implementation, implementation_sha256 = _implementation_binding(
+        backend, retry_backend, speech_region_detector
+    )
     execution_config = dict(manifest.get("execution", {}))
     execution_config["candidate_languages"] = list(_candidate_languages(manifest))
     execution = {
         "schema_version": "dubbing.historical-canary-execution.v1",
         "backend": backend_evidence,
         "retry_backend": retry_evidence,
+        "speech_region_detector": _detector_evidence(speech_region_detector),
         "required_languages": manifest.get("required_languages", []),
         "execution": execution_config,
         "policy": manifest.get("policy", {}),
@@ -964,6 +994,7 @@ def run_canary(
     backend,
     *,
     retry_backend=None,
+    speech_region_detector=None,
     selected_ids: set[str] | None = None,
     evaluate_only: bool = False,
 ) -> dict:
@@ -989,7 +1020,12 @@ def run_canary(
     )
     output = Path(output_dir).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    execution, fingerprint = _execution_fingerprint(manifest, backend, retry_backend)
+    execution, fingerprint = _execution_fingerprint(
+        manifest,
+        backend,
+        retry_backend,
+        speech_region_detector,
+    )
     _admit_frozen_execution(
         output / "frozen-execution.json",
         execution,
@@ -1042,6 +1078,7 @@ def run_canary(
                     entry_output,
                     planner=planner,
                     retry_backend=retry_backend,
+                    speech_region_detector=speech_region_detector,
                     candidate_languages=candidate_languages,
                     minimum_silence_seconds=float(config.get("minimum_silence_seconds", 0.7)),
                     language_retry_policy=dict(config.get("language_retry_policy", {})),
@@ -1194,12 +1231,14 @@ def main() -> None:
     args = parser.parse_args()
     backend = build_backend(args)
     retry_backend = build_retry_backend(args)
+    speech_region_detector = FasterWhisperSileroSpeechRegionDetector()
     try:
         summary = run_canary(
             args.manifest,
             args.output,
             backend,
             retry_backend=retry_backend,
+            speech_region_detector=speech_region_detector,
             selected_ids=set(args.selected or ()),
             evaluate_only=args.evaluate_only,
         )
