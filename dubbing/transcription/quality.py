@@ -9,7 +9,7 @@ from typing import Iterable
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
 
 
-QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v3"
+QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v4"
 
 
 class TranscriptQualityStatus(str, Enum):
@@ -363,7 +363,22 @@ def evaluate_transcript_quality(
     """Evaluate semantic and structural fitness; never equate valid JSON with quality."""
     issues: list[QualityIssue] = []
     segments = transcript.segments
-    duration_ms = expected_duration_ms or transcript.duration_ms or 0
+    duration_ms = (
+        expected_duration_ms
+        if expected_duration_ms is not None
+        else transcript.duration_ms or 0
+    )
+    duration_bounds = {
+        name: value
+        for name, value in (
+            ("expected_duration_ms", expected_duration_ms),
+            ("transcript_duration_ms", transcript.duration_ms),
+        )
+        if value is not None
+    }
+    timestamp_upper_bound_ms = (
+        min(duration_bounds.values()) if duration_bounds else None
+    )
     tokens = _tokens(transcript.text)
 
     if not segments or not tokens:
@@ -383,7 +398,74 @@ def evaluate_transcript_quality(
     explained_silence_gaps: list[tuple[int, int, float]] = []
     previous: TranscriptSegment | None = None
     stock_hallucination_count = 0
-    for segment in segments:
+    segment_timestamp_out_of_bounds_count = 0
+    word_timestamp_out_of_bounds_count = 0
+    word_recording_bounds_violation_count = 0
+    word_segment_containment_violation_count = 0
+    for segment_index, segment in enumerate(segments):
+        segment_interval_invalid = (
+            segment.start_ms < 0 or segment.end_ms <= segment.start_ms
+        )
+        violated_duration_bounds = {
+            name: bound
+            for name, bound in duration_bounds.items()
+            if segment.end_ms > bound
+        }
+        if segment_interval_invalid or violated_duration_bounds:
+            segment_timestamp_out_of_bounds_count += 1
+            issues.append(
+                QualityIssue(
+                    "timestamp_out_of_bounds",
+                    "fatal" if segment_interval_invalid else "critical",
+                    "Segment timestamps fall outside their valid recording interval.",
+                    segment.start_ms,
+                    segment.end_ms,
+                    {
+                        "kind": "segment",
+                        "segment_index": segment_index,
+                        "observed_start_ms": segment.start_ms,
+                        "observed_end_ms": segment.end_ms,
+                        "violated_duration_bounds": violated_duration_bounds,
+                    },
+                )
+            )
+        for word_index, word in enumerate(segment.words):
+            word_interval_invalid = word.start_ms < 0 or word.end_ms <= word.start_ms
+            word_duration_bounds = {
+                name: bound
+                for name, bound in duration_bounds.items()
+                if word.end_ms > bound
+            }
+            outside_segment = (
+                word.start_ms < segment.start_ms or word.end_ms > segment.end_ms
+            )
+            if not (word_interval_invalid or word_duration_bounds or outside_segment):
+                continue
+            word_timestamp_out_of_bounds_count += 1
+            if word_duration_bounds:
+                word_recording_bounds_violation_count += 1
+            if outside_segment:
+                word_segment_containment_violation_count += 1
+            issues.append(
+                QualityIssue(
+                    "timestamp_out_of_bounds",
+                    "fatal" if word_interval_invalid else "critical",
+                    "Word timestamps fall outside their recording or parent segment interval.",
+                    word.start_ms,
+                    word.end_ms,
+                    {
+                        "kind": "word",
+                        "segment_index": segment_index,
+                        "word_index": word_index,
+                        "observed_start_ms": word.start_ms,
+                        "observed_end_ms": word.end_ms,
+                        "parent_segment_start_ms": segment.start_ms,
+                        "parent_segment_end_ms": segment.end_ms,
+                        "violated_duration_bounds": word_duration_bounds,
+                        "outside_parent_segment": outside_segment,
+                    },
+                )
+            )
         if previous is not None:
             if _normalize(previous.text) == _normalize(segment.text):
                 adjacent_duplicates += 1
@@ -592,6 +674,23 @@ def evaluate_transcript_quality(
                 finding.to_dict() for finding in repetition_findings
             ],
             "stock_hallucination_under_no_speech_count": stock_hallucination_count,
+            "timestamp_upper_bound_ms": timestamp_upper_bound_ms,
+            "timestamp_out_of_bounds_count": (
+                segment_timestamp_out_of_bounds_count
+                + word_timestamp_out_of_bounds_count
+            ),
+            "segment_timestamp_out_of_bounds_count": (
+                segment_timestamp_out_of_bounds_count
+            ),
+            "word_timestamp_out_of_bounds_count": (
+                word_timestamp_out_of_bounds_count
+            ),
+            "word_recording_bounds_violation_count": (
+                word_recording_bounds_violation_count
+            ),
+            "word_segment_containment_violation_count": (
+                word_segment_containment_violation_count
+            ),
             "timestamp_overlap_count": timestamp_overlaps,
             "large_gap_count": len(large_gaps),
             "explained_silence_gap_count": len(explained_silence_gaps),

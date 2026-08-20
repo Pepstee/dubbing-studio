@@ -3,6 +3,7 @@ import pytest
 from dubbing.transcription.models import (
     DecodeDiagnostics,
     TranscriptSegment,
+    TranscriptWord,
     TranscriptionResult,
 )
 from dubbing.transcription.quality import (
@@ -118,6 +119,124 @@ def test_uncertain_span_is_not_approval_ready():
 def test_empty_output_is_failed():
     report = evaluate_transcript_quality(_result("", ()))
     assert report.status is TranscriptQualityStatus.FAILED
+
+
+def test_real_v5_segment_beyond_65407ms_duration_fails_closed():
+    transcript = TranscriptionResult(
+        segments=(TranscriptSegment(74_100, 74_120, "late"),),
+        text="late",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=65_407,
+        confidence_available=False,
+    )
+
+    report = evaluate_transcript_quality(
+        transcript,
+        expected_duration_ms=65_407,
+    )
+
+    issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert (issue.start_ms, issue.end_ms) == (74_100, 74_120)
+    assert issue.evidence == {
+        "kind": "segment",
+        "segment_index": 0,
+        "observed_start_ms": 74_100,
+        "observed_end_ms": 74_120,
+        "violated_duration_bounds": {
+            "expected_duration_ms": 65_407,
+            "transcript_duration_ms": 65_407,
+        },
+    }
+    assert report.metrics["timestamp_upper_bound_ms"] == 65_407
+    assert report.metrics["segment_timestamp_out_of_bounds_count"] == 1
+    assert report.metrics["timestamp_out_of_bounds_count"] == 1
+
+
+def test_expected_duration_is_enforced_when_transcript_duration_is_longer():
+    transcript = TranscriptionResult(
+        segments=(TranscriptSegment(60_000, 70_000, "late"),),
+        text="late",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=80_000,
+        confidence_available=False,
+    )
+
+    report = evaluate_transcript_quality(transcript, expected_duration_ms=65_407)
+    issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
+
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert issue.evidence["violated_duration_bounds"] == {
+        "expected_duration_ms": 65_407
+    }
+
+
+def test_transcript_duration_is_enforced_when_expected_duration_is_longer():
+    transcript = TranscriptionResult(
+        segments=(TranscriptSegment(1_000, 1_500, "late"),),
+        text="late",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=1_200,
+        confidence_available=False,
+    )
+
+    report = evaluate_transcript_quality(transcript, expected_duration_ms=2_000)
+    issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
+
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert issue.evidence["violated_duration_bounds"] == {
+        "transcript_duration_ms": 1_200
+    }
+    assert report.metrics["timestamp_upper_bound_ms"] == 1_200
+
+
+def test_word_beyond_duration_and_parent_segment_fails_closed_once():
+    word = TranscriptWord(900, 1_200, "late")
+    segment = TranscriptSegment(0, 1_000, "late", words=(word,))
+
+    report = evaluate_transcript_quality(
+        _result("late", (segment,)),
+        expected_duration_ms=1_000,
+    )
+    issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
+
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert issue.evidence["kind"] == "word"
+    assert issue.evidence["word_index"] == 0
+    assert issue.evidence["outside_parent_segment"] is True
+    assert issue.evidence["violated_duration_bounds"] == {
+        "expected_duration_ms": 1_000,
+        "transcript_duration_ms": 1_000,
+    }
+    assert report.metrics["word_timestamp_out_of_bounds_count"] == 1
+    assert report.metrics["word_recording_bounds_violation_count"] == 1
+    assert report.metrics["word_segment_containment_violation_count"] == 1
+
+
+def test_word_must_remain_contained_by_parent_segment():
+    word = TranscriptWord(900, 1_100, "boundary")
+    segment = TranscriptSegment(1_000, 2_000, "boundary", words=(word,))
+
+    report = evaluate_transcript_quality(
+        _result("boundary", (segment,)),
+        expected_duration_ms=2_000,
+    )
+    issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
+
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert issue.evidence["violated_duration_bounds"] == {}
+    assert issue.evidence["outside_parent_segment"] is True
+    assert report.metrics["word_recording_bounds_violation_count"] == 0
+    assert report.metrics["word_segment_containment_violation_count"] == 1
 
 
 def test_scattered_legitimate_duplicate_segments_do_not_form_a_loop():

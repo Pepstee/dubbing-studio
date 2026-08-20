@@ -167,9 +167,10 @@ class _RetryingBackend(TranscriptionBackend):
 
 
 class _IndependentBackend(TranscriptionBackend):
-    def __init__(self, text="clean ordinary phrase"):
+    def __init__(self, text="clean ordinary phrase", *, duration_ms=10_000):
         self.calls = 0
         self.text = text
+        self.duration_ms = duration_ms
 
     @property
     def identity(self):
@@ -178,13 +179,13 @@ class _IndependentBackend(TranscriptionBackend):
     def transcribe(self, audio, options=None):
         self.calls += 1
         return TranscriptionResult(
-            segments=(TranscriptSegment(0, 10_000, self.text),),
+            segments=(TranscriptSegment(0, self.duration_ms, self.text),),
             text=self.text,
             backend="fixture",
             model="independent",
             device="test",
             language=options.language or "en",
-            duration_ms=10_000,
+            duration_ms=self.duration_ms,
             confidence_available=False,
         )
 
@@ -1425,7 +1426,7 @@ def test_unknown_latin_turn_stays_uncertain_instead_of_trying_every_language(tmp
 def test_processing_cap_binds_full_source_and_limits_plan_result_and_replay(tmp_path):
     source = tmp_path / "lesson.mov"
     source.write_bytes(b"full source including unrelated tail")
-    backend = _IndependentBackend()
+    backend = _IndependentBackend(duration_ms=6_000)
     observed = {}
 
     def plan(duration_ms, silence_centres, *, silence_intervals=()):
@@ -1496,7 +1497,7 @@ def test_processing_cap_change_or_full_source_change_rejects_checkpoint(tmp_path
     source = tmp_path / "lesson.mov"
     source.write_bytes(b"source with tail")
     coordinator = AdaptiveLongFormCoordinator(
-        _IndependentBackend(),
+        _IndependentBackend(duration_ms=6_000),
         tmp_path / "job",
     )
     probe = MediaProbe(
