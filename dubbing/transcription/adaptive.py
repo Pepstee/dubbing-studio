@@ -49,7 +49,10 @@ _LANGUAGE_RETRY_CONTEXT_MS = 1_000
 _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO = 0.96
 _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS = 2_500
 _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
-_COORDINATOR_VERSION = "adaptive-long-form-v18"
+_UNCERTAIN_TURN_SILENCE_POLICY = (
+    "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
+)
+_COORDINATOR_VERSION = "adaptive-long-form-v19"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _NEAR_SILENCE_ADMISSION_POLICY = (
@@ -757,6 +760,15 @@ class AdaptiveLongFormCoordinator:
                     ),
                     "primary_valid_segment_count_required": 0,
                     "semantic_vad_zero_regions_required": True,
+                },
+                "uncertain_turn_after_empty_language_retry": {
+                    "policy": _UNCERTAIN_TURN_SILENCE_POLICY,
+                    "required_energy_coverage_ratio": 1.0,
+                    "forced_candidate_valid_segment_count_required": 0,
+                    "forced_candidate_failure_codes": [
+                        "malformed_or_empty_output"
+                    ],
+                    "sensitive_vad_target_overlap_ms_required": 0,
                 },
             },
             "planner": self.planner.to_dict(),
@@ -1589,6 +1601,7 @@ class AdaptiveLongFormCoordinator:
             self.backend,
             options,
             attempts,
+            energy_silence_intervals=energy_silence_intervals,
         )
         quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
         attempts.append(
@@ -1844,8 +1857,11 @@ class AdaptiveLongFormCoordinator:
         backend: TranscriptionBackend,
         base_options: TranscriptionOptions,
         attempts: list[dict],
+        *,
+        energy_silence_intervals: tuple[tuple[int, int], ...] = (),
     ) -> TranscriptionResult:
         resolved: list[TranscriptSegment] = []
+        silence_adjudications: list[dict] = []
         changed = False
         for segment in result.segments:
             if not segment.uncertain:
@@ -1876,6 +1892,7 @@ class AdaptiveLongFormCoordinator:
             eligible_replacements: list[
                 tuple[tuple[float, ...], str, tuple[TranscriptSegment, ...]]
             ] = []
+            empty_retry_evidence: list[tuple[str, dict]] = []
             with tempfile.TemporaryDirectory(prefix="dubbing-language-retry-") as directory:
                 span = Path(directory) / "span.wav"
                 context_start_ms = max(0, segment.start_ms - _LANGUAGE_RETRY_CONTEXT_MS)
@@ -1917,6 +1934,13 @@ class AdaptiveLongFormCoordinator:
                             "quality": quality.to_dict(),
                         }
                     )
+                    failure_codes = {issue.code for issue in quality.issues}
+                    if (
+                        not candidate.segments
+                        and quality.status == TranscriptQualityStatus.FAILED
+                        and failure_codes == {"malformed_or_empty_output"}
+                    ):
+                        empty_retry_evidence.append((language, quality.to_dict()))
                     if (
                         candidate.segments
                         and not any(item.uncertain for item in candidate.segments)
@@ -1965,6 +1989,94 @@ class AdaptiveLongFormCoordinator:
                         )
                         attempts[-1]["candidate_score"] = list(score)
                         eligible_replacements.append((score, language, candidate_segments))
+                target_duration_ms = segment.end_ms - segment.start_ms
+                target_energy_silence_ms = _interval_coverage_ms(
+                    segment.start_ms,
+                    segment.end_ms,
+                    energy_silence_intervals,
+                )
+                may_adjudicate_silence = (
+                    result.duration_ms is not None
+                    and 0 <= segment.start_ms < segment.end_ms <= result.duration_ms
+                    and target_energy_silence_ms == target_duration_ms
+                    and len(empty_retry_evidence) == len(languages)
+                    and bool(empty_retry_evidence)
+                    and self.silence_verification_detector is not None
+                )
+                if not eligible_replacements and may_adjudicate_silence:
+                    plan = self.silence_verification_detector.detect(span)
+                    sensitive_overlaps = []
+                    for region in plan.sensitive_regions:
+                        overlap_start_ms = max(target_start_ms, region.start_ms)
+                        overlap_end_ms = min(target_end_ms, region.end_ms)
+                        if overlap_end_ms > overlap_start_ms:
+                            sensitive_overlaps.append(
+                                {
+                                    "start_ms": overlap_start_ms,
+                                    "end_ms": overlap_end_ms,
+                                }
+                            )
+                    sensitive_overlap_ms = _interval_coverage_ms(
+                        target_start_ms,
+                        target_end_ms,
+                        tuple(
+                            (item["start_ms"], item["end_ms"])
+                            for item in sensitive_overlaps
+                        ),
+                    )
+                    retry_quality = empty_retry_evidence[0][1]
+                    evidence_document = {
+                        "kind": "uncertain-turn-silence-adjudication",
+                        "status": (
+                            "DROPPED_CONFIRMED_NO_SPEECH"
+                            if sensitive_overlap_ms == 0
+                            else "PRESERVED_SENSITIVE_SPEECH"
+                        ),
+                        "policy": _UNCERTAIN_TURN_SILENCE_POLICY,
+                        "source_start_ms": segment.start_ms,
+                        "source_end_ms": segment.end_ms,
+                        "context_start_ms": context_start_ms,
+                        "context_end_ms": context_end_ms,
+                        "original_text_sha256": hashlib.sha256(
+                            segment.text.encode("utf-8")
+                        ).hexdigest(),
+                        "context_audio_sha256": source_sha256(span),
+                        "target_energy_silence_coverage_ms": (
+                            target_energy_silence_ms
+                        ),
+                        "target_duration_ms": target_duration_ms,
+                        "required_energy_coverage_ratio": 1.0,
+                        "forced_language": empty_retry_evidence[0][0],
+                        "forced_retry_quality": retry_quality,
+                        "forced_retry_quality_sha256": _document_sha256(
+                            retry_quality
+                        ),
+                        "speech_region_plan": plan.to_dict(),
+                        "speech_region_plan_sha256": _document_sha256(
+                            plan.to_dict()
+                        ),
+                        "sensitive_vad_target_overlap_ms": sensitive_overlap_ms,
+                        "sensitive_vad_target_overlaps": sensitive_overlaps,
+                    }
+                    attempts.append(evidence_document)
+                    if sensitive_overlap_ms == 0:
+                        silence_adjudications.append(
+                            {
+                                key: evidence_document[key]
+                                for key in (
+                                    "status",
+                                    "policy",
+                                    "source_start_ms",
+                                    "source_end_ms",
+                                    "original_text_sha256",
+                                    "context_audio_sha256",
+                                    "forced_retry_quality_sha256",
+                                    "speech_region_plan_sha256",
+                                )
+                            }
+                        )
+                        changed = True
+                        continue
             if eligible_replacements:
                 _, selected_language, replacement = max(
                     eligible_replacements, key=lambda item: item[0]
@@ -1984,7 +2096,18 @@ class AdaptiveLongFormCoordinator:
         if not changed:
             return result
         ordered = tuple(sorted(resolved, key=lambda item: (item.start_ms, item.end_ms)))
-        return replace(result, segments=ordered, text=" ".join(item.text for item in ordered))
+        provenance = dict(result.provenance or {})
+        if silence_adjudications:
+            provenance["uncertain_turn_silence_adjudications"] = [
+                *provenance.get("uncertain_turn_silence_adjudications", []),
+                *silence_adjudications,
+            ]
+        return replace(
+            result,
+            segments=ordered,
+            text=" ".join(item.text for item in ordered),
+            provenance=provenance,
+        )
 
     def run(
         self,

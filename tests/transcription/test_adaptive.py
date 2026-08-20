@@ -415,6 +415,16 @@ def test_real_six_gap_near_silence_stops_after_empty_bounded_primary(tmp_path):
     assert policy["minimum_energy_coverage_ratio"] == 0.96
     assert policy["maximum_total_uncovered_ms"] == 2_500
     assert policy["maximum_uncovered_gap_ms"] == 1_500
+    turn_policy = manifest["silence_admission"][
+        "uncertain_turn_after_empty_language_retry"
+    ]
+    assert turn_policy == {
+        "policy": "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1",
+        "required_energy_coverage_ratio": 1.0,
+        "forced_candidate_valid_segment_count_required": 0,
+        "forced_candidate_failure_codes": ["malformed_or_empty_output"],
+        "sensitive_vad_target_overlap_ms_required": 0,
+    }
 
 
 def test_near_silence_sensitive_vad_speech_preserves_fail_closed_retry(tmp_path):
@@ -1683,6 +1693,251 @@ def test_language_retry_rejects_context_without_target_turn(tmp_path):
         )
 
     assert resolved == original
+
+
+class _EmptyLanguageRetryBackend(TranscriptionBackend):
+    @property
+    def identity(self):
+        return "fixture:empty-language-retry"
+
+    def transcribe(self, audio, options=None):
+        return TranscriptionResult(
+            (),
+            "",
+            "fixture",
+            "empty-language-retry",
+            "test",
+            options.language,
+            3_000,
+            False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("start_ms", "end_ms", "text"),
+    [
+        (50_200, 51_600, "зелень"),
+        (29_100, 29_120, "Продолжение следует..."),
+        (167_400, 167_420, "Продолжение следует..."),
+    ],
+    ids=("greenery", "continuation-middle", "continuation-tail"),
+)
+def test_empty_language_retry_drops_exact_full_silence_zero_vad_patterns(
+    tmp_path, start_ms, end_ms, text
+):
+    segment = TranscriptSegment(start_ms, end_ms, text, language="en", uncertain=True)
+    original = TranscriptionResult(
+        (segment,),
+        text,
+        "fixture",
+        "empty-language-retry",
+        "test",
+        "en",
+        200_000,
+        False,
+        provenance={"fixture": True},
+    )
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        _EmptyLanguageRetryBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, marker, destination: destination.write_bytes(
+            b"hash-bound-context"
+        ),
+    ):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            attempts,
+            energy_silence_intervals=((start_ms, end_ms),),
+        )
+
+    assert resolved.segments == ()
+    assert resolved.text == ""
+    assert detector.calls == 1
+    adjudication = attempts[-1]
+    assert adjudication["kind"] == "uncertain-turn-silence-adjudication"
+    assert adjudication["status"] == "DROPPED_CONFIRMED_NO_SPEECH"
+    assert adjudication["source_start_ms"] == start_ms
+    assert adjudication["source_end_ms"] == end_ms
+    assert adjudication["target_energy_silence_coverage_ms"] == end_ms - start_ms
+    assert adjudication["sensitive_vad_target_overlap_ms"] == 0
+    assert adjudication["context_audio_sha256"] == hashlib.sha256(
+        b"hash-bound-context"
+    ).hexdigest()
+    assert adjudication["original_text_sha256"] == hashlib.sha256(
+        text.encode("utf-8")
+    ).hexdigest()
+    assert adjudication["forced_retry_quality_sha256"]
+    assert adjudication["speech_region_plan_sha256"]
+    provenance = resolved.provenance["uncertain_turn_silence_adjudications"]
+    assert len(provenance) == 1
+    assert provenance[0]["context_audio_sha256"] == adjudication["context_audio_sha256"]
+
+
+def test_uncertain_turn_silence_adjudication_preserves_sensitive_vad_speech(tmp_path):
+    segment = TranscriptSegment(1_000, 2_000, "неясно", language="en", uncertain=True)
+    original = TranscriptionResult(
+        (segment,), segment.text, "fixture", "empty", "test", "en", 4_000, False
+    )
+    detector = _SpeechDetector((SpeechRegion(900, 1_100, "sensitive"),))
+    coordinator = AdaptiveLongFormCoordinator(
+        _EmptyLanguageRetryBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, marker, destination: destination.write_bytes(b"context"),
+    ):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            attempts,
+            energy_silence_intervals=((1_000, 2_000),),
+        )
+
+    assert resolved == original
+    assert attempts[-1]["status"] == "PRESERVED_SENSITIVE_SPEECH"
+    assert attempts[-1]["sensitive_vad_target_overlap_ms"] == 100
+
+
+@pytest.mark.parametrize(
+    ("detector_configured", "energy_intervals"),
+    [
+        (False, ((1_000, 2_000),)),
+        (True, ((1_000, 1_999),)),
+    ],
+    ids=("detector-absent", "partial-energy-silence"),
+)
+def test_uncertain_turn_silence_adjudication_requires_full_energy_and_detector(
+    tmp_path, detector_configured, energy_intervals
+):
+    segment = TranscriptSegment(1_000, 2_000, "неясно", language="en", uncertain=True)
+    original = TranscriptionResult(
+        (segment,), segment.text, "fixture", "empty", "test", "en", 4_000, False
+    )
+    detector = _SpeechDetector() if detector_configured else None
+    coordinator = AdaptiveLongFormCoordinator(
+        _EmptyLanguageRetryBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+    )
+    attempts = []
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, marker, destination: destination.write_bytes(b"context"),
+    ):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            attempts,
+            energy_silence_intervals=energy_intervals,
+        )
+
+    assert resolved == original
+    assert not any(
+        item["kind"] == "uncertain-turn-silence-adjudication" for item in attempts
+    )
+    if detector is not None:
+        assert detector.calls == 0
+
+
+def test_uncertain_turn_silence_adjudication_preserves_nonempty_failed_retry(tmp_path):
+    class _NonemptyFailedBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:nonempty-failed-language-retry"
+
+        def transcribe(self, audio, options=None):
+            text = " ".join(["повтор"] * 20)
+            return TranscriptionResult(
+                (TranscriptSegment(1_000, 2_000, text, language="ru"),),
+                text,
+                "fixture",
+                "nonempty-failed-language-retry",
+                "test",
+                "ru",
+                3_000,
+                False,
+            )
+
+    segment = TranscriptSegment(1_000, 2_000, "неясно", language="en", uncertain=True)
+    original = TranscriptionResult(
+        (segment,), segment.text, "fixture", "failed", "test", "en", 4_000, False
+    )
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        _NonemptyFailedBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+    )
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, marker, destination: destination.write_bytes(b"context"),
+    ):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            [],
+            energy_silence_intervals=((1_000, 2_000),),
+        )
+
+    assert resolved == original
+    assert detector.calls == 0
+
+
+def test_uncertain_turn_silence_adjudication_preserves_mixed_script_without_retry(
+    tmp_path,
+):
+    class _MustNotRunBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:mixed-must-not-run"
+
+        def transcribe(self, audio, options=None):
+            raise AssertionError("mixed-script turn must remain for independent evidence")
+
+    segment = TranscriptSegment(1_000, 2_000, "Или yes", language="en", uncertain=True)
+    original = TranscriptionResult(
+        (segment,), segment.text, "fixture", "mixed", "test", "en", 4_000, False
+    )
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        _MustNotRunBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+    )
+
+    resolved = coordinator._resolve_uncertain_turns(
+        tmp_path / "audio.wav",
+        original,
+        coordinator.backend,
+        TranscriptionOptions(),
+        [],
+        energy_silence_intervals=((1_000, 2_000),),
+    )
+
+    assert resolved == original
+    assert detector.calls == 0
 
 
 def test_language_retry_preserves_turn_beyond_audio_duration_as_uncertain(tmp_path):
