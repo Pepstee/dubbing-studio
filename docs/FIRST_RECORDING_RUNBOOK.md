@@ -39,6 +39,21 @@ The Mac deployment uses the existing WhisperKit primary, cached MLX independent 
 diarization models. It disables translation rather than making the first recording depend on an
 uninstalled NLLB model. This does not weaken original-language transcript quality or review gates.
 
+### DR-10L Pro format evidence
+
+The production watcher has been exercised with a four-minute, real English/Russian dialogue
+encoded at the DR-10L Pro's demanding normal setting: mono BWF/WAV, 48 kHz, 32-bit float. Fresh
+model-loading preflight passed, ASR quality passed with no uncertain segments, diarization assigned
+all eligible speech duration, source rehash/stat verification passed, and an unchanged replay was
+byte-identical without creating another capture or package. The machine-readable receipt is
+`benchmarks/fixtures/lesson-2026-08-01-193908/dr10l-pro-format-shadow-receipt.json`.
+
+This proves container/codec compatibility only. The signal was derived from a hash-bound lesson
+recording, not captured through the physical recorder, lavalier or analog front end. Do not call the
+Tascam path acoustically certified until a real, unedited recorder file completes the same watcher
+path and its speaker-attributed review package is inspected. The format-shadow package remains in
+review because one genuine overlap requires acknowledgement; it emitted no GIGA event.
+
 ## 2. Transfer atomically
 
 Never copy directly to its final filename. Copy using a hidden `.partial`

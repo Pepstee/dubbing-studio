@@ -1,0 +1,136 @@
+{
+  "artifact_responsibility": "Machine-readable evidence for the DR-10L Pro container-format shadow canary; this is distinct from the historical ASR accuracy fixtures and from a future real-recorder acoustic canary.",
+  "capture_id": "61d7f1e306d7e37c3c4c7854fc08a0bc3ba6a30d72491017eb39a003b0cc9ac3",
+  "certification_scope": {
+    "acoustic_capture_from_physical_dr10l_pro": false,
+    "container_and_codec_compatibility": true,
+    "english_russian_asr_pipeline": true,
+    "full_day_duration": false,
+    "production_personal_capture_path": true,
+    "speaker_identity_accuracy": false
+  },
+  "derived_source": {
+    "duration_ms": 240000,
+    "generation": {
+      "arguments": [
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        "<parent-audio>",
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-sn",
+        "-dn",
+        "-ac",
+        "1",
+        "-ar",
+        "48000",
+        "-c:a",
+        "pcm_f32le",
+        "-write_bext",
+        "1",
+        "-metadata",
+        "originator=TASCAM DR-10L Pro shadow fixture",
+        "-metadata",
+        "description=Device-format shadow canary; derived from hash-bound Lesson 6 dialogue",
+        "-metadata",
+        "time_reference=0",
+        "-f",
+        "wav",
+        "<atomic-partial-output>"
+      ],
+      "ffmpeg": {
+        "path": "/opt/homebrew/Cellar/ffmpeg/8.1.2_1/bin/ffmpeg",
+        "sha256": "1332dc2de372bade9a8a63da0d6cdfab9de97fcefbae707bcc0b0506e1203327",
+        "size_bytes": 441728,
+        "version": "8.1.2"
+      }
+    },
+    "parent_audio_sha256": "2e91861e387c79d2fcc86fef2a007307efe31ad23bff4e8d3e1fe69e1d8493ea",
+    "sha256": "61d7f1e306d7e37c3c4c7854fc08a0bc3ba6a30d72491017eb39a003b0cc9ac3",
+    "size_bytes": 46080702,
+    "transformation": {
+      "bits_per_sample": "32-bit float",
+      "channels": 1,
+      "codec": "pcm_f32le",
+      "container": "BWF/WAV",
+      "sample_rate_hz": 48000,
+      "time_reference": 0
+    }
+  },
+  "evidence": {
+    "diarization_quality_report": {
+      "attributed_speech_duration_ratio": 1.0,
+      "attributed_word_ratio": 0.953947,
+      "eligible_speech_segment_count": 21,
+      "issues": [
+        "overlapping_speech"
+      ],
+      "sha256": "adbf869305aa69bd81b0d040edb3bc87f9e24e028d5d854ffef335b66e595e0f",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "unresolved_speech_segment_count": 0
+    },
+    "diarization_result_sha256": "51bfc8581a85bb14471616bd435e58cfb9ea7b16aedbc87b0ec8b1a7fdd1815f",
+    "giga_outbox_file_count_after_run_and_replay": 0,
+    "package_aggregate_sha256_before_and_after_replay": "432ac4d831b54bc826a805b75450e04874ecf69da4d4e09a4e9a8275cb587be2",
+    "package_manifest_sha256": "dd17174dab0dd28b94f6759372a099055b672f706b5b6e1fc00538d677f83b30",
+    "preflight": {
+      "failed_check_count": 0,
+      "model_load_certified": true,
+      "ready": true,
+      "sha256": "824fccb92661f33d394818f45d67f54e60b9e07662af170f6deb7b6b9aabdad1",
+      "warning_count": 0
+    },
+    "replay": {
+      "capture_database_rows_after": 2,
+      "capture_database_rows_before": 2,
+      "package_count_after": 2,
+      "package_count_before": 2,
+      "runtime_seconds": 1.49
+    },
+    "source_integrity": {
+      "concurrent_full_source_rehash_passed": true,
+      "final_stat_recheck_passed": true,
+      "progress_status": "COMPLETE",
+      "source_rehash_sha256": "61d7f1e306d7e37c3c4c7854fc08a0bc3ba6a30d72491017eb39a003b0cc9ac3"
+    },
+    "transcript": {
+      "assigned_speaker_labels": [
+        "SPEAKER_00",
+        "SPEAKER_02"
+      ],
+      "segment_count": 22,
+      "sha256": "98fb3672e0a1534c23cc8634264101914697ad65c72988331aaecfbe0cbf438a",
+      "uncertain_segment_count": 0
+    },
+    "transcript_quality_report": {
+      "approval_allowed": true,
+      "repetition_finding_count": 0,
+      "sha256": "cea103b42e0d73b3f939b5e022a1cf90c7df7283e45555d7ceebf6f809908b45",
+      "status": "PASS",
+      "timestamp_out_of_bounds_count": 0,
+      "token_count": 158
+    },
+    "watcher_runtime_seconds": 31.86
+  },
+  "giga_admission_allowed": false,
+  "limitations": [
+    "The file was transcoded from a hash-bound real English/Russian lesson recording; it was not recorded by the physical Tascam microphone or analog front end.",
+    "The four-minute run proves the exact device-format ingest path, not multi-hour thermal, storage, checkpoint or acoustic behavior.",
+    "Anonymous speaker coverage does not certify speaker identity or diarization correctness without human reference labels.",
+    "The package remains in review because one overlap requires human acknowledgement; no approval or GIGA event was emitted."
+  ],
+  "recorded_at": "2026-08-21T03:19:42+09:00",
+  "repository_head": "b00edc7c9a004ca2658d00fd6950a57518aa7f37",
+  "runtime": {
+    "artifact_root": "/Users/admin/Library/Application Support/DubbingStudio/canaries/personal-capture-v20-lesson06",
+    "model_manifest_sha256": "8fcf1135a3144f024427f90b488de7ce2cbf514252440e5c9700ec42d01b464e",
+    "personal_capture_config_sha256": "af6ffaeefd715b2e3dd0b9494e20959b47ebe25ae0af784a07b232ddc0f8ac07"
+  },
+  "schema_version": "dubbing.dr10l-pro-format-shadow-receipt.v1",
+  "specification_source": "https://tascam.com/amer-es/product/dr-10l_pro",
+  "verdict": "FORMAT_PATH_PASS_REAL_DEVICE_ACOUSTICS_PENDING"
+}
