@@ -14,6 +14,12 @@ from dubbing.diarization.models import (
     UnsupportedSpeakerConstraintError,
 )
 from dubbing.diarization.pyannote import PyannoteCommunityBackend
+from dubbing.diarization.quality import (
+    DIARIZATION_QUALITY_POLICY_VERSION,
+    DiarizationQualityReport,
+    DiarizationQualityStatus,
+    evaluate_diarization_quality,
+)
 from dubbing.diarization.sherpa import SherpaOnnxDiarizationBackend
 from dubbing.diarization.stability import (
     CannotLinkEvidence,
@@ -30,6 +36,9 @@ __all__ = [
     "ResumableDiarizationJob",
     "DiarizationError",
     "DiarizationResult",
+    "DiarizationQualityReport",
+    "DiarizationQualityStatus",
+    "DIARIZATION_QUALITY_POLICY_VERSION",
     "DiarizationStabilityPolicy",
     "DiarizationStabilityReport",
     "DiarizationStabilityStatus",
@@ -46,4 +55,5 @@ __all__ = [
     "attribute_window",
     "attributed_segment_plan",
     "evaluate_diarization_stability",
+    "evaluate_diarization_quality",
 ]

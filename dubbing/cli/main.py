@@ -202,6 +202,7 @@ def _cmd_capture(args: argparse.Namespace) -> None:
             args.capture_id,
             speaker_aliases=speaker_aliases(args.speaker),
             notes=args.notes,
+            diarization_review_acknowledged=args.diarization_review_acknowledged,
         )
         print(f"Approved {args.capture_id}; wrote {event}")
         return
@@ -498,6 +499,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     capture_approve.add_argument("--speaker", action="append", default=[])
     capture_approve.add_argument("--notes", default="")
+    capture_approve.add_argument(
+        "--diarization-review-acknowledged",
+        action="store_true",
+        help=(
+            "Confirm manual review/correction of HUMAN_REVIEW_REQUIRED speaker "
+            "attribution"
+        ),
+    )
 
     capture_list = capture_sub.add_parser("list", help="List capture-ledger state")
     capture_list_location = capture_list.add_mutually_exclusive_group(required=True)

@@ -195,7 +195,15 @@ def create_capture_app(config_path: str | Path) -> Flask:
             )
             if action == "approve":
                 try:
-                    service.approve(capture_id, speaker_aliases=aliases, notes=notes)
+                    service.approve(
+                        capture_id,
+                        speaker_aliases=aliases,
+                        notes=notes,
+                        diarization_review_acknowledged=(
+                            request.form.get("diarization_review_acknowledged")
+                            == "yes"
+                        ),
+                    )
                 except ValueError as exc:
                     flash(f"Edits saved, but approval is blocked: {exc}")
                     return redirect(url_for("detail", capture_id=capture_id))

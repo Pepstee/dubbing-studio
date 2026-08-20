@@ -14,6 +14,11 @@ from dubbing.apps.personal_capture.store import CaptureRecord, CaptureStore
 from dubbing.diarization.base import DiarizationBackend
 from dubbing.diarization.job import ResumableDiarizationJob
 from dubbing.diarization.models import SpeakerConstraints
+from dubbing.diarization.quality import (
+    DiarizationQualityReport,
+    DiarizationQualityStatus,
+    evaluate_diarization_quality,
+)
 from dubbing.transcription import (
     AudioUnderstandingPipeline,
     ResumableTranscriptionJob,
@@ -309,6 +314,9 @@ class CaptureService:
                         else None
                     ),
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
+                    "diarization_backend": (
+                        self.diarizer.identity if self.diarizer is not None else None
+                    ),
                     "diarization_global_speaker_threshold": (
                         self.diarization_global_speaker_threshold
                     ),
@@ -336,6 +344,7 @@ class CaptureService:
                     if quality_report is not None
                     else None
                 ),
+                "diarization_quality": None,
                 "review": {
                     "required": True,
                     "speaker_aliases": {},
@@ -354,6 +363,28 @@ class CaptureService:
                 transcript_to_srt(transcript),
                 encoding="utf-8",
             )
+            if self.diarizer is not None:
+                diarization_path = staging / "diarization.json"
+                diarization_path.write_text(
+                    _json(transcript.diarization or {}), encoding="utf-8"
+                )
+                diarization_report = evaluate_diarization_quality(
+                    transcript,
+                    transcript_sha256=_sha256(staging / "transcript.json"),
+                    diarization_sha256=_sha256(diarization_path),
+                )
+                diarization_report_path = staging / "diarization-quality-report.json"
+                diarization_report_path.write_text(
+                    _json(diarization_report.to_dict()), encoding="utf-8"
+                )
+                manifest["diarization_quality"] = {
+                    "report": diarization_report_path.name,
+                    "report_sha256": _sha256(diarization_report_path),
+                    "diarization": diarization_path.name,
+                    "diarization_sha256": _sha256(diarization_path),
+                    "status": diarization_report.status.value,
+                    "policy_version": diarization_report.policy_version,
+                }
             (staging / "manifest.json").write_text(_json(manifest), encoding="utf-8")
             if quality_report is not None:
                 (staging / "quality-report.json").write_text(
@@ -606,6 +637,7 @@ class CaptureService:
         *,
         speaker_aliases: Mapping[str, str] | None = None,
         notes: str = "",
+        diarization_review_acknowledged: bool = False,
     ) -> Path:
         record = self.store.get(capture_id)
         if record is None or record.package_path is None:
@@ -660,6 +692,72 @@ class CaptureService:
                     f"transcript quality is {quality_status}; explicit review notes are required"
                 )
             quality_sha256 = _sha256(quality_path)
+        diarization_quality_sha256 = None
+        diarization_evidence_sha256 = None
+        diarization_quality_status = None
+        diarization_required = bool(
+            manifest.get("execution", {}).get("diarization_backend")
+            or manifest.get("diarization_quality") is not None
+            or transcript.diarization is not None
+        )
+        if diarization_required:
+            diarization_path = package / "diarization.json"
+            diarization_quality_path = package / "diarization-quality-report.json"
+            if not diarization_path.is_file() or not diarization_quality_path.is_file():
+                raise ValueError(
+                    "diarization-controlled package is missing its evidence or quality report"
+                )
+            diarization_document = json.loads(
+                diarization_path.read_text(encoding="utf-8")
+            )
+            if transcript.diarization != diarization_document:
+                raise ValueError("transcript diarization does not match diarization.json")
+            diarization_evidence_sha256 = _sha256(diarization_path)
+            refreshed_diarization_quality = evaluate_diarization_quality(
+                transcript,
+                transcript_sha256=_sha256(transcript_path),
+                diarization_sha256=diarization_evidence_sha256,
+            )
+            stored_diarization_quality = DiarizationQualityReport.from_dict(
+                json.loads(diarization_quality_path.read_text(encoding="utf-8"))
+            )
+            if (
+                refreshed_diarization_quality.to_dict()
+                != stored_diarization_quality.to_dict()
+            ):
+                _atomic_text(
+                    diarization_quality_path,
+                    _json(refreshed_diarization_quality.to_dict()),
+                )
+            diarization_quality = refreshed_diarization_quality
+            diarization_quality_sha256 = _sha256(diarization_quality_path)
+            diarization_quality_status = diarization_quality.status.value
+            manifest["diarization_quality"] = {
+                "report": diarization_quality_path.name,
+                "report_sha256": diarization_quality_sha256,
+                "diarization": diarization_path.name,
+                "diarization_sha256": diarization_evidence_sha256,
+                "status": diarization_quality_status,
+                "policy_version": diarization_quality.policy_version,
+            }
+            _atomic_text(manifest_path, _json(manifest))
+            if (
+                diarization_quality.status
+                is DiarizationQualityStatus.REPROCESS_REQUIRED
+            ):
+                raise ValueError(
+                    "diarization quality is REPROCESS_REQUIRED; approval and outbox "
+                    "emission are blocked"
+                )
+            if (
+                diarization_quality.status
+                is DiarizationQualityStatus.HUMAN_REVIEW_REQUIRED
+                and not diarization_review_acknowledged
+            ):
+                raise ValueError(
+                    "diarization quality requires explicit review or correction "
+                    "acknowledgement"
+                )
         _atomic_text(package / "transcript.txt", transcript_to_text(transcript))
         _atomic_text(package / "transcript.srt", transcript_to_srt(transcript))
         transcript_sha256 = _sha256(transcript_path)
@@ -699,6 +797,9 @@ class CaptureService:
             "approved_at": datetime.now(timezone.utc).isoformat(),
             "speaker_aliases": aliases,
             "notes": notes,
+            "diarization_review_acknowledged": (
+                diarization_review_acknowledged if diarization_required else None
+            ),
         }
         _atomic_text(package / "approval.json", _json(approval))
         approval_sha256 = _sha256(package / "approval.json")
@@ -710,6 +811,8 @@ class CaptureService:
                     translation_sha256,
                     approval_sha256,
                     quality_sha256,
+                    diarization_quality_sha256,
+                    diarization_evidence_sha256,
                 )
                 if value is not None
             ).encode("ascii")
@@ -729,6 +832,9 @@ class CaptureService:
                 "approval_sha256": approval_sha256,
                 "quality_report_sha256": quality_sha256,
                 "quality_status": quality_status,
+                "diarization_quality_report_sha256": diarization_quality_sha256,
+                "diarization_quality_status": diarization_quality_status,
+                "diarization_sha256": diarization_evidence_sha256,
             },
             "payload": {
                 "transcript_file": "transcript.json",
@@ -738,6 +844,14 @@ class CaptureService:
                 "approval_file": "approval.json",
                 "quality_report_file": (
                     "quality-report.json" if quality_path.is_file() else None
+                ),
+                "diarization_file": (
+                    "diarization.json" if diarization_evidence_sha256 else None
+                ),
+                "diarization_quality_report_file": (
+                    "diarization-quality-report.json"
+                    if diarization_quality_sha256
+                    else None
                 ),
                 "speaker_aliases": aliases,
                 "review_notes": notes,
@@ -757,6 +871,8 @@ class CaptureService:
             "translation.json": translation_sha256,
             "approval.json": approval_sha256,
             "quality-report.json": quality_sha256,
+            "diarization.json": diarization_evidence_sha256,
+            "diarization-quality-report.json": diarization_quality_sha256,
         }
         _atomic_text(manifest_path, _json(manifest))
         self.store.transition(capture_id, "approved")
