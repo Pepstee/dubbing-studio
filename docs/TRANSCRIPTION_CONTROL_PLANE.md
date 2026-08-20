@@ -315,6 +315,14 @@ before the next upload. `compaction-plan.json` reports retained, removed and upl
 estimated reduction, fallback reason and the known dual-miss limitation: sensitive VAD plus local
 transcript evidence reduces but cannot mathematically eliminate missed quiet speech.
 
+An HTTP-success response that cannot satisfy the provider candidate contract is not treated as an
+unknown network outcome. Dubbing Studio preserves the complete local response evidence, its hash
+and request receipt, changes the reservation to `response_rejected`, continues counting its full
+estimated cost, and forbids automatic re-upload. A later parser version may recover a checkpoint
+offline from that exact hash-bound response; the checkpoint and programme ledger retain the
+rejection lineage. An older client that failed before preserving the response remains permanently
+non-retryable rather than spending again or fabricating evidence.
+
 Cost enforcement is transactional per programme-state file. An exclusive POSIX lock serializes
 budget decisions and uploads. Each packet's duration and estimated cost are reserved durably with
 status `uploading` before network transmission, then promoted to `completed` only after a bound

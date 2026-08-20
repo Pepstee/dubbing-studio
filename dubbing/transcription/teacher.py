@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - Windows must fail closed at runtime.
 
 from dubbing.evaluation.metrics import character_tokens, levenshtein_distance, word_tokens
 from dubbing.transcription.cloud import (
+    CloudProviderResponseError,
     CloudTransport,
     ElevenLabsHTTPTransport,
     PROVIDERS,
@@ -43,6 +44,7 @@ from dubbing.transcription.speech_regions import (
 _POLICY_SCHEMA = "dubbing.cloud-teacher-policy.v1"
 _REPORT_SCHEMA = "dubbing.cloud-teacher-report.v1"
 _CORPUS_SCHEMA = "dubbing.asr-silver-corpus.v1"
+_RESPONSE_REJECTION_SCHEMA = "dubbing.cloud-teacher-response-rejection.v1"
 _ALLOWED_LANGUAGES = {"en", "ru", "ro", "ko"}
 _POLICY_KEYS = frozenset(
     {
@@ -411,11 +413,10 @@ class CloudTeacherRunner:
         for packet in packets:
             key = f"{source_digest}:{packet.index}:{packet.mapping_sha256}:{provider.name}"
             checkpoint_path = checkpoints / f"chunk-{packet.index:06d}.json"
-            checkpoint = self._load_checkpoint(
-                checkpoint_path, source_digest, packet, plan_sha256
-            )
+            checkpoint = self._load_checkpoint(checkpoint_path, source_digest, packet, plan_sha256)
             entry = usage["chunks"].get(key)
             if checkpoint is not None:
+                candidate_provenance = checkpoint.get("candidate_provenance")
                 completed = {
                     "status": "completed",
                     "duration_ms": packet.compact_duration_ms,
@@ -425,6 +426,17 @@ class CloudTeacherRunner:
                     "request_receipt": checkpoint["request_receipt"],
                     "completed_at": checkpoint.get("created_at"),
                 }
+                if (
+                    isinstance(candidate_provenance, dict)
+                    and candidate_provenance.get("recovered_offline_from_response_rejection")
+                    is True
+                ):
+                    completed["recovered_from_response_rejection"] = candidate_provenance.get(
+                        "response_rejection"
+                    )
+                    completed["recovered_from_response_rejection_sha256"] = (
+                        candidate_provenance.get("response_rejection_sha256")
+                    )
                 if entry != completed:
                     usage["chunks"][key] = completed
                     changed = True
@@ -433,15 +445,136 @@ class CloudTeacherRunner:
                 continue
             status = entry.get("status", "completed")
             if status == "uploading":
-                raise TranscriptionError(
-                    "a previous cloud upload has an unknown outcome; its reserved cost "
-                    "remains counted and operator reconciliation is required"
+                rejection_path = (
+                    self.output_dir
+                    / "provider-response-rejections"
+                    / f"packet-{packet.index:06d}.json"
                 )
+                if not rejection_path.is_file():
+                    raise TranscriptionError(
+                        "a previous cloud upload has an unknown outcome; its reserved cost "
+                        "remains counted and operator reconciliation is required"
+                    )
+                rejection = json.loads(rejection_path.read_text(encoding="utf-8"))
+                expected_rejection = {
+                    "schema_version": _RESPONSE_REJECTION_SCHEMA,
+                    "recording_sha256": source_digest,
+                    "packet_index": packet.index,
+                    "mapping_sha256": packet.mapping_sha256,
+                    "compaction_plan_sha256": plan_sha256,
+                    "provider": provider.name,
+                    "policy_sha256": self.policy.configuration_sha256,
+                }
+                if any(rejection.get(key) != value for key, value in expected_rejection.items()):
+                    raise TranscriptionError("orphaned provider response evidence binding mismatch")
+                rejection_sha256 = source_sha256(rejection_path)
+                entry = {
+                    "status": "response_rejected",
+                    "duration_ms": packet.compact_duration_ms,
+                    "original_retained_ms": packet.original_retained_ms,
+                    "estimated_cost_usd": entry["estimated_cost_usd"],
+                    "checkpoint": str(checkpoint_path),
+                    "request_receipt": rejection.get("request_receipt"),
+                    "response_sha256": rejection.get("response_sha256"),
+                    "response_rejection": str(rejection_path),
+                    "response_rejection_sha256": rejection_sha256,
+                    "failed_at": rejection.get("created_at"),
+                }
+                usage["chunks"][key] = entry
+                status = "response_rejected"
+                changed = True
             if status == "completed":
                 raise TranscriptionError(
                     "programme usage records a completed upload but its bound checkpoint "
                     "is missing; automatic re-upload is denied"
                 )
+            if status == "response_rejected":
+                rejection_path_value = entry.get("response_rejection")
+                rejection_sha256 = entry.get("response_rejection_sha256")
+                if not isinstance(rejection_path_value, str) or not isinstance(
+                    rejection_sha256, str
+                ):
+                    raise TranscriptionError(
+                        "programme usage has an unbound rejected provider response"
+                    )
+                rejection_path = Path(rejection_path_value)
+                if (
+                    not rejection_path.is_file()
+                    or source_sha256(rejection_path) != rejection_sha256
+                ):
+                    raise TranscriptionError(
+                        "rejected provider response evidence is missing or changed"
+                    )
+                rejection = json.loads(rejection_path.read_text(encoding="utf-8"))
+                expected = {
+                    "schema_version": _RESPONSE_REJECTION_SCHEMA,
+                    "recording_sha256": source_digest,
+                    "packet_index": packet.index,
+                    "mapping_sha256": packet.mapping_sha256,
+                    "compaction_plan_sha256": plan_sha256,
+                    "provider": provider.name,
+                    "policy_sha256": self.policy.configuration_sha256,
+                }
+                if any(rejection.get(key) != value for key, value in expected.items()):
+                    raise TranscriptionError("rejected provider response evidence binding mismatch")
+                response_document = rejection.get("response_document")
+                source_span_digest = rejection.get("source_span_sha256")
+                request_receipt = rejection.get("request_receipt")
+                response_sha256 = rejection.get("response_sha256")
+                if (
+                    isinstance(response_document, dict)
+                    and isinstance(source_span_digest, str)
+                    and isinstance(request_receipt, str)
+                    and request_receipt.strip()
+                    and isinstance(response_sha256, str)
+                ):
+                    try:
+                        candidate = ElevenLabsHTTPTransport._candidate(response_document)
+                    except TranscriptionError:
+                        continue
+                    recovered_at = datetime.now(timezone.utc).isoformat()
+                    recovered_checkpoint = {
+                        "schema_version": "dubbing.cloud-teacher-checkpoint.v1",
+                        "recording_sha256": source_digest,
+                        "source_span_sha256": source_span_digest,
+                        "packet_index": packet.index,
+                        "compact_duration_ms": packet.compact_duration_ms,
+                        "original_retained_ms": packet.original_retained_ms,
+                        "mapping_sha256": packet.mapping_sha256,
+                        "compaction_plan_sha256": plan_sha256,
+                        "mapping": packet.to_dict(),
+                        "provider": provider.name,
+                        "model": provider.model,
+                        "policy_sha256": self.policy.configuration_sha256,
+                        "operator_authorization_id": (self.policy.operator_authorization_id),
+                        "retention_mode": self.policy.retention_mode,
+                        "request_configuration": provider.build_request()["options"],
+                        "request_receipt": request_receipt,
+                        "estimated_cost_usd": entry["estimated_cost_usd"],
+                        "candidate": candidate,
+                        "candidate_provenance": {
+                            "transport": "elevenlabs-speech-to-text-http",
+                            "response_sha256": response_sha256,
+                            "recovered_offline_from_response_rejection": True,
+                            "response_rejection": str(rejection_path),
+                            "response_rejection_sha256": rejection_sha256,
+                        },
+                        "created_at": recovered_at,
+                    }
+                    _atomic_json(checkpoint_path, recovered_checkpoint)
+                    usage["chunks"][key] = {
+                        "status": "completed",
+                        "duration_ms": packet.compact_duration_ms,
+                        "original_retained_ms": packet.original_retained_ms,
+                        "estimated_cost_usd": entry["estimated_cost_usd"],
+                        "checkpoint": str(checkpoint_path),
+                        "request_receipt": request_receipt,
+                        "completed_at": recovered_at,
+                        "recovered_from_response_rejection": str(rejection_path),
+                        "recovered_from_response_rejection_sha256": rejection_sha256,
+                    }
+                    changed = True
+                continue
             raise TranscriptionError("programme usage contains an unsupported packet status")
         if changed:
             _atomic_json(self.programme_state, usage)
@@ -809,6 +942,15 @@ class CloudTeacherRunner:
                     )
                     reused = checkpoint is not None
                     if checkpoint is None:
+                        existing_entry = usage["chunks"].get(usage_key(packet))
+                        if (
+                            isinstance(existing_entry, dict)
+                            and existing_entry.get("status") == "response_rejected"
+                        ):
+                            raise TranscriptionError(
+                                "provider returned an unusable transcript for this packet; "
+                                "its cost remains counted and automatic re-upload is denied"
+                            )
                         audio = temporary_dir / f"chunk-{packet.index:06d}.flac"
                         extract_compacted_flac(source_path, packet, audio)
                         estimated_cost = (
@@ -827,8 +969,61 @@ class CloudTeacherRunner:
                         _atomic_json(self.programme_state, usage)
 
                         audio_bytes = audio.read_bytes()
+                        source_span_digest = source_sha256(audio)
                         request = provider.build_request()
-                        response = self.transport(request, audio_bytes, credential)
+                        try:
+                            response = self.transport(request, audio_bytes, credential)
+                        except CloudProviderResponseError as exc:
+                            rejection_path = (
+                                self.output_dir
+                                / "provider-response-rejections"
+                                / f"packet-{packet.index:06d}.json"
+                            )
+                            rejection = {
+                                "schema_version": _RESPONSE_REJECTION_SCHEMA,
+                                "recording_sha256": digest,
+                                "source_span_sha256": source_span_digest,
+                                "packet_index": packet.index,
+                                "compact_duration_ms": packet.compact_duration_ms,
+                                "mapping_sha256": packet.mapping_sha256,
+                                "compaction_plan_sha256": plan_sha256,
+                                "provider": provider.name,
+                                "model": provider.model,
+                                "policy_sha256": self.policy.configuration_sha256,
+                                "operator_authorization_id": (
+                                    self.policy.operator_authorization_id
+                                ),
+                                "request_receipt": exc.request_receipt,
+                                "response_sha256": exc.response_sha256,
+                                "response_document": exc.response_document,
+                                "response_body_text": exc.response_body_text,
+                                "error": str(exc),
+                                "estimated_cost_usd": estimated_cost,
+                                "automatic_retry_allowed": False,
+                                "giga_admission_allowed": False,
+                                "created_at": datetime.now(timezone.utc).isoformat(),
+                            }
+                            _atomic_json(rejection_path, rejection)
+                            usage["chunks"][usage_key(packet)] = {
+                                "status": "response_rejected",
+                                "duration_ms": packet.compact_duration_ms,
+                                "original_retained_ms": packet.original_retained_ms,
+                                "estimated_cost_usd": estimated_cost,
+                                "checkpoint": str(checkpoint_path),
+                                "request_receipt": exc.request_receipt,
+                                "response_sha256": exc.response_sha256,
+                                "response_rejection": str(rejection_path),
+                                "response_rejection_sha256": source_sha256(
+                                    rejection_path
+                                ),
+                                "failed_at": rejection["created_at"],
+                            }
+                            _atomic_json(self.programme_state, usage)
+                            raise TranscriptionError(
+                                "provider returned an unusable transcript; response evidence "
+                                "was preserved, its cost remains counted, and automatic retry "
+                                "is denied"
+                            ) from exc
                         candidate = response.get("candidate")
                         if not isinstance(candidate, dict):
                             raise TranscriptionError(
@@ -845,7 +1040,7 @@ class CloudTeacherRunner:
                         checkpoint = {
                             "schema_version": "dubbing.cloud-teacher-checkpoint.v1",
                             "recording_sha256": digest,
-                            "source_span_sha256": source_sha256(audio),
+                            "source_span_sha256": source_span_digest,
                             "packet_index": packet.index,
                             "compact_duration_ms": packet.compact_duration_ms,
                             "original_retained_ms": packet.original_retained_ms,

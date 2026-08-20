@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import tempfile
+import unicodedata
 import urllib.error
 import urllib.request
 import uuid
@@ -53,6 +54,30 @@ class CloudSpan:
 
 class CloudTransport(Protocol):
     def __call__(self, request: dict, audio: bytes, credential: str) -> dict: ...
+
+
+class CloudProviderResponseError(TranscriptionError):
+    """The provider returned an HTTP response that cannot be admitted.
+
+    This is distinct from an unknown network outcome: callers may durably record
+    the response evidence and its reserved cost, but must never retry the same
+    source packet automatically.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        request_receipt: str,
+        response_sha256: str,
+        response_document: dict | None,
+        response_body_text: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.request_receipt = request_receipt
+        self.response_sha256 = response_sha256
+        self.response_document = response_document
+        self.response_body_text = response_body_text
 
 
 _UNCERTAIN_PREFIX = "[UNCERTAIN:"
@@ -372,6 +397,7 @@ class ElevenLabsHTTPTransport:
                 "ElevenLabs Scribe response did not contain timestamped words"
             )
         segments = []
+        discarded_zero_duration_punctuation = []
         for item in raw_words:
             if not isinstance(item, dict) or item.get("type", "word") != "word":
                 continue
@@ -383,7 +409,22 @@ class ElevenLabsHTTPTransport:
                 raise TranscriptionError(
                     "ElevenLabs returned a malformed timestamped word"
                 ) from exc
-            if start_ms < 0 or end_ms <= start_ms or not value:
+            if start_ms < 0 or end_ms < start_ms or not value:
+                raise TranscriptionError("ElevenLabs returned invalid word content")
+            if end_ms == start_ms:
+                if all(
+                    unicodedata.category(character).startswith("P")
+                    for character in value
+                ):
+                    discarded_zero_duration_punctuation.append(
+                        {
+                            "start_ms": start_ms,
+                            "end_ms": end_ms,
+                            "text": value,
+                            "type": item.get("type", "word"),
+                        }
+                    )
+                    continue
                 raise TranscriptionError("ElevenLabs returned invalid word content")
             segments.append(
                 {
@@ -409,6 +450,9 @@ class ElevenLabsHTTPTransport:
             "segments": segments,
             "language": _language_code(document.get("language_code")),
             "language_probability": document.get("language_probability"),
+            "discarded_zero_duration_punctuation": (
+                discarded_zero_duration_punctuation
+            ),
         }
 
     def __call__(self, request: dict, audio: bytes, credential: str) -> dict:
@@ -430,7 +474,6 @@ class ElevenLabsHTTPTransport:
                 http_request, timeout=self.timeout_seconds
             ) as response:
                 response_bytes = response.read()
-                document = json.loads(response_bytes.decode("utf-8"))
                 request_id = response.headers.get("request-id") or response.headers.get(
                     "x-request-id"
                 )
@@ -439,12 +482,33 @@ class ElevenLabsHTTPTransport:
             raise TranscriptionError(
                 f"ElevenLabs transcription request failed with HTTP {exc.code}: {detail}"
             ) from exc
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
             raise TranscriptionError("ElevenLabs transcription request failed") from exc
         response_sha256 = hashlib.sha256(response_bytes).hexdigest()
+        request_receipt = request_id or f"response-sha256:{response_sha256}"
+        try:
+            response_body_text = response_bytes.decode("utf-8")
+            document = json.loads(response_body_text)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise CloudProviderResponseError(
+                "ElevenLabs returned a non-JSON transcription response",
+                request_receipt=request_receipt,
+                response_sha256=response_sha256,
+                response_document=None,
+                response_body_text=response_bytes.decode("utf-8", errors="replace"),
+            ) from exc
+        try:
+            candidate = self._candidate(document)
+        except TranscriptionError as exc:
+            raise CloudProviderResponseError(
+                str(exc),
+                request_receipt=request_receipt,
+                response_sha256=response_sha256,
+                response_document=document,
+            ) from exc
         return {
-            "candidate": self._candidate(document),
-            "request_receipt": request_id or f"response-sha256:{response_sha256}",
+            "candidate": candidate,
+            "request_receipt": request_receipt,
             "cost": None,
             "free_credit_consumed": None,
             "provenance": {

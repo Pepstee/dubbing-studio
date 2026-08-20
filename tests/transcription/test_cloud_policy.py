@@ -12,6 +12,7 @@ import pytest
 from dubbing.transcription.cloud import (
     CloudAdjudicator,
     CloudAuthorization,
+    CloudProviderResponseError,
     CloudSpan,
     ElevenLabsHTTPTransport,
     OfflineMockTransport,
@@ -504,6 +505,71 @@ def test_elevenlabs_parser_preserves_word_evidence():
     assert candidate["segments"][0]["confidence"] > 0.8
 
 
+def test_elevenlabs_http_200_malformed_candidate_is_typed_and_bound():
+    document = {
+        "language_code": "en",
+        "text": "bad timestamp",
+        "words": [
+            {
+                "type": "word",
+                "text": "bad",
+                "start": 1.0,
+                "end": 1.0,
+            }
+        ],
+    }
+    payload = json.dumps(document).encode()
+
+    class Response:
+        headers = {"request-id": "provider-request-1"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return payload
+
+    with (
+        patch("urllib.request.urlopen", return_value=Response()),
+        pytest.raises(CloudProviderResponseError, match="invalid word content") as error,
+    ):
+        ElevenLabsHTTPTransport()(
+            {
+                "provider": "elevenlabs",
+                "endpoint": "https://api.elevenlabs.io/v1/speech-to-text",
+                "options": {"model_id": "scribe_v2"},
+            },
+            b"private-audio",
+            "secret-never-persisted",
+        )
+
+    assert error.value.request_receipt == "provider-request-1"
+    assert error.value.response_sha256 == hashlib.sha256(payload).hexdigest()
+    assert error.value.response_document == document
+
+
+def test_elevenlabs_parser_discards_zero_duration_punctuation_only():
+    candidate = ElevenLabsHTTPTransport._candidate(
+        {
+            "language_code": "rus",
+            "text": "слово — word",
+            "words": [
+                {"type": "word", "text": "слово", "start": 0.1, "end": 0.5},
+                {"type": "word", "text": "—", "start": 0.5, "end": 0.5},
+                {"type": "word", "text": "word", "start": 0.6, "end": 1.0},
+            ],
+        }
+    )
+
+    assert [item["text"] for item in candidate["segments"]] == ["слово", "word"]
+    assert candidate["discarded_zero_duration_punctuation"] == [
+        {"start_ms": 500, "end_ms": 500, "text": "—", "type": "word"}
+    ]
+
+
 def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_path):
     source = tmp_path / "recording.wav"
     _silent_wave(source, duration_seconds=5)
@@ -678,6 +744,261 @@ def test_unknown_upload_outcome_remains_reserved_and_cannot_be_retried(tmp_path)
         with pytest.raises(TranscriptionError, match="unknown outcome"):
             runner.run(source, local)
 
+    assert transport.calls == 1
+
+
+def test_rejected_provider_response_is_preserved_counted_and_never_retried(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=5)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(500, 3_500, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=5_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            speech = SpeechRegion(500, 3_500, "sensitive")
+            return SpeechRegionPlan(self.identity, 5_000, (), (speech,), (speech,))
+
+    class RejectedResponseTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, _request, _audio, _credential):
+            self.calls += 1
+            raise CloudProviderResponseError(
+                "ElevenLabs returned invalid word content",
+                request_receipt="provider-request-1",
+                response_sha256="a" * 64,
+                response_document={"text": "private response", "words": []},
+            )
+
+    transport = RejectedResponseTransport()
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=transport,
+        speech_region_detector=Detector(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+
+    def fake_extract(_source, _packet, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    with (
+        patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}),
+        patch("dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract),
+    ):
+        with pytest.raises(TranscriptionError, match="response evidence was preserved"):
+            runner.run(source, local)
+        usage = json.loads((tmp_path / "programme-usage.json").read_text())
+        reservation = next(iter(usage["chunks"].values()))
+        assert reservation["status"] == "response_rejected"
+        assert reservation["estimated_cost_usd"] > 0
+        rejection_path = (
+            tmp_path / "teacher" / "provider-response-rejections" / "packet-000000.json"
+        )
+        rejection = json.loads(rejection_path.read_text())
+        assert rejection["request_receipt"] == "provider-request-1"
+        assert rejection["response_document"]["text"] == "private response"
+        assert rejection["automatic_retry_allowed"] is False
+        assert rejection["giga_admission_allowed"] is False
+        assert (
+            reservation["response_rejection_sha256"]
+            == hashlib.sha256(rejection_path.read_bytes()).hexdigest()
+        )
+        with pytest.raises(TranscriptionError, match="automatic re-upload is denied"):
+            runner.run(source, local)
+
+    assert transport.calls == 1
+    for evidence in tmp_path.rglob("*.json"):
+        assert "local-only" not in evidence.read_text()
+
+
+def test_rejected_response_can_be_recovered_offline_without_resend(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=5)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(500, 3_500, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=5_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            speech = SpeechRegion(500, 3_500, "sensitive")
+            return SpeechRegionPlan(self.identity, 5_000, (), (speech,), (speech,))
+
+    class OnceRejectedTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, _request, _audio, _credential):
+            self.calls += 1
+            raise CloudProviderResponseError(
+                "legacy parser rejected zero-duration punctuation",
+                request_receipt="provider-request-2",
+                response_sha256="b" * 64,
+                response_document={
+                    "language_code": "en",
+                    "text": "hello — careful world",
+                    "words": [
+                        {"type": "word", "text": "hello", "start": 0.5, "end": 1.0},
+                        {"type": "word", "text": "—", "start": 1.0, "end": 1.0},
+                        {"type": "word", "text": "careful", "start": 1.2, "end": 2.0},
+                        {"type": "word", "text": "world", "start": 2.2, "end": 3.5},
+                    ],
+                },
+            )
+
+    transport = OnceRejectedTransport()
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        tmp_path / "programme-usage.json",
+        transport=transport,
+        speech_region_detector=Detector(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+
+    def fake_extract(_source, _packet, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    with (
+        patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}),
+        patch("dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract),
+    ):
+        with pytest.raises(TranscriptionError, match="response evidence was preserved"):
+            runner.run(source, local)
+        report = runner.run(source, local)
+        replay = runner.run(source, local)
+
+    assert transport.calls == 1
+    assert report["chunks"][0]["reused"] is True
+    assert replay["chunks"][0]["reused"] is True
+    usage = json.loads((tmp_path / "programme-usage.json").read_text())
+    entry = next(iter(usage["chunks"].values()))
+    assert entry["status"] == "completed"
+    assert entry["recovered_from_response_rejection_sha256"]
+    checkpoint = json.loads(
+        (tmp_path / "teacher" / "checkpoints" / "chunk-000000.json").read_text()
+    )
+    assert checkpoint["candidate_provenance"]["recovered_offline_from_response_rejection"] is True
+    assert checkpoint["candidate"]["discarded_zero_duration_punctuation"][0]["text"] == "—"
+
+
+def test_orphaned_response_rejection_repairs_uploading_ledger_without_resend(tmp_path):
+    source = tmp_path / "recording.wav"
+    _silent_wave(source, duration_seconds=5)
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    local = TranscriptionResult(
+        segments=(TranscriptSegment(500, 3_500, "hello careful world", language="en"),),
+        text="hello careful world",
+        backend="faster-whisper",
+        model="large-v3",
+        device="cuda",
+        language="en",
+        duration_ms=5_000,
+        confidence_available=False,
+        source_sha256=digest,
+    )
+
+    class Detector:
+        @property
+        def identity(self):
+            return "test-sensitive-vad"
+
+        def detect(self, _source):
+            speech = SpeechRegion(500, 3_500, "sensitive")
+            return SpeechRegionPlan(self.identity, 5_000, (), (speech,), (speech,))
+
+    class RejectedTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, _request, _audio, _credential):
+            self.calls += 1
+            raise CloudProviderResponseError(
+                "unrecoverable provider response",
+                request_receipt="provider-request-3",
+                response_sha256="c" * 64,
+                response_document={"text": "", "words": []},
+            )
+
+    programme_state = tmp_path / "programme-usage.json"
+    transport = RejectedTransport()
+    runner = CloudTeacherRunner(
+        CloudTeacherPolicy.from_dict(_teacher_policy()),
+        tmp_path / "teacher",
+        programme_state,
+        transport=transport,
+        speech_region_detector=Detector(),
+        now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+
+    def fake_extract(_source, _packet, destination):
+        destination.write_bytes(b"lossless-flac-fixture")
+
+    from dubbing.transcription import teacher as teacher_module
+
+    real_atomic_json = teacher_module._atomic_json
+
+    def crash_before_rejected_ledger_commit(path, document):
+        if path == programme_state and any(
+            entry.get("status") == "response_rejected"
+            for entry in document.get("chunks", {}).values()
+        ):
+            raise OSError("simulated crash before rejection ledger commit")
+        real_atomic_json(path, document)
+
+    with (
+        patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}),
+        patch("dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract),
+        patch(
+            "dubbing.transcription.teacher._atomic_json",
+            side_effect=crash_before_rejected_ledger_commit,
+        ),
+        pytest.raises(OSError, match="simulated crash"),
+    ):
+        runner.run(source, local)
+
+    uploading = json.loads(programme_state.read_text())
+    assert next(iter(uploading["chunks"].values()))["status"] == "uploading"
+    assert next((tmp_path / "teacher" / "provider-response-rejections").iterdir())
+
+    with (
+        patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}),
+        patch("dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract),
+        pytest.raises(TranscriptionError, match="automatic re-upload is denied"),
+    ):
+        runner.run(source, local)
+
+    repaired = json.loads(programme_state.read_text())
+    assert next(iter(repaired["chunks"].values()))["status"] == "response_rejected"
     assert transport.calls == 1
 
 

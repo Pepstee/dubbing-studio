@@ -1,0 +1,131 @@
+{
+  "artifact_responsibility": "Machine-readable evidence for the first bounded live ElevenLabs shadow canary. This is an outcome receipt distinct from the immutable span-preparation manifest and does not authorize transcript replacement or GIGA admission.",
+  "completed_at": "2026-08-21T08:47:09+09:00",
+  "inputs": {
+    "parent_local_result_sha256": "1f94f2250937ec09b41393907872632016fd4910ec6ca5464a20f56cde379dff",
+    "preparation_manifest": "/Users/admin/Library/Application Support/DubbingStudio/canaries/elevenlabs-lesson06-v10-nine-uncertain/preparation-manifest.json",
+    "preparation_manifest_sha256": "5fcf3c4bf992d3e6b338f8a78a268a2cd43f872701547703d206007caa2ec825",
+    "prepared_packet_count": 7,
+    "prepared_source_duration_seconds": 180.0,
+    "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+  },
+  "live_execution": {
+    "completed_packet_count": 6,
+    "estimated_cost_usd": 0.010694688888888887,
+    "provider": "elevenlabs",
+    "rejected_response_count": 1,
+    "reserved_audio_seconds": 175.004,
+    "state": "/Users/admin/Library/Application Support/DubbingStudio/canaries/elevenlabs-lesson06-v10-nine-uncertain-live/state/usage.json",
+    "state_sha256": "7f3b330eeb905952c5064485eac0f8be9b7ac77e83b3c164332bfcb8b21d64f0",
+    "usable_cloud_quality": "PASS for all 6 completed packets"
+  },
+  "model": "scribe-v2",
+  "packet_reports": {
+    "hard-chamomile-code-switch": "e47f450ba40bb0dd7d988b7f594538fa9192d1fb7ab9fc846c1f10a35f3a83e9",
+    "hard-growing-code-switch": "66e42fcf64ab0d360d983baeacd8df6d451185cd40d7422577440f296317a834",
+    "hard-leaf-greenery": "3dd37d44b972c0eb4a2f3687eeda23d1bbbe2a3bc52e49db5acb4e7ea0786000",
+    "hard-live-lives": "71229927f9b85c31c99e1afe19d66e9872c25b159550f276a9f7ae81d1274880",
+    "hard-properties-code-switch": "292c9535c2ad868e80ecc78bbbee24d894789b81e0f0d6083f58571b1bd6213b",
+    "hard-yard-code-switch": "b0ef80a317ef10363d486865477968d7ceb01ad88a2715fd203c7b18ba8b8926"
+  },
+  "policy": {
+    "file": "deploy/cloud_teacher/lesson06-v10-nine-uncertain-shadow.json",
+    "file_sha256": "384dd28b7a0c5c6e5fb94ec4e35051a1a89f4d184f77c47d59112a253b4b9e99",
+    "maximum_estimated_cost_usd": 0.02,
+    "maximum_total_audio_seconds": 181,
+    "model_improvement_opt_out_attested": true,
+    "policy_configuration_sha256": "bf13a37d5144e115a3360537f9733617bdd83ca2eaaa6ed3cc35988e6c7ccbe0",
+    "retention_mode": "provider-storage; model-improvement opt-out verified in ElevenLabs account UI on 2026-08-21"
+  },
+  "provider_response_incident": {
+    "automatic_reupload_allowed": false,
+    "legacy_unrecoverable_packet": "hard-independent-hole",
+    "legacy_unrecoverable_reserved_seconds": 56.722,
+    "recovered_offline_packet": "hard-properties-code-switch",
+    "recovered_response_sha256": "f3d83cba184f8b133dbee79735d93f237caa42462c587b991fd4e35dc0de125e",
+    "root_cause": "Scribe v2 emitted an em dash as a type=word item with identical start/end timestamps. The parser now discards only zero-duration punctuation and still rejects zero-duration lexical words.",
+    "status": "FAIL_CLOSED_WITH_ONE_LEGACY_RESPONSE_LOST"
+  },
+  "replay": {
+    "checkpoint_inventory_sha256": "084be85b6c843f2dd0811adf3b3d346f28e338aae6e036970f0a8d162840e832",
+    "completed_packets_reused": 6,
+    "giga_outbox_file_count_after_replay": 0,
+    "ledger_byte_identical": true,
+    "legacy_rejected_packet_resent": false,
+    "request_receipt_inventory_sha256": "9183de33596a8bb346c7992fabeef5b7ddb6064bf22433598939260e8d5c3e2c"
+  },
+  "safety": {
+    "cloud_is_human_ground_truth": false,
+    "giga_admission_allowed": false,
+    "local_transcript_overwritten": false,
+    "model_improvement_enabled": false
+  },
+  "schema_version": "dubbing.cloud-teacher-live-shadow-receipt.v1",
+  "silver_corpus": {
+    "accepted_count": 5,
+    "accepted_rows_are_neighboring_non_uncertain_segments": true,
+    "cloud_only_unverified_count": 18,
+    "local_uncertain_rows_accepted": 0,
+    "note": "Agreement rows remain silver training candidates only; no row is human ground truth or GIGA evidence."
+  },
+  "status": "PARTIAL_FAIL_CLOSED",
+  "uncertainty_evidence": [
+    {
+      "cloud_text": null,
+      "local_text": "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]",
+      "parent_end_ms": 471982,
+      "parent_start_ms": 442002,
+      "packet": "hard-independent-hole",
+      "verdict": "NO_CLOUD_CANDIDATE_RESPONSE_REJECTED"
+    },
+    {
+      "cloud_text": "",
+      "local_text": "Продолжение следует...",
+      "parent_end_ms": 673662,
+      "parent_start_ms": 673642,
+      "packet": "hard-leaf-greenery",
+      "verdict": "CLOUD_FOUND_NO_SPEECH_IN_LOCAL_STOCK_HALLUCINATION_INTERVAL"
+    },
+    {
+      "cloud_text": "Life, lives.",
+      "local_text": "Лайв, лайвз.",
+      "parent_end_ms": 1323116,
+      "parent_start_ms": 1322236,
+      "packet": "hard-live-lives",
+      "verdict": "CLOUD_FAVORS_ENGLISH_ORTHOGRAPHY_HUMAN_REVIEW_REQUIRED"
+    },
+    {
+      "cloud_text": "Или... / So, medicinal properties это, э-э-э, не цели, а-а-а, возмож--",
+      "local_text": "Или yes. / So medicinal properties это не цели, а возможности.",
+      "parent_end_ms": 1986345,
+      "parent_start_ms": 1970215,
+      "packet": "hard-properties-code-switch",
+      "verdict": "PARTIAL_CODE_SWITCH_EVIDENCE_NO_AUTOMATIC_REPLACEMENT"
+    },
+    {
+      "cloud_text": "Такое, / court,",
+      "local_text": "Такое. / Код.",
+      "parent_end_ms": 2486691,
+      "parent_start_ms": 2482191,
+      "packet": "hard-yard-code-switch",
+      "verdict": "ONE_CORROBORATED_ONE_DISAGREEMENT"
+    },
+    {
+      "cloud_text": "Там растёт что-то?",
+      "local_text": "Там растет что-то?",
+      "parent_end_ms": 2612704,
+      "parent_start_ms": 2611654,
+      "packet": "hard-growing-code-switch",
+      "verdict": "SEMANTIC_CORROBORATION_ORTHOGRAPHIC_YO_DIFFERENCE"
+    },
+    {
+      "cloud_text": "ромашек,",
+      "local_text": "ромашек",
+      "parent_end_ms": 3243194,
+      "parent_start_ms": 3242754,
+      "packet": "hard-chamomile-code-switch",
+      "verdict": "CORROBORATED_PUNCTUATION_ONLY_DIFFERENCE"
+    }
+  ],
+  "verdict": "ElevenLabs is useful as a bounded adjudicator and silver-data teacher, but this run does not resolve every uncertainty and does not certify cloud output as ground truth."
+}

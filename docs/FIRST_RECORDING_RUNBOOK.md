@@ -199,6 +199,12 @@ manually. A failure leaves the local package untouched. Review `report.json`,
 both candidate transcripts and the excluded disagreement set; do not interpret a cloud-only span
 as ground truth.
 
+If the provider returns HTTP success but its timestamped response is malformed, the current client
+stores a hash-bound `provider-response-rejections/packet-*.json`, counts the reservation and denies
+resend. Re-running the same command may only reparse that saved response locally; it cannot upload
+the packet again. A legacy `response_rejected` entry without a saved response is permanently
+non-retryable and must remain in the programme ledger.
+
 ## 5. Review
 
 Open the private review interface through Tailscale. Verify:
