@@ -44,6 +44,8 @@ _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
+_COORDINATOR_VERSION = "adaptive-long-form-v11"
+_SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 
 
 @dataclass(frozen=True)
@@ -206,6 +208,29 @@ def detect_silence_intervals(
             noise_db=noise_db,
         )
     )
+
+
+def _interval_coverage_ms(
+    start_ms: int,
+    end_ms: int,
+    intervals: tuple[tuple[int, int], ...],
+) -> int:
+    clipped = sorted(
+        (max(start_ms, start), min(end_ms, end))
+        for start, end in intervals
+        if start < end_ms and end > start_ms
+    )
+    if not clipped:
+        return 0
+    covered = 0
+    cursor_start, cursor_end = clipped[0]
+    for next_start, next_end in clipped[1:]:
+        if next_start <= cursor_end:
+            cursor_end = max(cursor_end, next_end)
+        else:
+            covered += cursor_end - cursor_start
+            cursor_start, cursor_end = next_start, next_end
+    return covered + cursor_end - cursor_start
 
 
 def _detect_silence_seconds(
@@ -575,7 +600,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
-            "coordinator_version": "adaptive-long-form-v10",
+            "coordinator_version": _COORDINATOR_VERSION,
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
             "source_sha256": digest,
@@ -607,6 +632,11 @@ class AdaptiveLongFormCoordinator:
                 "independent_minimum_consensus_tokens": (
                     _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
                 ),
+            },
+            "silence_admission": {
+                "policy": _SILENCE_ADMISSION_POLICY,
+                "required_energy_coverage_ratio": 1.0,
+                "semantic_vad_zero_regions_required": True,
             },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
@@ -1327,9 +1357,52 @@ class AdaptiveLongFormCoordinator:
         audio: Path,
         chunk: AdaptiveChunk,
         options: TranscriptionOptions,
+        *,
+        energy_silence_coverage_ms: int = 0,
     ) -> tuple[TranscriptionResult, dict]:
         attempts: list[dict] = []
         duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
+        if (
+            energy_silence_coverage_ms == duration_ms
+            and self.speech_region_detector is not None
+        ):
+            plan = self.speech_region_detector.detect(audio)
+            silence_attempt = {
+                "kind": "chunk-silence-classification",
+                "status": (
+                    "CONFIRMED_SILENCE"
+                    if not plan.selected_regions
+                    else "SEMANTIC_SPEECH_DETECTED"
+                ),
+                "policy": _SILENCE_ADMISSION_POLICY,
+                "energy_silence_coverage_ms": energy_silence_coverage_ms,
+                "energy_silence_coverage_ratio": 1.0,
+                "speech_region_plan": plan.to_dict(),
+            }
+            attempts.append(silence_attempt)
+            if not plan.selected_regions:
+                result = TranscriptionResult(
+                    segments=(),
+                    text="",
+                    backend=self.backend.identity.split(":", 1)[0],
+                    model=self.backend.identity,
+                    device="adaptive-local",
+                    language=options.language,
+                    duration_ms=duration_ms,
+                    confidence_available=False,
+                    provenance={
+                        "coordinator": _COORDINATOR_VERSION,
+                        "classification": "confirmed_silence",
+                        "silence_admission_policy": _SILENCE_ADMISSION_POLICY,
+                        "energy_silence_coverage_ms": energy_silence_coverage_ms,
+                        "speech_region_detector": plan.detector_identity,
+                    },
+                )
+                return result, {
+                    "attempts": attempts,
+                    "selected_attempt": 0,
+                    "targeted_retry_exhausted": False,
+                }
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
         result = self._retry_detected_chunk_language(
             audio, result, options, duration_ms, attempts
@@ -1632,7 +1705,22 @@ class AdaptiveLongFormCoordinator:
                 with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
                     audio = Path(directory) / f"{chunk.index:06d}.wav"
                     self._extract(source, streams, chunk, audio)
-                    result, receipt = self._decode_chunk(audio, chunk, options)
+                    duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
+                    energy_silence_coverage_ms = _interval_coverage_ms(
+                        chunk.extract_start_ms,
+                        chunk.extract_end_ms,
+                        silence_intervals,
+                    )
+                    result, receipt = self._decode_chunk(
+                        audio,
+                        chunk,
+                        options,
+                        energy_silence_coverage_ms=(
+                            energy_silence_coverage_ms
+                            if energy_silence_coverage_ms == duration_ms
+                            else 0
+                        ),
+                    )
                 _atomic_json(checkpoint, result.to_dict())
                 _atomic_json(receipt_path, receipt)
             completed.append((chunk, result))
@@ -1657,7 +1745,7 @@ class AdaptiveLongFormCoordinator:
             confidence_available=any(item.confidence is not None for item in segments),
             source_sha256=digest,
             provenance={
-                "coordinator": "adaptive-long-form-v10",
+                "coordinator": _COORDINATOR_VERSION,
                 "chunk_count": len(chunks),
                 "audio_streams": [stream.to_dict() for stream in streams],
                 "channel_preservation": "all-streams-merged-with-discrete-channels-v1",

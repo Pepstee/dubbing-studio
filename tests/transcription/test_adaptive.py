@@ -189,6 +189,174 @@ class _IndependentBackend(TranscriptionBackend):
         )
 
 
+class _SpeechDetector:
+    identity = "fixture:sensitive-vad"
+
+    def __init__(self, regions=()):
+        self.calls = 0
+        self.regions = regions
+
+    def detect(self, audio):
+        self.calls += 1
+        duration_ms = 65_407
+        return SpeechRegionPlan(
+            self.identity,
+            duration_ms,
+            tuple(item for item in self.regions if item.source_pass == "strict"),
+            tuple(item for item in self.regions if item.source_pass == "sensitive"),
+            self.regions,
+        )
+
+
+def _lesson_silence_chunk():
+    return AdaptiveChunk(
+        index=15,
+        start_ms=962_400,
+        end_ms=1_023_807,
+        extract_start_ms=960_400,
+        extract_end_ms=1_025_807,
+        boundary_reason="long-silence",
+    )
+
+
+def _single_chunk_planner(chunk):
+    return SimpleNamespace(
+        plan=lambda duration_ms, silence_centres, silence_intervals=(): (chunk,),
+        to_dict=lambda: {"fixture": "single-chunk"},
+    )
+
+
+def test_dual_evidence_silence_skips_asr_and_replays_empty_checkpoint(tmp_path):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"source")
+    chunk = _lesson_silence_chunk()
+    backend = _IndependentBackend()
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=_single_chunk_planner(chunk),
+        speech_region_detector=detector,
+    )
+
+    def extract(source, streams, selected_chunk, output):
+        output.write_bytes(b"confirmed silence")
+
+    with patch(
+        "dubbing.transcription.adaptive.probe_media",
+        return_value=MediaProbe(
+            1_034_499,
+            6,
+            (AudioStream(0, "pcm", 1, 16_000),),
+        ),
+    ), patch(
+        "dubbing.transcription.adaptive.detect_silence_intervals",
+        return_value=((955_118, 1_034_499),),
+    ), patch.object(coordinator, "_extract", side_effect=extract):
+        result, _ = coordinator.run(source)
+        replay, _ = coordinator.run(source)
+
+    assert result.segments == ()
+    assert result.text == ""
+    assert replay == result
+    assert backend.calls == 0
+    assert detector.calls == 1
+    chunk_document = json.loads(
+        (tmp_path / "job" / "chunks" / "000015.json").read_text()
+    )
+    assert chunk_document["segments"] == []
+    assert chunk_document["provenance"]["classification"] == "confirmed_silence"
+    receipt = json.loads(
+        (tmp_path / "job" / "receipts" / "000015.json").read_text()
+    )
+    assert receipt["selected_attempt"] == 0
+    assert receipt["targeted_retry_exhausted"] is False
+    assert receipt["attempts"][0]["status"] == "CONFIRMED_SILENCE"
+    assert receipt["attempts"][0]["energy_silence_coverage_ms"] == 65_407
+    assert not any(
+        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
+    )
+
+
+def test_silence_short_of_full_extracted_range_preserves_asr(tmp_path):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"source")
+    chunk = _lesson_silence_chunk()
+    backend = _IndependentBackend()
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=_single_chunk_planner(chunk),
+        speech_region_detector=detector,
+    )
+
+    with patch(
+        "dubbing.transcription.adaptive.probe_media",
+        return_value=MediaProbe(
+            1_034_499,
+            6,
+            (AudioStream(0, "pcm", 1, 16_000),),
+        ),
+    ), patch(
+        "dubbing.transcription.adaptive.detect_silence_intervals",
+        return_value=((955_118, chunk.extract_end_ms - 1),),
+    ), patch.object(
+        coordinator,
+        "_extract",
+        side_effect=lambda source, streams, selected_chunk, output: output.write_bytes(
+            b"not fully covered"
+        ),
+    ):
+        coordinator.run(source)
+
+    assert backend.calls == 1
+    assert detector.calls == 0
+
+
+def test_semantic_vad_speech_overrides_full_energy_silence(tmp_path):
+    chunk = _lesson_silence_chunk()
+    backend = _IndependentBackend()
+    detector = _SpeechDetector((SpeechRegion(20_000, 21_000, "sensitive"),))
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        speech_region_detector=detector,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"quiet speech")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        chunk,
+        TranscriptionOptions(),
+        energy_silence_coverage_ms=65_407,
+    )
+
+    assert result.text == "clean ordinary phrase"
+    assert backend.calls == 1
+    assert detector.calls == 1
+    assert receipt["attempts"][0]["status"] == "SEMANTIC_SPEECH_DETECTED"
+
+
+def test_energy_silence_without_configured_detector_preserves_asr(tmp_path):
+    chunk = _lesson_silence_chunk()
+    backend = _IndependentBackend()
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"unverified silence")
+
+    result, _ = coordinator._decode_chunk(
+        audio,
+        chunk,
+        TranscriptionOptions(),
+        energy_silence_coverage_ms=65_407,
+    )
+
+    assert result.text == "clean ordinary phrase"
+    assert backend.calls == 1
+
+
 class _ConstantBackend(TranscriptionBackend):
     def __init__(self, identity):
         self._identity = identity
