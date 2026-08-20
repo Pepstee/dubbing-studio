@@ -53,6 +53,10 @@ class Detector(LanguageDetector):
         return "ru", 0.99
 
 
+class SpeechDetector:
+    identity = "fake:speech-regions"
+
+
 class Translator(TranslationBackend):
     @property
     def identity(self):
@@ -219,9 +223,12 @@ def test_adaptive_capture_owns_long_file_chunking_and_preserves_checkpoints(tmp_
     quality = evaluate_transcript_quality(
         result, expected_duration_ms=result.duration_ms
     ).to_dict()
+    speech_detector = SpeechDetector()
     service = CaptureService(
         tmp_path / "workspace",
         FakeASR(),
+        silence_verification_detector=speech_detector,
+        targeted_retry_region_detector=None,
         processing_dir="processing",
         transcription_strategy="adaptive",
         transcription_chunk_seconds=240,
@@ -234,18 +241,47 @@ def test_adaptive_capture_owns_long_file_chunking_and_preserves_checkpoints(tmp_
         "dubbing.apps.personal_capture.service.media_duration_ms",
         return_value=3_600_000,
     ), patch(
-        "dubbing.apps.personal_capture.service.AdaptiveLongFormCoordinator.run",
-        return_value=(result, quality),
-    ) as run:
+        "dubbing.apps.personal_capture.service.AdaptiveLongFormCoordinator"
+    ) as coordinator:
+        coordinator.return_value.run.return_value = (result, quality)
         outcome = service.process(source)
 
     assert outcome.state == "review"
+    run = coordinator.return_value.run
     assert run.call_count == 1
     assert run.call_args.args[0] == source.resolve()
     assert run.call_args.kwargs["source_digest"] == hashlib.sha256(b"audio").hexdigest()
+    assert (
+        coordinator.call_args.kwargs["silence_verification_detector"]
+        is speech_detector
+    )
+    assert coordinator.call_args.kwargs["targeted_retry_region_detector"] is None
     manifest = json.loads((outcome.package_path / "manifest.json").read_text())
     assert manifest["execution"]["transcription_strategy"] == "adaptive"
     assert manifest["execution"]["transcription_chunk_seconds"] == 240
+    assert (
+        manifest["execution"]["silence_verification_detector"]
+        == speech_detector.identity
+    )
+    assert manifest["execution"]["targeted_retry_region_detector"] is None
+
+
+def test_legacy_capture_detector_binds_both_provenance_roles(tmp_path):
+    source = media(tmp_path / "legacy.wav")
+    detector = SpeechDetector()
+    service = CaptureService(
+        tmp_path / "workspace",
+        FakeASR(),
+        speech_region_detector=detector,
+        resumable=False,
+    )
+
+    outcome = service.process(source)
+
+    manifest = json.loads((outcome.package_path / "manifest.json").read_text())
+    assert manifest["execution"]["speech_region_detector"] == detector.identity
+    assert manifest["execution"]["silence_verification_detector"] == detector.identity
+    assert manifest["execution"]["targeted_retry_region_detector"] == detector.identity
 
 
 def test_one_long_file_is_automatically_split_into_internal_checkpoints(tmp_path):

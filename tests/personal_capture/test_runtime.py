@@ -31,8 +31,13 @@ def test_production_runtime_wires_distinct_manifest_bound_retry_model(tmp_path):
     assert service.transcription_backend.identity != service.transcription_retry_backend.identity
     assert service.transcription_retry_backend.model_revision == "c" * 40
     assert service.transcription_retry_backend.compute_type == "int8_float16"
-    assert service.speech_region_detector.identity.startswith(
+    assert service.speech_region_detector is None
+    assert service.silence_verification_detector.identity.startswith(
         "faster-whisper-silero:strict=0.2:sensitive=0.1"
+    )
+    assert (
+        service.targeted_retry_region_detector
+        is service.silence_verification_detector
     )
     assert service.diarizer.cluster_threshold == 0.85
     assert service.diarization_embedding_backend is service.diarizer
@@ -79,6 +84,8 @@ def test_runtime_wires_whisperkit_primary_and_mlx_retry_without_translation(tmp_
             "asr_retry_backend": "mlx",
             "asr_retry_temperatures": [0.0],
             "translation_backend": "none",
+            "vad_silence_verification_enabled": True,
+            "vad_targeted_retry_region_detection_enabled": False,
         }
     )
     manifest = {
@@ -100,3 +107,7 @@ def test_runtime_wires_whisperkit_primary_and_mlx_retry_without_translation(tmp_
     assert service.transcription_retry_backend.temperature == (0.0,)
     assert service.translation_backend is None
     assert service.language_detector is None
+    assert service.silence_verification_detector.identity.startswith(
+        "faster-whisper-silero:strict=0.2:sensitive=0.1"
+    )
+    assert service.targeted_retry_region_detector is None

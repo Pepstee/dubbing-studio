@@ -129,6 +129,12 @@ def validate_config(document: dict) -> dict:
         raise ValueError(
             "production Personal Capture requires vad_backend=faster-whisper-silero"
         )
+    for key in (
+        "vad_silence_verification_enabled",
+        "vad_targeted_retry_region_detection_enabled",
+    ):
+        if key in defaults and not isinstance(defaults[key], bool):
+            raise ValueError(f"defaults.{key} must be boolean")
     strict_vad = float(defaults.get("vad_strict_threshold", 0))
     sensitive_vad = float(defaults.get("vad_sensitive_threshold", 0))
     if not 0 < sensitive_vad < strict_vad < 1:

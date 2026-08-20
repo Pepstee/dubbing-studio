@@ -39,6 +39,8 @@ def deployment_config(tmp_path: Path) -> dict:
             ],
             "maximum_audio_candidate_channels": 4,
             "vad_backend": "faster-whisper-silero",
+            "vad_silence_verification_enabled": True,
+            "vad_targeted_retry_region_detection_enabled": True,
             "vad_strict_threshold": 0.2,
             "vad_sensitive_threshold": 0.1,
             "vad_minimum_speech_ms": 40,
@@ -129,6 +131,19 @@ def test_checked_in_mac_deployment_is_schema_valid():
     assert config["machine"] == "Artioms-MacBook-Air"
     assert config["defaults"]["asr_backend"] == "whisperkit"
     assert config["defaults"]["asr_retry_backend"] == "mlx"
+    assert config["defaults"]["vad_silence_verification_enabled"] is True
+    assert config["defaults"]["vad_targeted_retry_region_detection_enabled"] is False
+
+
+def test_checked_in_gigabyte_deployment_keeps_both_vad_roles_explicit():
+    repository = Path(__file__).resolve().parents[2]
+
+    config = load_config(
+        repository / "deploy" / "personal_capture" / "gigabyte" / "personal-capture.json"
+    )
+
+    assert config["defaults"]["vad_silence_verification_enabled"] is True
+    assert config["defaults"]["vad_targeted_retry_region_detection_enabled"] is True
 
 
 @pytest.mark.parametrize(
@@ -145,6 +160,12 @@ def test_checked_in_mac_deployment_is_schema_valid():
                 vad_strict_threshold=0.2,
             ),
             "VAD thresholds",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                vad_targeted_retry_region_detection_enabled="no",
+            ),
+            "vad_targeted_retry_region_detection_enabled",
         ),
         (
             lambda config: config["defaults"].update(

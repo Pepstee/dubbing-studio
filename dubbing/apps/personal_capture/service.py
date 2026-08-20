@@ -106,6 +106,13 @@ class CaptureOutcome:
     error: str | None = None
 
 
+class _UnsetSpeechRegionDetector:
+    pass
+
+
+_UNSET_SPEECH_REGION_DETECTOR = _UnsetSpeechRegionDetector()
+
+
 class CaptureService:
     """Turn stable inbox media into reviewable, provenance-bearing packages."""
 
@@ -116,6 +123,12 @@ class CaptureService:
         *,
         transcription_retry_backend: TranscriptionBackend | None = None,
         speech_region_detector: SpeechRegionDetector | None = None,
+        silence_verification_detector: (
+            SpeechRegionDetector | None | _UnsetSpeechRegionDetector
+        ) = _UNSET_SPEECH_REGION_DETECTOR,
+        targeted_retry_region_detector: (
+            SpeechRegionDetector | None | _UnsetSpeechRegionDetector
+        ) = _UNSET_SPEECH_REGION_DETECTOR,
         diarizer: DiarizationBackend | None = None,
         diarization_embedding_backend: DiarizationBackend | None = None,
         speaker_constraints: SpeakerConstraints | None = None,
@@ -156,6 +169,16 @@ class CaptureService:
         self.transcription_backend = transcription_backend
         self.transcription_retry_backend = transcription_retry_backend
         self.speech_region_detector = speech_region_detector
+        self.silence_verification_detector = (
+            speech_region_detector
+            if isinstance(silence_verification_detector, _UnsetSpeechRegionDetector)
+            else silence_verification_detector
+        )
+        self.targeted_retry_region_detector = (
+            speech_region_detector
+            if isinstance(targeted_retry_region_detector, _UnsetSpeechRegionDetector)
+            else targeted_retry_region_detector
+        )
         self.resumable = resumable
         if transcription_strategy not in {"adaptive", "fixed"}:
             raise ValueError("transcription_strategy must be adaptive or fixed")
@@ -273,6 +296,16 @@ class CaptureService:
                     "speech_region_detector": (
                         self.speech_region_detector.identity
                         if self.speech_region_detector is not None
+                        else None
+                    ),
+                    "silence_verification_detector": (
+                        self.silence_verification_detector.identity
+                        if self.silence_verification_detector is not None
+                        else None
+                    ),
+                    "targeted_retry_region_detector": (
+                        self.targeted_retry_region_detector.identity
+                        if self.targeted_retry_region_detector is not None
                         else None
                     ),
                     "diarization_chunk_seconds": self.diarization_chunk_seconds,
@@ -429,7 +462,12 @@ class CaptureService:
                         ),
                         language_retry_policy={"ko": "always"},
                         retry_backend=self.transcription_retry_backend,
-                        speech_region_detector=self.speech_region_detector,
+                        silence_verification_detector=(
+                            self.silence_verification_detector
+                        ),
+                        targeted_retry_region_detector=(
+                            self.targeted_retry_region_detector
+                        ),
                         audio_candidate_policies=self.audio_candidate_policies,
                         maximum_audio_candidate_channels=(
                             self.maximum_audio_candidate_channels

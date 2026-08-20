@@ -101,17 +101,27 @@ def build_service(config: dict) -> CaptureService:
             local_files_only=defaults.get("offline_models_required", False),
             model_revision=model_manifest["models"]["translation"]["revision"],
         )
+    speech_region_detector = FasterWhisperSileroSpeechRegionDetector(
+        strict_threshold=defaults["vad_strict_threshold"],
+        sensitive_threshold=defaults["vad_sensitive_threshold"],
+        minimum_speech_ms=defaults["vad_minimum_speech_ms"],
+        minimum_silence_ms=defaults["vad_minimum_silence_ms"],
+        speech_pad_ms=defaults["vad_speech_pad_ms"],
+        maximum_region_seconds=defaults["vad_maximum_region_seconds"],
+    )
     return CaptureService(
         config["workspace"]["wsl_path"],
         primary_asr,
         transcription_retry_backend=retry_asr,
-        speech_region_detector=FasterWhisperSileroSpeechRegionDetector(
-            strict_threshold=defaults["vad_strict_threshold"],
-            sensitive_threshold=defaults["vad_sensitive_threshold"],
-            minimum_speech_ms=defaults["vad_minimum_speech_ms"],
-            minimum_silence_ms=defaults["vad_minimum_silence_ms"],
-            speech_pad_ms=defaults["vad_speech_pad_ms"],
-            maximum_region_seconds=defaults["vad_maximum_region_seconds"],
+        silence_verification_detector=(
+            speech_region_detector
+            if defaults.get("vad_silence_verification_enabled", True)
+            else None
+        ),
+        targeted_retry_region_detector=(
+            speech_region_detector
+            if defaults.get("vad_targeted_retry_region_detection_enabled", True)
+            else None
         ),
         diarizer=diarizer,
         diarization_embedding_backend=diarization_embedding_backend,

@@ -41,6 +41,8 @@
     ],
     "maximum_audio_candidate_channels": 4,
     "vad_backend": "faster-whisper-silero",
+    "vad_silence_verification_enabled": true,
+    "vad_targeted_retry_region_detection_enabled": false,
     "vad_strict_threshold": 0.2,
     "vad_sensitive_threshold": 0.1,
     "vad_minimum_speech_ms": 40,
