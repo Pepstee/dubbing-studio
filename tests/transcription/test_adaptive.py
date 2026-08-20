@@ -1133,6 +1133,115 @@ def test_explicit_none_disables_retry_isolation_but_keeps_silence_detector(tmp_p
     assert not any(item["kind"] == "targeted-speech-region-plan" for item in attempts)
 
 
+class _PostAudioBackend(TranscriptionBackend):
+    def __init__(self, segments):
+        self.calls = 0
+        self.segments = segments
+
+    @property
+    def identity(self):
+        return "fixture:post-audio"
+
+    def transcribe(self, audio, options=None):
+        self.calls += 1
+        return TranscriptionResult(
+            segments=self.segments,
+            text=" ".join(segment.text for segment in self.segments),
+            backend="fixture",
+            model="post-audio",
+            device="test",
+            language="en",
+            duration_ms=74_980,
+            confidence_available=False,
+        )
+
+
+def test_wholly_post_audio_segment_is_rejected_without_targeted_retry(tmp_path):
+    backend = _PostAudioBackend(
+        (
+            TranscriptSegment(0, 10_000, "real speech"),
+            TranscriptSegment(
+                74_180,
+                74_980,
+                "And...",
+                words=(TranscriptWord(74_180, 74_980, " And..."),),
+            ),
+        )
+    )
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"audio")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        AdaptiveChunk(0, 0, 64_202, 0, 64_202, "fixture"),
+        TranscriptionOptions(),
+    )
+
+    assert backend.calls == 1
+    assert result.text == "real speech"
+    assert len(result.segments) == 1
+    assert (result.segments[0].start_ms, result.segments[0].end_ms) == (0, 10_000)
+    assert result.segments[0].text == "real speech"
+    assert receipt["targeted_retry_exhausted"] is False
+    rejection = next(
+        item
+        for item in receipt["attempts"]
+        if item["kind"] == "out-of-audio-segment-rejection"
+    )
+    assert rejection["audio_duration_ms"] == 64_202
+    assert rejection["raw_quality"]["status"] == "REPROCESS_REQUIRED"
+    assert rejection["changes"] == [
+        {
+            "action": "DROPPED_WHOLE_SEGMENT",
+            "segment_index": 1,
+            "observed_start_ms": 74_180,
+            "observed_end_ms": 74_980,
+        }
+    ]
+    assert not any(
+        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
+    )
+
+
+def test_segment_overlapping_audio_end_is_clamped_by_word_midpoint(tmp_path):
+    backend = _PostAudioBackend(
+        (
+            TranscriptSegment(
+                63_800,
+                65_000,
+                "kept dropped",
+                words=(
+                    TranscriptWord(63_800, 64_100, " kept"),
+                    TranscriptWord(64_300, 65_000, " dropped"),
+                ),
+            ),
+        )
+    )
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"audio")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        AdaptiveChunk(0, 0, 64_202, 0, 64_202, "fixture"),
+        TranscriptionOptions(),
+    )
+
+    assert backend.calls == 1
+    assert result.text == "kept"
+    assert result.segments[0].end_ms == 64_202
+    assert result.segments[0].words == (TranscriptWord(63_800, 64_100, " kept"),)
+    assert receipt["targeted_retry_exhausted"] is False
+    rejection = next(
+        item
+        for item in receipt["attempts"]
+        if item["kind"] == "out-of-audio-segment-rejection"
+    )
+    assert rejection["changes"][0]["action"] == "CLAMPED_OVERLAPPING_SEGMENT"
+    assert rejection["changes"][0]["dropped_word_count"] == 1
+
+
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):
     class _LanguageBackend(TranscriptionBackend):
         def __init__(self):

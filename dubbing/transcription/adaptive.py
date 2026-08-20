@@ -45,8 +45,9 @@ _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
 _LANGUAGE_RETRY_CONTEXT_MS = 1_000
-_COORDINATOR_VERSION = "adaptive-long-form-v15"
+_COORDINATOR_VERSION = "adaptive-long-form-v16"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
+_AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
 
 
 class _UnsetSpeechRegionDetector:
@@ -1428,6 +1429,8 @@ class AdaptiveLongFormCoordinator:
                     "targeted_retry_exhausted": False,
                 }
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
+        raw_quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
+        result = self._enforce_audio_bounds(result, duration_ms, raw_quality, attempts)
         result = self._retry_detected_chunk_language(audio, result, options, duration_ms, attempts)
         result = self._resolve_uncertain_turns(
             audio,
@@ -1463,6 +1466,80 @@ class AdaptiveLongFormCoordinator:
             "selected_attempt": selected_attempt,
             "targeted_retry_exhausted": selected_attempt is None,
         }
+
+    @staticmethod
+    def _enforce_audio_bounds(
+        result: TranscriptionResult,
+        duration_ms: int,
+        raw_quality: TranscriptQualityReport,
+        attempts: list[dict],
+    ) -> TranscriptionResult:
+        """Reject decoder timestamps that cannot refer to the extracted audio."""
+        normalized: list[TranscriptSegment] = []
+        changes: list[dict] = []
+        for segment_index, segment in enumerate(result.segments):
+            if segment.start_ms >= duration_ms:
+                changes.append(
+                    {
+                        "action": "DROPPED_WHOLE_SEGMENT",
+                        "segment_index": segment_index,
+                        "observed_start_ms": segment.start_ms,
+                        "observed_end_ms": segment.end_ms,
+                    }
+                )
+                continue
+            if segment.end_ms <= duration_ms:
+                normalized.append(segment)
+                continue
+            words = []
+            for word in segment.words:
+                midpoint_ms = word.start_ms + (word.end_ms - word.start_ms) // 2
+                if not 0 <= midpoint_ms < duration_ms:
+                    continue
+                start_ms = max(0, word.start_ms)
+                end_ms = min(duration_ms, word.end_ms)
+                if end_ms > start_ms:
+                    words.append(replace(word, start_ms=start_ms, end_ms=end_ms))
+            text = segment.text
+            if segment.words and words:
+                text = "".join(word.text for word in words).strip()
+            normalized.append(
+                replace(
+                    segment,
+                    end_ms=duration_ms,
+                    text=text,
+                    words=tuple(words),
+                )
+            )
+            changes.append(
+                {
+                    "action": "CLAMPED_OVERLAPPING_SEGMENT",
+                    "segment_index": segment_index,
+                    "observed_start_ms": segment.start_ms,
+                    "observed_end_ms": segment.end_ms,
+                    "normalized_start_ms": segment.start_ms,
+                    "normalized_end_ms": duration_ms,
+                    "dropped_word_count": len(segment.words) - len(words),
+                }
+            )
+        if not changes:
+            return result
+        attempts.append(
+            {
+                "kind": "out-of-audio-segment-rejection",
+                "policy": _AUDIO_BOUNDS_POLICY,
+                "audio_duration_ms": duration_ms,
+                "raw_quality": raw_quality.to_dict(),
+                "changes": changes,
+            }
+        )
+        segments = tuple(normalized)
+        return replace(
+            result,
+            segments=segments,
+            text=" ".join(segment.text for segment in segments),
+            duration_ms=duration_ms,
+        )
 
     @staticmethod
     def _average_log_probability(result: TranscriptionResult) -> float | None:
