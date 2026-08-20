@@ -1,7 +1,9 @@
-import json
 import hashlib
+import json
+import shutil
 import wave
 from array import array
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -590,7 +592,7 @@ def test_quality_issue_timestamps_drive_targeted_retry_not_the_whole_recording()
     ]
 
 
-def test_v3_checkpoint_manifest_migrates_only_when_other_contract_fields_match(tmp_path):
+def test_legacy_checkpoint_manifest_fails_closed(tmp_path):
     backend = _RetryingBackend()
     coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
     source = tmp_path / "source.mov"
@@ -605,9 +607,10 @@ def test_v3_checkpoint_manifest_migrates_only_when_other_contract_fields_match(t
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps(existing), encoding="utf-8")
 
-    coordinator._admit_manifest(expected)
+    with pytest.raises(TranscriptionError, match="does not match"):
+        coordinator._admit_manifest(expected)
 
-    assert json.loads(manifest.read_text(encoding="utf-8")) == expected
+    assert json.loads(manifest.read_text(encoding="utf-8")) == existing
 
 
 def test_detector_role_change_invalidates_adaptive_checkpoint_manifest(tmp_path):
@@ -1633,6 +1636,227 @@ def test_processing_cap_change_or_full_source_change_rejects_checkpoint(tmp_path
         source.write_bytes(b"changed full source tail")
         with pytest.raises(TranscriptionError, match="does not match"):
             coordinator.run(source, processing_end_ms=6_000)
+
+
+def _run_checkpoint_fixture(coordinator, source, duration_ms, extract):
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(
+                duration_ms,
+                source.stat().st_size,
+                (AudioStream(0, "pcm", 1, 16_000),),
+            ),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=(),
+        ),
+        patch.object(coordinator, "_extract", side_effect=extract),
+    ):
+        return coordinator.run(source)
+
+
+def _canonical_document_hash(document):
+    payload = json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def test_valid_replay_reextracts_without_redecoding(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    extractions = []
+
+    def extract(source, streams, chunk, output):
+        extractions.append(chunk.index)
+        output.write_bytes(b"stable chunk zero")
+
+    first, _ = _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    replay, _ = _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+
+    assert replay == first
+    assert backend.calls == 1
+    assert extractions == [0, 0]
+    receipt = json.loads((tmp_path / "job/receipts/000000.json").read_text())
+    assert receipt["schema_version"] == "dubbing.adaptive-chunk-receipt.v1"
+    assert receipt["full_source_sha256"] == hashlib.sha256(b"source").hexdigest()
+    assert receipt["chunk"]["index"] == 0
+
+
+@pytest.mark.parametrize("missing", ["checkpoint", "receipt"])
+def test_replay_rejects_incomplete_checkpoint_pair(tmp_path, missing):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(b"stable chunk zero")
+
+    _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    target = (
+        tmp_path / "job/chunks/000000.json"
+        if missing == "checkpoint"
+        else tmp_path / "job/receipts/000000.json"
+    )
+    target.unlink()
+
+    with pytest.raises(TranscriptionError, match="checkpoint pair is incomplete"):
+        _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    assert backend.calls == 1
+
+
+def test_replay_rejects_checkpoint_document_tampering(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(b"stable chunk zero")
+
+    _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    checkpoint = tmp_path / "job/chunks/000000.json"
+    document = json.loads(checkpoint.read_text())
+    document["text"] = "tampered"
+    checkpoint.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(TranscriptionError, match="checkpoint document hash mismatch"):
+        _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    assert backend.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", "legacy"),
+        ("coordinator_version", "forged"),
+        ("quality_policy_version", "forged"),
+        ("full_source_sha256", "0" * 64),
+        ("manifest_sha256", "0" * 64),
+        ("chunk", {"index": 0}),
+    ],
+)
+def test_replay_rejects_receipt_binding_tampering(tmp_path, field, value):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(b"stable chunk zero")
+
+    _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    receipt_path = tmp_path / "job/receipts/000000.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt[field] = value
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(TranscriptionError, match=f"binding mismatch: 000000:{field}"):
+        _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    assert backend.calls == 1
+
+
+def test_replay_rejects_copied_equal_duration_chunk_pair(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    chunks = (
+        AdaptiveChunk(0, 0, 1_000, 0, 1_000, "fixture"),
+        AdaptiveChunk(1, 1_000, 2_000, 1_000, 2_000, "fixture"),
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=_single_chunk_planner(chunks[0]),
+    )
+    coordinator.planner = SimpleNamespace(
+        plan=lambda duration_ms, silence_centres, silence_intervals=(): chunks,
+        to_dict=lambda: {"fixture": "two-equal-chunks"},
+    )
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(f"chunk-{chunk.index}".encode())
+
+    _run_checkpoint_fixture(coordinator, source, 2_000, extract)
+    shutil.copyfile(
+        tmp_path / "job/chunks/000000.json",
+        tmp_path / "job/chunks/000001.json",
+    )
+    shutil.copyfile(
+        tmp_path / "job/receipts/000000.json",
+        tmp_path / "job/receipts/000001.json",
+    )
+
+    with pytest.raises(TranscriptionError, match="binding mismatch: 000001:chunk"):
+        _run_checkpoint_fixture(coordinator, source, 2_000, extract)
+    assert backend.calls == 2
+
+
+def test_replay_reextracts_and_rejects_forged_audio_binding(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    chunks = (
+        AdaptiveChunk(0, 0, 1_000, 0, 1_000, "fixture"),
+        AdaptiveChunk(1, 1_000, 2_000, 1_000, 2_000, "fixture"),
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=SimpleNamespace(
+            plan=lambda duration_ms, silence_centres, silence_intervals=(): chunks,
+            to_dict=lambda: {"fixture": "two-equal-chunks"},
+        ),
+    )
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(f"chunk-{chunk.index}".encode())
+
+    _run_checkpoint_fixture(coordinator, source, 2_000, extract)
+    checkpoint_zero = json.loads((tmp_path / "job/chunks/000000.json").read_text())
+    receipt_zero = json.loads((tmp_path / "job/receipts/000000.json").read_text())
+    checkpoint_one = tmp_path / "job/chunks/000001.json"
+    receipt_one = tmp_path / "job/receipts/000001.json"
+    forged_receipt = json.loads(receipt_one.read_text())
+    checkpoint_one.write_text(json.dumps(checkpoint_zero), encoding="utf-8")
+    forged_receipt["checkpoint_document_sha256"] = _canonical_document_hash(
+        checkpoint_zero
+    )
+    forged_receipt["extracted_audio_sha256"] = receipt_zero["extracted_audio_sha256"]
+    receipt_one.write_text(json.dumps(forged_receipt), encoding="utf-8")
+
+    with pytest.raises(TranscriptionError, match="extracted audio hash mismatch: 000001"):
+        _run_checkpoint_fixture(coordinator, source, 2_000, extract)
+    assert backend.calls == 2
+
+
+def test_initial_decode_rejects_backend_source_hash_mismatch(tmp_path):
+    class _WrongSourceBackend(_IndependentBackend):
+        def transcribe(self, audio, options=None):
+            result = super().transcribe(audio, options)
+            return replace(result, source_sha256="f" * 64)
+
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _WrongSourceBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    def extract(source, streams, chunk, output):
+        output.write_bytes(b"stable chunk zero")
+
+    with pytest.raises(TranscriptionError, match="backend source hash mismatch"):
+        _run_checkpoint_fixture(coordinator, source, 1_000, extract)
+    assert not (tmp_path / "job/chunks/000000.json").exists()
+    assert not (tmp_path / "job/receipts/000000.json").exists()
 
 
 @pytest.mark.parametrize("processing_end_ms", [0, -1, 10_001, 1.5, True])

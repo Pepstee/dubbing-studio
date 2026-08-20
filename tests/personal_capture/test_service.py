@@ -44,7 +44,7 @@ class FakeASR(TranscriptionBackend):
             language="ru",
             duration_ms=1000,
             confidence_available=False,
-            source_sha256="a" * 64,
+            source_sha256=hashlib.sha256(Path(audio).read_bytes()).hexdigest(),
         )
 
 

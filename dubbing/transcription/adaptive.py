@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -45,7 +46,8 @@ _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
 _LANGUAGE_RETRY_CONTEXT_MS = 1_000
-_COORDINATOR_VERSION = "adaptive-long-form-v16"
+_COORDINATOR_VERSION = "adaptive-long-form-v17"
+_CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
 
@@ -459,6 +461,17 @@ def _atomic_json(path: Path, document: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _document_sha256(document: dict) -> str:
+    payload = json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _normalize(text: str) -> str:
     return " ".join(re.findall(r"\w+", text.casefold(), flags=re.UNICODE))
 
@@ -708,18 +721,10 @@ class AdaptiveLongFormCoordinator:
                 existing = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as exc:
                 raise TranscriptionError("adaptive checkpoint manifest is malformed") from exc
-            compatible_v3 = existing.get("coordinator_version") == "adaptive-long-form-v3"
-            if compatible_v3:
-                migrated = dict(existing)
-                migrated["coordinator_version"] = expected["coordinator_version"]
-                migrated["targeted_retry"] = expected["targeted_retry"]
-                compatible_v3 = migrated == expected
-            if existing != expected and not compatible_v3:
+            if existing != expected:
                 raise TranscriptionError(
                     "adaptive checkpoint does not match source or configuration"
                 )
-            if compatible_v3:
-                _atomic_json(path, expected)
         else:
             _atomic_json(path, expected)
 
@@ -1880,31 +1885,84 @@ class AdaptiveLongFormCoordinator:
             silence_intervals=silence_intervals,
         )
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self._admit_manifest(self._manifest(source, digest, probe, chunks, effective_duration_ms))
+        expected_manifest = self._manifest(
+            source,
+            digest,
+            probe,
+            chunks,
+            effective_duration_ms,
+        )
+        self._admit_manifest(expected_manifest)
+        manifest_sha256 = _document_sha256(expected_manifest)
         streams = probe.audio_streams
         completed: list[tuple[AdaptiveChunk, TranscriptionResult]] = []
         for chunk in chunks:
             checkpoint = self.checkpoint_dir / "chunks" / f"{chunk.index:06d}.json"
             receipt_path = self.checkpoint_dir / "receipts" / f"{chunk.index:06d}.json"
-            if checkpoint.is_file():
+            checkpoint_exists = checkpoint.is_file()
+            receipt_exists = receipt_path.is_file()
+            if checkpoint_exists != receipt_exists:
+                raise TranscriptionError(
+                    f"adaptive chunk checkpoint pair is incomplete: {chunk.index:06d}"
+                )
+            if checkpoint_exists:
                 try:
-                    result = transcription_result_from_dict(
-                        json.loads(checkpoint.read_text(encoding="utf-8"))
-                    )
+                    checkpoint_document = json.loads(checkpoint.read_text(encoding="utf-8"))
+                    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                    result = transcription_result_from_dict(checkpoint_document)
                 except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
                     raise TranscriptionError(
-                        f"malformed adaptive chunk: {checkpoint.name}"
+                        f"malformed adaptive chunk checkpoint pair: {checkpoint.name}"
                     ) from exc
-                if any(item.text == _FAILED_SPAN_TEXT for item in result.segments):
-                    checkpoint.unlink()
-                    receipt_path.unlink(missing_ok=True)
-                    result = None
+                expected_bindings = {
+                    "schema_version": _CHUNK_RECEIPT_SCHEMA,
+                    "coordinator_version": _COORDINATOR_VERSION,
+                    "quality_policy_version": QUALITY_POLICY_VERSION,
+                    "full_source_sha256": digest,
+                    "manifest_sha256": manifest_sha256,
+                    "chunk": chunk.to_dict(),
+                }
+                for name, expected_value in expected_bindings.items():
+                    if receipt.get(name) != expected_value:
+                        raise TranscriptionError(
+                            f"adaptive chunk receipt binding mismatch: {chunk.index:06d}:{name}"
+                        )
+                if receipt.get("checkpoint_document_sha256") != _document_sha256(
+                    checkpoint_document
+                ):
+                    raise TranscriptionError(
+                        f"adaptive chunk checkpoint document hash mismatch: {chunk.index:06d}"
+                    )
+                extracted_audio_sha256 = receipt.get("extracted_audio_sha256")
+                if not isinstance(extracted_audio_sha256, str) or not re.fullmatch(
+                    r"[a-f0-9]{64}", extracted_audio_sha256
+                ):
+                    raise TranscriptionError(
+                        f"adaptive chunk extracted audio hash is malformed: {chunk.index:06d}"
+                    )
+                if (
+                    result.source_sha256 is not None
+                    and result.source_sha256 != extracted_audio_sha256
+                ):
+                    raise TranscriptionError(
+                        f"adaptive chunk backend source hash mismatch: {chunk.index:06d}"
+                    )
+                with tempfile.TemporaryDirectory(
+                    prefix="dubbing-adaptive-replay-"
+                ) as directory:
+                    replay_audio = Path(directory) / f"{chunk.index:06d}.wav"
+                    self._extract(source, streams, chunk, replay_audio)
+                    if source_sha256(replay_audio) != extracted_audio_sha256:
+                        raise TranscriptionError(
+                            f"adaptive chunk extracted audio hash mismatch: {chunk.index:06d}"
+                        )
             else:
                 result = None
             if result is None:
                 with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
                     audio = Path(directory) / f"{chunk.index:06d}.wav"
                     self._extract(source, streams, chunk, audio)
+                    extracted_audio_sha256 = source_sha256(audio)
                     duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
                     energy_silence_coverage_ms = _interval_coverage_ms(
                         chunk.extract_start_ms,
@@ -1921,7 +1979,30 @@ class AdaptiveLongFormCoordinator:
                             else 0
                         ),
                     )
-                _atomic_json(checkpoint, result.to_dict())
+                    if (
+                        result.source_sha256 is not None
+                        and result.source_sha256 != extracted_audio_sha256
+                    ):
+                        raise TranscriptionError(
+                            f"adaptive chunk backend source hash mismatch: {chunk.index:06d}"
+                        )
+                checkpoint_document = result.to_dict()
+                receipt = dict(receipt)
+                receipt.update(
+                    {
+                        "schema_version": _CHUNK_RECEIPT_SCHEMA,
+                        "coordinator_version": _COORDINATOR_VERSION,
+                        "quality_policy_version": QUALITY_POLICY_VERSION,
+                        "full_source_sha256": digest,
+                        "manifest_sha256": manifest_sha256,
+                        "chunk": chunk.to_dict(),
+                        "extracted_audio_sha256": extracted_audio_sha256,
+                        "checkpoint_document_sha256": _document_sha256(
+                            checkpoint_document
+                        ),
+                    }
+                )
+                _atomic_json(checkpoint, checkpoint_document)
                 _atomic_json(receipt_path, receipt)
             completed.append((chunk, result))
             _atomic_json(
