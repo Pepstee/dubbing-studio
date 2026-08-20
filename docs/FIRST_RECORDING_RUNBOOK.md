@@ -176,8 +176,9 @@ dubbing-cloud-teacher "$inbox/2026-07-30-full-day.wav" \
   --keychain-account "$USER"
 ```
 
-This command remains blocked until the provider data-use opt-out is attested in the policy and
-the credential is available from the explicitly selected macOS Keychain item. The existing item
+This command fails closed unless the provider data-use opt-out is attested in the policy and
+the credential is available from the explicitly selected macOS Keychain item. The month-one
+policy records the opt-out verified in the ElevenLabs account UI on 2026-08-21. The existing item
 uses service `dubbing-studio-elevenlabs` and account `$USER`. To update it without placing the API
 key in shell history or process arguments, keep `-w` last so `security` prompts:
 
