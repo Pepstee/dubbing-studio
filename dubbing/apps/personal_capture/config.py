@@ -58,15 +58,11 @@ def validate_config(document: dict) -> dict:
 
     defaults = document["defaults"]
     for key in (
+        "asr_backend",
         "asr_model",
-        "asr_device",
-        "asr_compute_type",
+        "asr_retry_backend",
         "asr_retry_model",
-        "asr_retry_device",
-        "asr_retry_compute_type",
-        "translation_target",
-        "translation_model",
-        "translation_device",
+        "translation_backend",
         "diarization_device",
         "segmentation_model",
         "embedding_model",
@@ -74,15 +70,53 @@ def validate_config(document: dict) -> dict:
     ):
         if not isinstance(defaults.get(key), str) or not defaults[key]:
             raise ValueError(f"defaults.{key} must be a non-empty string")
-    if defaults.get("asr_backend") != "faster-whisper":
-        raise ValueError("production Personal Capture requires asr_backend=faster-whisper")
+    supported_asr_backends = {"faster-whisper", "mlx", "whisperkit"}
+    if defaults["asr_backend"] not in supported_asr_backends:
+        raise ValueError("defaults.asr_backend is not supported")
+    if defaults["asr_retry_backend"] not in supported_asr_backends:
+        raise ValueError("defaults.asr_retry_backend is not supported")
     if defaults.get("offline_models_required") is not True:
         raise ValueError("production Personal Capture requires offline_models_required=true")
     for key in ("asr_model", "asr_retry_model", "translation_model"):
-        if not Path(defaults[key]).is_absolute():
+        if key == "translation_model" and defaults["translation_backend"] == "none":
+            continue
+        if key not in defaults or not Path(defaults[key]).is_absolute():
             raise ValueError(f"defaults.{key} must be an absolute local model directory")
     if Path(defaults["asr_model"]).resolve() == Path(defaults["asr_retry_model"]).resolve():
         raise ValueError("defaults.asr_retry_model must be independent from defaults.asr_model")
+    for prefix in ("asr", "asr_retry"):
+        backend = defaults[f"{prefix}_backend"]
+        if backend == "faster-whisper":
+            for suffix in ("device", "compute_type"):
+                key = f"{prefix}_{suffix}"
+                if not isinstance(defaults.get(key), str) or not defaults[key]:
+                    raise ValueError(f"defaults.{key} must be a non-empty string")
+        elif backend == "whisperkit":
+            executable_key = f"{prefix}_executable"
+            model_name_key = f"{prefix}_model_name"
+            if not Path(defaults.get(executable_key, "")).is_absolute():
+                raise ValueError(f"defaults.{executable_key} must be an absolute path")
+            if not isinstance(defaults.get(model_name_key), str) or not defaults[model_name_key]:
+                raise ValueError(f"defaults.{model_name_key} must be a non-empty string")
+            port = int(defaults.get(f"{prefix}_server_port", 0))
+            if not 1 <= port <= 65_535:
+                raise ValueError(f"defaults.{prefix}_server_port must be a valid port")
+        else:
+            temperatures = defaults.get(f"{prefix}_temperatures", [0.0])
+            if (
+                not isinstance(temperatures, list)
+                or not temperatures
+                or any(not isinstance(value, (int, float)) or value < 0 for value in temperatures)
+            ):
+                raise ValueError(
+                    f"defaults.{prefix}_temperatures must contain non-negative numbers"
+                )
+    if defaults["translation_backend"] not in {"nllb", "none"}:
+        raise ValueError("defaults.translation_backend must be nllb or none")
+    if defaults["translation_backend"] == "nllb":
+        for key in ("translation_target", "translation_model", "translation_device"):
+            if not isinstance(defaults.get(key), str) or not defaults[key]:
+                raise ValueError(f"defaults.{key} must be a non-empty string")
     if not Path(defaults["model_manifest"]).is_absolute():
         raise ValueError("defaults.model_manifest must be an absolute path")
     if defaults.get("resumable") is not True:

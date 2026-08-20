@@ -23,6 +23,7 @@ def deployment_config(tmp_path: Path) -> dict:
         },
         "defaults": {
             "asr_backend": "faster-whisper",
+            "asr_retry_backend": "faster-whisper",
             "resumable": True,
             "transcription_strategy": "adaptive",
             "transcription_chunk_seconds": 240,
@@ -58,6 +59,7 @@ def deployment_config(tmp_path: Path) -> dict:
             "asr_retry_device": "cuda",
             "asr_retry_compute_type": "int8_float16",
             "translation_target": "en",
+            "translation_backend": "nllb",
             "translation_model": str(tmp_path / "translation-model"),
             "translation_device": "cuda",
             "diarization_device": "cpu",
@@ -96,6 +98,37 @@ def test_canonical_config_is_valid(tmp_path):
     path.write_text(json.dumps(config), encoding="utf-8")
 
     assert load_config(path) == config
+
+
+def test_mac_provider_pair_can_disable_nonessential_translation(tmp_path):
+    config = deployment_config(tmp_path)
+    config["defaults"].update(
+        {
+            "asr_backend": "whisperkit",
+            "asr_model_name": "large-v3",
+            "asr_executable": "/opt/homebrew/bin/whisperkit-cli",
+            "asr_server_port": 50060,
+            "asr_retry_backend": "mlx",
+            "asr_retry_temperatures": [0.0],
+            "translation_backend": "none",
+        }
+    )
+    config["defaults"].pop("translation_model")
+    config["defaults"].pop("translation_device")
+
+    assert validate_config(config) == config
+
+
+def test_checked_in_mac_deployment_is_schema_valid():
+    repository = Path(__file__).resolve().parents[2]
+
+    config = load_config(
+        repository / "deploy" / "personal_capture" / "mac" / "personal-capture.json"
+    )
+
+    assert config["machine"] == "Artioms-MacBook-Air"
+    assert config["defaults"]["asr_backend"] == "whisperkit"
+    assert config["defaults"]["asr_retry_backend"] == "mlx"
 
 
 @pytest.mark.parametrize(

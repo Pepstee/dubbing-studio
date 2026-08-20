@@ -66,3 +66,37 @@ def test_runtime_separates_pyannote_diarization_from_titanet_embeddings(tmp_path
 
     assert service.diarizer.model == config["defaults"]["pyannote_model"]
     assert service.diarization_embedding_backend.cluster_threshold == 0.85
+
+
+def test_runtime_wires_whisperkit_primary_and_mlx_retry_without_translation(tmp_path):
+    config = deployment_config(tmp_path)
+    config["defaults"].update(
+        {
+            "asr_backend": "whisperkit",
+            "asr_model_name": "large-v3",
+            "asr_executable": "/opt/homebrew/bin/whisperkit-cli",
+            "asr_server_port": 50060,
+            "asr_retry_backend": "mlx",
+            "asr_retry_temperatures": [0.0],
+            "translation_backend": "none",
+        }
+    )
+    manifest = {
+        "models": {
+            "asr": {"revision": "a" * 40},
+            "asr_retry": {"revision": "c" * 40},
+        }
+    }
+
+    with patch(
+        "dubbing.apps.personal_capture.runtime.verify_model_manifest",
+        return_value=manifest,
+    ), patch("dubbing.apps.personal_capture.runtime.WhisperKitServerProcess") as server:
+        server.return_value.endpoint = "http://127.0.0.1:50060"
+        service = build_service(config)
+
+    assert service.transcription_backend.model == "large-v3"
+    assert service.transcription_retry_backend.model == config["defaults"]["asr_retry_model"]
+    assert service.transcription_retry_backend.temperature == (0.0,)
+    assert service.translation_backend is None
+    assert service.language_detector is None

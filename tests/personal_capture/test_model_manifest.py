@@ -163,3 +163,51 @@ def test_model_manifest_rejects_changed_diarization_weights(tmp_path):
 
     with pytest.raises(ValueError, match="does not match"):
         verify_model_manifest(config)
+
+
+def test_model_manifest_binds_internal_mlx_cache_symlinks_without_translation(tmp_path):
+    config = deployment_config(tmp_path)
+    cache = tmp_path / "models--mlx"
+    snapshot = cache / "snapshots" / ("c" * 40)
+    blobs = cache / "blobs"
+    snapshot.mkdir(parents=True)
+    blobs.mkdir()
+    for name, content in (("config", b"{}"), ("weights", b"model")):
+        blob = blobs / name
+        blob.write_bytes(content)
+        target = snapshot / ("config.json" if name == "config" else "weights.safetensors")
+        target.symlink_to(blob)
+    asr = _model(tmp_path / "asr-model", {"config.json": b"{}"})
+    segmentation, embedding = _diarization_models(tmp_path)
+    config["defaults"].update(
+        {
+            "asr_backend": "whisperkit",
+            "asr_model": str(asr),
+            "asr_retry_backend": "mlx",
+            "asr_retry_model": str(snapshot),
+            "translation_backend": "none",
+        }
+    )
+
+    create_model_manifest(
+        asr_directory=asr,
+        asr_revision="a" * 40,
+        asr_backend="whisperkit",
+        asr_retry_directory=snapshot,
+        asr_retry_revision="c" * 40,
+        asr_retry_backend="mlx",
+        translation_directory=None,
+        translation_revision=None,
+        translation_backend="none",
+        segmentation_model=segmentation,
+        embedding_model=embedding,
+        output=config["defaults"]["model_manifest"],
+    )
+
+    document = verify_model_manifest(config)
+
+    assert document["models"]["asr_retry"]["cache_symlinks"] == {
+        "config.json": "blobs/config",
+        "weights.safetensors": "blobs/weights",
+    }
+    assert "translation" not in document["models"]

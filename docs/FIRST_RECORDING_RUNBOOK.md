@@ -22,6 +22,23 @@ private review token. A static file check alone cannot produce a ready report.
 The exact model commit revisions and every self-contained model-file hash must
 also match `defaults.model_manifest`.
 
+On the canonical Mac host, use the checked-in host configuration. The token option creates a
+private `0600` token only if it is absent and never prints or overwrites it:
+
+```bash
+cd /Users/admin/Documents/dubbing-studio
+.venv/bin/dubbing-capture-preflight \
+  --config deploy/personal_capture/mac/personal-capture.json \
+  --prepare \
+  --generate-review-token \
+  --load-models \
+  --output /Users/admin/Documents/giga-user/life-logging/audio-processing/state/mac-preflight.json
+```
+
+The Mac deployment uses the existing WhisperKit primary, cached MLX independent retry and Sherpa
+diarization models. It disables translation rather than making the first recording depend on an
+uninstalled NLLB model. This does not weaken original-language transcript quality or review gates.
+
 ## 2. Transfer atomically
 
 Never copy directly to its final filename. Copy using a hidden `.partial`
@@ -66,8 +83,7 @@ benefit from a downmix or isolated channel, it creates and adjudicates those can
 the operator must not pre-process or split the recording. Normalization is not enabled in the
 production policy because it failed the human-corrected difficult-span benchmark.
 
-For a direct Mac control-plane run, use the existing WhisperKit model as the primary and an
-already-cached MLX model as the independent rejected-span adjudicator:
+For an ASR-only diagnostic on the Mac, the lower-level control-plane command remains available:
 
 ```bash
 dubbing-long-transcribe "/path/to/recording.wav" \
@@ -86,6 +102,16 @@ model directory or an unambiguous Hugging Face cache entry. If it cannot resolve
 the run stops before transcription and performs no download. Faster-Whisper can be selected with
 `--retry-backend faster-whisper --retry-model /path/to/existing/ctranslate2-model`; it is always
 constructed with offline-only model loading.
+
+Do not use this lower-level command as the first-recording production path because it does not
+construct the diarization/review package. The Mac Personal Capture watcher is the single
+end-to-end path:
+
+```bash
+.venv/bin/dubbing-capture-watch \
+  --config deploy/personal_capture/mac/personal-capture.json \
+  --once
+```
 
 ## 4. Run the authorized month-one cloud shadow
 

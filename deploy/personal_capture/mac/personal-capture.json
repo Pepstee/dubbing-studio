@@ -1,16 +1,15 @@
 {
   "schema_version": "dubbing.personal-capture-deployment.v1",
-  "machine": "gutua",
+  "machine": "Artioms-MacBook-Air",
   "landing_inbox": {
-    "windows_path": "\\\\wsl.localhost\\Ubuntu\\home\\gutua\\software-factory\\giga-user\\life-logging\\audio-processing\\recordings\\inbox",
-    "wsl_path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing/recordings/inbox",
-    "purpose": "Project-owned landing zone for phone, Tailscale, and manual uploads",
+    "wsl_path": "/Users/admin/Documents/giga-user/life-logging/audio-processing/recordings/inbox",
+    "purpose": "Canonical Mac landing zone for complete immutable recorder files",
     "minimum_file_age_seconds": 60,
     "raw_audio_retention": "operator-controlled; scanner does not copy or delete source audio"
   },
   "workspace": {
-    "wsl_path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing",
-    "purpose": "Private SQLite ledger, review packages, transcripts, translations, and GIGA events"
+    "wsl_path": "/Users/admin/Documents/giga-user/life-logging/audio-processing",
+    "purpose": "Private checkpoints, review packages, transcripts and evidence events"
   },
   "paths": {
     "packages": "outputs/packages",
@@ -18,14 +17,16 @@
     "state": "state"
   },
   "defaults": {
-    "asr_backend": "faster-whisper",
-    "asr_model": "/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-turbo",
-    "asr_device": "cuda",
-    "asr_compute_type": "float16",
-    "asr_retry_model": "/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-edaa852",
-    "asr_retry_backend": "faster-whisper",
-    "asr_retry_device": "cuda",
-    "asr_retry_compute_type": "int8_float16",
+    "asr_backend": "whisperkit",
+    "asr_model": "/Users/admin/Library/Application Support/DubbingStudio/models/whisperkit/openai_whisper-large-v3-v20240930_626MB",
+    "asr_model_name": "large-v3-v20240930-626MB",
+    "asr_executable": "/opt/homebrew/bin/whisperkit-cli",
+    "asr_server_port": 50061,
+    "asr_retry_backend": "mlx",
+    "asr_retry_model": "/Users/admin/.cache/huggingface/hub/models--mlx-community--whisper-large-v3-turbo/snapshots/a4aaeec0636e6fef84abdcbe3544cb2bf7e9f6fb",
+    "asr_retry_temperatures": [
+      0.0
+    ],
     "resumable": true,
     "transcription_strategy": "adaptive",
     "transcription_chunk_seconds": 240,
@@ -47,20 +48,18 @@
     "vad_speech_pad_ms": 150,
     "vad_maximum_region_seconds": 8.0,
     "maximum_audio_seconds": 86400,
+    "translation_backend": "none",
     "translation_target": "en",
-    "translation_backend": "nllb",
-    "translation_model": "/home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M",
-    "translation_device": "cuda",
     "diarization_backend": "sherpa-onnx",
     "diarization_device": "cpu",
     "diarization_cluster_threshold": 0.85,
     "diarization_chunk_seconds": 7200,
     "diarization_global_speaker_threshold": 0.8,
     "diarization_global_speaker_margin": 0.05,
-    "minimum_free_bytes": 5368709120,
-    "segmentation_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx",
-    "embedding_model": "/home/gutua/software-factory/.control/dubbing-diarization-20260727/models/nemo_en_titanet_small.onnx",
-    "model_manifest": "/home/gutua/software-factory/.control/dubbing-models/personal-capture-model-manifest.json",
+    "minimum_free_bytes": 16106127360,
+    "segmentation_model": "/Users/admin/Library/Application Support/DubbingStudio/models/diarization/sherpa/sherpa-onnx-pyannote-segmentation-3-0/model.int8.onnx",
+    "embedding_model": "/Users/admin/Library/Application Support/DubbingStudio/models/diarization/sherpa/nemo_en_titanet_small.onnx",
+    "model_manifest": "/Users/admin/Documents/dubbing-studio/deploy/personal_capture/mac/model-manifest.json",
     "offline_models_required": true,
     "review_required": true
   },
@@ -73,12 +72,12 @@
     "port": 7433,
     "max_upload_bytes": 17179869184,
     "upload_timeout_seconds": 3600,
-    "token_file": "/home/gutua/.config/dubbing-studio/capture.token",
+    "token_file": "/Users/admin/.config/dubbing-studio/capture.token",
     "secure_cookie": true,
     "exposure": "tailscale-serve-only"
   },
   "giga_outbox": {
-    "path": "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outbox/giga",
+    "path": "/Users/admin/Documents/giga-user/life-logging/audio-processing/outbox/giga",
     "automatic_interpreted_memory_promotion": false
   },
   "boundaries": {

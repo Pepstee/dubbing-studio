@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import tempfile
@@ -12,13 +13,11 @@ from pathlib import Path
 
 from dubbing.apps.personal_capture.config import load_config
 from dubbing.apps.personal_capture.model_manifest import verify_model_manifest
+from dubbing.apps.personal_capture.runtime import build_transcription_backend
 from dubbing.diarization import PyannoteCommunityBackend, SherpaOnnxDiarizationBackend
 from dubbing.media import ffmpeg_executable
-from dubbing.transcription import (
-    FasterWhisperSileroSpeechRegionDetector,
-    FasterWhisperTranscriptionBackend,
-)
-from dubbing.transcription.job import media_duration_ms
+from dubbing.transcription import FasterWhisperSileroSpeechRegionDetector
+from dubbing.transcription.job import media_duration_ms, source_sha256
 from dubbing.translation import NLLBTranslationBackend
 
 
@@ -41,6 +40,36 @@ def _check_model_directory(
     valid = path.is_dir() and not missing
     detail = str(path) if valid else f"{path}; missing: {', '.join(missing) or 'directory'}"
     _check(checks, f"model:{name}", "pass" if valid else "fail", detail)
+
+
+def _check_asr_model(checks: list[dict], name: str, backend: str, path: Path) -> None:
+    if backend == "faster-whisper":
+        _check_model_directory(
+            checks,
+            name,
+            path,
+            required=("config.json", "model.bin"),
+            alternatives=(("tokenizer.json", "vocabulary.txt"),),
+        )
+    elif backend == "mlx":
+        _check_model_directory(
+            checks,
+            name,
+            path,
+            required=("config.json", "weights.safetensors"),
+        )
+    else:
+        _check_model_directory(
+            checks,
+            name,
+            path,
+            required=(
+                "config.json",
+                "AudioEncoder.mlmodelc/coremldata.bin",
+                "MelSpectrogram.mlmodelc/coremldata.bin",
+                "TextDecoder.mlmodelc/coremldata.bin",
+            ),
+        )
 
 
 def _probe_diarization(defaults: dict) -> None:
@@ -85,12 +114,48 @@ def _probe_vad(defaults: dict) -> None:
         detector.detect(sample)
 
 
+def _probe_asr(backend) -> None:
+    with tempfile.TemporaryDirectory(prefix="dubbing-asr-probe-") as directory:
+        sample = Path(directory) / "silence.wav"
+        with wave.open(str(sample), "wb") as output:
+            output.setnchannels(1)
+            output.setsampwidth(2)
+            output.setframerate(16_000)
+            output.writeframes(b"\0\0" * 16_000)
+        try:
+            backend.transcribe(sample)
+        finally:
+            server = getattr(backend, "server", None)
+            if server is not None:
+                server.close()
+
+
+def ensure_review_token(config: dict) -> Path:
+    """Create the private review token once, never print or overwrite it."""
+    path = Path(config["network"]["token_file"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    if path.exists():
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("review token path must be a regular non-symlink file")
+        return path
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(secrets.token_urlsafe(48) + "\n")
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return path
+
+
 def inspect_environment(
     config_path: str | Path,
     *,
     audio: str | Path | None = None,
     prepare: bool = False,
     load_models: bool = False,
+    generate_review_token: bool = False,
 ) -> dict:
     config = load_config(config_path)
     workspace = Path(config["workspace"]["wsl_path"])
@@ -108,6 +173,8 @@ def inspect_environment(
         for path in runtime_dirs:
             path.mkdir(parents=True, exist_ok=True)
             os.chmod(path, 0o700)
+    if generate_review_token:
+        ensure_review_token(config)
 
     checks: list[dict] = []
     for path in runtime_dirs:
@@ -131,15 +198,23 @@ def inspect_environment(
         ffprobe or "not available",
     )
 
+    defaults = config["defaults"]
     dependencies = {
-        "faster_whisper": "Faster-Whisper ASR",
-        "lingua": "language detection",
+        "faster_whisper": "Silero VAD",
         "numpy": "audio arrays",
         "sherpa_onnx": "speaker diarization",
-        "torch": "translation runtime",
-        "transformers": "NLLB translation",
         "waitress": "production review server",
     }
+    if "mlx" in {defaults["asr_backend"], defaults["asr_retry_backend"]}:
+        dependencies["mlx_whisper"] = "Apple-Silicon retry ASR"
+    if defaults.get("translation_backend", "nllb") == "nllb":
+        dependencies.update(
+            {
+                "lingua": "language detection",
+                "torch": "translation runtime",
+                "transformers": "NLLB translation",
+            }
+        )
     if config["defaults"].get("diarization_backend") == "pyannote-community-1":
         dependencies["pyannote.audio"] = "preferred local speaker diarization"
     for module, purpose in dependencies.items():
@@ -150,6 +225,17 @@ def inspect_environment(
             "pass" if available else "fail",
             purpose if available else f"missing dependency for {purpose}",
         )
+
+    for prefix in ("asr", "asr_retry"):
+        if defaults[f"{prefix}_backend"] == "whisperkit":
+            executable = Path(defaults[f"{prefix}_executable"])
+            available = executable.is_file() and os.access(executable, os.X_OK)
+            _check(
+                checks,
+                f"executable:{prefix}_whisperkit",
+                "pass" if available else "fail",
+                str(executable),
+            )
 
     cuda_requested = any(
         config["defaults"].get(key) == "cuda"
@@ -201,30 +287,29 @@ def inspect_environment(
             "pass" if model.is_dir() else "fail",
             str(model),
         )
-    _check_model_directory(
+    _check_asr_model(
         checks,
         "asr_model",
-        Path(config["defaults"]["asr_model"]),
-        required=("config.json", "model.bin"),
-        alternatives=(("tokenizer.json", "vocabulary.txt"),),
+        defaults["asr_backend"],
+        Path(defaults["asr_model"]),
     )
-    _check_model_directory(
+    _check_asr_model(
         checks,
         "asr_retry_model",
-        Path(config["defaults"]["asr_retry_model"]),
-        required=("config.json", "model.bin"),
-        alternatives=(("tokenizer.json", "vocabulary.txt"),),
+        defaults["asr_retry_backend"],
+        Path(defaults["asr_retry_model"]),
     )
-    _check_model_directory(
-        checks,
-        "translation_model",
-        Path(config["defaults"]["translation_model"]),
-        required=("config.json",),
-        alternatives=(
-            ("model.safetensors", "pytorch_model.bin"),
-            ("sentencepiece.bpe.model", "tokenizer.json"),
-        ),
-    )
+    if defaults.get("translation_backend", "nllb") == "nllb":
+        _check_model_directory(
+            checks,
+            "translation_model",
+            Path(defaults["translation_model"]),
+            required=("config.json",),
+            alternatives=(
+                ("model.safetensors", "pytorch_model.bin"),
+                ("sentencepiece.bpe.model", "tokenizer.json"),
+            ),
+        )
     try:
         model_manifest = verify_model_manifest(config)
     except ValueError as exc:
@@ -259,44 +344,31 @@ def inspect_environment(
         )
 
     if load_models and model_manifest is not None:
-        defaults = config["defaults"]
-        probes = (
-            (
-                "asr-load",
-                lambda: FasterWhisperTranscriptionBackend(
-                    defaults["asr_model"],
-                    device=defaults["asr_device"],
-                    compute_type=defaults["asr_compute_type"],
-                    local_files_only=True,
-                )._load_model(),
-            ),
-            (
-                "asr-retry-load",
-                lambda: FasterWhisperTranscriptionBackend(
-                    defaults["asr_retry_model"],
-                    device=defaults["asr_retry_device"],
-                    compute_type=defaults["asr_retry_compute_type"],
-                    local_files_only=True,
-                    model_revision=model_manifest["models"]["asr_retry"]["revision"],
-                )._load_model(),
-            ),
+        primary_asr = build_transcription_backend(defaults, model_manifest)
+        retry_asr = build_transcription_backend(defaults, model_manifest, retry=True)
+        probes = [
+            ("asr-load", lambda: _probe_asr(primary_asr)),
+            ("asr-retry-load", lambda: _probe_asr(retry_asr)),
             (
                 "vad-load",
                 lambda: _probe_vad(defaults),
             ),
             (
-                "translation-load",
-                lambda: NLLBTranslationBackend(
-                    defaults["translation_model"],
-                    device=defaults["translation_device"],
-                    local_files_only=True,
-                )._load(),
-            ),
-            (
                 "diarization-load",
                 lambda: _probe_diarization(defaults),
             ),
-        )
+        ]
+        if defaults.get("translation_backend", "nllb") == "nllb":
+            probes.append(
+                (
+                    "translation-load",
+                    lambda: NLLBTranslationBackend(
+                        defaults["translation_model"],
+                        device=defaults["translation_device"],
+                        local_files_only=True,
+                    )._load(),
+                )
+            )
         for name, probe in probes:
             try:
                 probe()
@@ -326,6 +398,7 @@ def inspect_environment(
     try:
         token_ok = (
             token.is_file()
+            and not token.is_symlink()
             and len(token.read_text(encoding="utf-8").strip()) >= 32
             and token.stat().st_mode & 0o077 == 0
         )
@@ -372,6 +445,7 @@ def inspect_environment(
                 "path": str(source),
                 "size": source.stat().st_size,
                 "duration_ms": duration_ms,
+                "sha256": source_sha256(source),
             }
 
     ready = not any(item["status"] == "fail" for item in checks)
@@ -403,6 +477,11 @@ def main() -> None:
     parser.add_argument("--audio")
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument(
+        "--generate-review-token",
+        action="store_true",
+        help="create the private review token if absent; never prints or overwrites it",
+    )
+    parser.add_argument(
         "--load-models",
         action="store_true",
         help="load every configured model offline; required for a ready report",
@@ -414,6 +493,7 @@ def main() -> None:
         audio=args.audio,
         prepare=args.prepare,
         load_models=args.load_models,
+        generate_review_token=args.generate_review_token,
     )
     payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:

@@ -1,9 +1,12 @@
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from dubbing.apps.personal_capture.preflight import inspect_environment
+import pytest
+
+from dubbing.apps.personal_capture.preflight import ensure_review_token, inspect_environment
 from dubbing.apps.personal_capture.model_manifest import create_model_manifest
 from tests.personal_capture.test_config import deployment_config
 
@@ -66,8 +69,8 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
         "dubbing.apps.personal_capture.preflight.subprocess.run",
         return_value=completed,
     ), patch(
-        "dubbing.apps.personal_capture.preflight.FasterWhisperTranscriptionBackend",
-        return_value=asr_probe,
+        "dubbing.apps.personal_capture.preflight.build_transcription_backend",
+        side_effect=(asr_probe, asr_probe),
     ), patch(
         "dubbing.apps.personal_capture.preflight.FasterWhisperSileroSpeechRegionDetector",
         return_value=vad_probe,
@@ -86,6 +89,7 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     assert report["diarization_model_integrity"]["diarization_embedding"][
         "size_bytes"
     ] == 5
+    assert asr_probe.transcribe.call_count == 2
     vad_probe.detect.assert_called_once()
 
 
@@ -111,3 +115,31 @@ def test_preflight_cannot_report_ready_without_loading_models(tmp_path):
 
     assert report["ready"] is False
     assert report["model_load_certified"] is False
+
+
+def test_review_token_is_private_and_never_overwritten(tmp_path):
+    config = deployment_config(tmp_path)
+    token = Path(config["network"]["token_file"])
+
+    created = ensure_review_token(config)
+    original = token.read_text(encoding="utf-8")
+    repeated = ensure_review_token(config)
+
+    assert created == repeated == token
+    assert len(original.strip()) >= 32
+    assert token.stat().st_mode & 0o077 == 0
+    assert token.read_text(encoding="utf-8") == original
+
+
+def test_review_token_generator_rejects_symlink(tmp_path):
+    config = deployment_config(tmp_path)
+    token = Path(config["network"]["token_file"])
+    token.parent.mkdir(parents=True, exist_ok=True)
+    target = tmp_path / "other-secret"
+    target.write_text("do-not-touch", encoding="utf-8")
+    token.symlink_to(target)
+
+    with pytest.raises(ValueError, match="non-symlink"):
+        ensure_review_token(config)
+
+    assert target.read_text(encoding="utf-8") == "do-not-touch"
