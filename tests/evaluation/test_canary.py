@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import dubbing.evaluation.canary as canary_module
+import dubbing.transcription.job as transcription_job_module
 from dubbing.evaluation.canary import (
     evaluate_canary_result,
     load_canary_manifest,
@@ -14,7 +15,11 @@ from dubbing.evaluation.canary import (
     validate_canary_bindings,
 )
 from dubbing.transcription.mlx_whisper import MLXWhisperTranscriptionBackend
-from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
+from dubbing.transcription.models import (
+    TranscriptSegment,
+    TranscriptionError,
+    TranscriptionResult,
+)
 from dubbing.transcription.speech_regions import FasterWhisperSileroSpeechRegionDetector
 from dubbing.transcription.whisperkit import WhisperKitTranscriptionBackend
 
@@ -79,21 +84,26 @@ def _install_fake_coordinator(
     quality_status="PASS",
     mutate=False,
     after_run=None,
+    verify_source=False,
 ):
     class FakeCoordinator:
         calls = 0
         init_kwargs = []
         processing_ends = []
+        source_bindings = []
 
         def __init__(self, backend, output_dir, **kwargs):
             self.output_dir = Path(output_dir)
             type(self).init_kwargs.append(kwargs)
 
-        def run(self, source, options, *, processing_end_ms=None):
+        def run(self, source, options, *, source_binding=None, processing_end_ms=None):
             type(self).calls += 1
             type(self).processing_ends.append(processing_end_ms)
+            type(self).source_bindings.append(source_binding)
+            if verify_source:
+                transcription_job_module.verify_source_binding(source_binding)
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            source_hash = _sha256(Path(source))
+            source_hash = source_binding.sha256
             text = "changed" if mutate and type(self).calls > 1 else "hello привет"
             duration_ms = processing_end_ms or 1000
             result = TranscriptionResult(
@@ -134,6 +144,84 @@ def test_manifest_binds_every_source_and_reference(tmp_path):
     Path(bound[1]["reference"]["path"]).write_text("changed", encoding="utf-8")
     with pytest.raises(ValueError, match="reference SHA-256 mismatch"):
         validate_canary_bindings(manifest_path, manifest)
+
+
+def test_run_passes_exact_validated_source_binding_to_coordinator(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    created = []
+    create_source_binding = canary_module.create_source_binding
+
+    def observe_binding(path, *, expected_sha256=None):
+        binding = create_source_binding(path, expected_sha256=expected_sha256)
+        created.append(binding)
+        return binding
+
+    monkeypatch.setattr(canary_module, "create_source_binding", observe_binding)
+    coordinator = _install_fake_coordinator(monkeypatch)
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert len(created) == 1
+    assert coordinator.source_bindings == [created[0]]
+    assert coordinator.source_bindings[0] is created[0]
+    assert created[0].sha256 == json.loads(manifest.read_text())["entries"][0]["source"][
+        "sha256"
+    ]
+
+
+def test_wrong_manifest_source_digest_fails_before_attempt_or_backend(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["entries"][0]["source"]["sha256"] = "0" * 64
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    execution_fingerprint_calls = []
+
+    def unexpected_execution_fingerprint(*args, **kwargs):
+        execution_fingerprint_calls.append((args, kwargs))
+        raise AssertionError("backend execution evidence must not run")
+
+    monkeypatch.setattr(
+        canary_module,
+        "_execution_fingerprint",
+        unexpected_execution_fingerprint,
+    )
+
+    with pytest.raises(TranscriptionError, match="does not match expected SHA-256"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert coordinator.calls == 0
+    assert execution_fingerprint_calls == []
+    assert not output.exists()
+
+
+def test_source_content_is_read_once_for_binding_and_once_for_coordinator_verifier(
+    tmp_path, monkeypatch
+):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    actual_create_source_binding = transcription_job_module.create_source_binding
+    content_reads = []
+
+    def counted_binding(path, *, expected_sha256=None):
+        content_reads.append(Path(path).resolve())
+        return actual_create_source_binding(path, expected_sha256=expected_sha256)
+
+    monkeypatch.setattr(canary_module, "create_source_binding", counted_binding)
+    monkeypatch.setattr(
+        transcription_job_module,
+        "create_source_binding",
+        counted_binding,
+    )
+    coordinator = _install_fake_coordinator(monkeypatch, verify_source=True)
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    source = Path(json.loads(manifest.read_text())["entries"][0]["source"]["path"]).resolve()
+    assert content_reads == [source, source]
+    assert coordinator.source_bindings[0].path == source
 
 
 def test_operational_pass_does_not_claim_provisional_reference_is_ground_truth(tmp_path):
@@ -822,6 +910,34 @@ def test_attempt_ledger_is_immutable_and_runtime_does_not_use_mtime(tmp_path, mo
     assert receipt["runtime_measurement"] == "append-only-monotonic-attempt-ledger-v1"
     assert "recovered_checkpoint_seconds" not in receipt
     assert receipt["runtime_accounting_complete"] is True
+
+
+def test_failed_replay_invalidates_stale_receipt_and_summary(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    receipt_path = output / "lesson-0" / "canary-run-receipt.json"
+    original_receipt = receipt_path.read_bytes()
+
+    def fail_replay(self, source, options, *, source_binding=None, processing_end_ms=None):
+        raise RuntimeError("synthetic replay failure")
+
+    monkeypatch.setattr(coordinator, "run", fail_replay)
+    with pytest.raises(RuntimeError, match="synthetic replay failure"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert receipt_path.read_bytes() == original_receipt
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["status"] == "FAIL"
+    assert summary["completed_entries"] == []
+    assert "latest attempt did not complete" in summary["invalid_evidence"]["lesson-0"]
+    assert sorted(item.name for item in (receipt_path.parent / "attempts").glob("*.json")) == [
+        "000001-completed.json",
+        "000001-started.json",
+        "000002-failed.json",
+        "000002-started.json",
+    ]
 
 
 @pytest.mark.parametrize(

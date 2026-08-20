@@ -18,6 +18,7 @@ from dubbing.evaluation.metrics import TimedText, evaluate_documents
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.adaptive import AdaptiveChunkPlanner, AdaptiveLongFormCoordinator
 from dubbing.transcription.faster_whisper import FasterWhisperTranscriptionBackend
+from dubbing.transcription.job import SourceBinding, create_source_binding
 from dubbing.transcription.mlx_whisper import MLXWhisperTranscriptionBackend
 from dubbing.transcription.models import (
     TranscriptionError,
@@ -373,7 +374,12 @@ def _resolve(root: Path, value: str) -> Path:
     return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
-def validate_canary_bindings(manifest_path: Path, manifest: dict) -> tuple[dict, ...]:
+def validate_canary_bindings(
+    manifest_path: Path,
+    manifest: dict,
+    *,
+    bindings_by_entry_id: dict[str, SourceBinding] | None = None,
+) -> tuple[dict, ...]:
     root = manifest_path.parent
     bound = []
     for entry in manifest["entries"]:
@@ -384,9 +390,19 @@ def validate_canary_bindings(manifest_path: Path, manifest: dict) -> tuple[dict,
             path = _resolve(root, item["path"])
             if not path.is_file():
                 raise ValueError(f"{entry['id']} {key} is missing: {path}")
-            actual = _sha256(path)
-            if actual != item["sha256"]:
-                raise ValueError(f"{entry['id']} {key} SHA-256 mismatch: expected {item['sha256']}")
+            if key == "source":
+                source_binding = create_source_binding(
+                    path,
+                    expected_sha256=item["sha256"],
+                )
+                if bindings_by_entry_id is not None:
+                    bindings_by_entry_id[entry["id"]] = source_binding
+            else:
+                actual = _sha256(path)
+                if actual != item["sha256"]:
+                    raise ValueError(
+                        f"{entry['id']} {key} SHA-256 mismatch: expected {item['sha256']}"
+                    )
             resolved[key] = {**item, "path": str(path)}
         bound.append(resolved)
     return tuple(bound)
@@ -719,6 +735,8 @@ def _attempt_accounting(
         if item.get("previous_result_sha256") is not None
         and item.get("result_byte_identical_to_previous") is not True
     ]
+    latest_attempt_index = max(started, default=None)
+    latest_terminal = terminal.get(latest_attempt_index)
     return {
         "attempt_count": len(started),
         "completed_attempt_count": len(completed),
@@ -734,6 +752,10 @@ def _attempt_accounting(
         "transcription_attempt_count": len(transcription),
         "evaluation_attempt_count": len(evaluations),
         "replay_mismatch_count": len(replay_mismatches),
+        "latest_attempt_index": latest_attempt_index,
+        "latest_terminal_status": (
+            latest_terminal["event"] if latest_terminal is not None else None
+        ),
     }
 
 
@@ -766,6 +788,12 @@ def _validate_receipt(
     if receipt.get("runtime_accounting_complete") is not True:
         raise ValueError(f"{entry['id']} receipt has incomplete runtime accounting")
     accounting = _attempt_accounting(receipt_path.parent, entry=entry, fingerprint=fingerprint)
+    if accounting["unterminated_attempt_indices"]:
+        raise ValueError(f"{entry['id']} receipt has newer unterminated attempt evidence")
+    if accounting["latest_terminal_status"] != "COMPLETED":
+        raise ValueError(f"{entry['id']} receipt latest attempt did not complete")
+    if receipt.get("last_attempt_index") != accounting["latest_attempt_index"]:
+        raise ValueError(f"{entry['id']} receipt does not bind to latest attempt")
     for key in (
         "initial_runtime_seconds",
         "cumulative_runtime_seconds",
@@ -1149,6 +1177,7 @@ def run_canary(
     )
     manifest_path, manifest = load_canary_manifest(manifest_path)
     all_entries = tuple(dict(entry) for entry in manifest["entries"])
+    bindings_by_entry_id: dict[str, SourceBinding] = {}
     if selected_ids:
         unknown = selected_ids - {entry["id"] for entry in manifest["entries"]}
         if unknown:
@@ -1157,9 +1186,17 @@ def run_canary(
             **manifest,
             "entries": [entry for entry in manifest["entries"] if entry["id"] in selected_ids],
         }
-        selected_entries = validate_canary_bindings(manifest_path, selected_manifest)
+        selected_entries = validate_canary_bindings(
+            manifest_path,
+            selected_manifest,
+            bindings_by_entry_id=bindings_by_entry_id,
+        )
     else:
-        selected_entries = validate_canary_bindings(manifest_path, manifest)
+        selected_entries = validate_canary_bindings(
+            manifest_path,
+            manifest,
+            bindings_by_entry_id=bindings_by_entry_id,
+        )
     selected_by_id = {entry["id"]: entry for entry in selected_entries}
     entries = tuple(
         selected_by_id[entry["id"]]
@@ -1237,6 +1274,7 @@ def run_canary(
                 _, quality = coordinator.run(
                     Path(entry["source"]["path"]),
                     TranscriptionOptions(task="transcribe", word_timestamps=True),
+                    source_binding=bindings_by_entry_id[entry["id"]],
                     processing_end_ms=entry["source"].get("processing_end_ms"),
                 )
                 current_execution, current_fingerprint = _execution_fingerprint(
