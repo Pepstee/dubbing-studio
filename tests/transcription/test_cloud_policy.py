@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 import threading
 import wave
 from unittest.mock import patch
@@ -20,6 +22,7 @@ from dubbing.transcription.cloud import (
     unresolved_intervals,
 )
 from dubbing.transcription.teacher import CloudTeacherPolicy, CloudTeacherRunner
+from dubbing.transcription.teacher_cli import _macos_keychain_credential
 from dubbing.transcription.compaction import CompactionPacket, CompactionSlice
 from dubbing.transcription.speech_regions import SpeechRegion, SpeechRegionPlan
 from dubbing.transcription.models import (
@@ -323,6 +326,47 @@ def test_teacher_policy_requires_privacy_opt_out_attestation():
         CloudTeacherPolicy.from_dict(document)
 
 
+def test_macos_keychain_lookup_keeps_secret_out_of_command_arguments():
+    completed = SimpleNamespace(returncode=0, stdout=b"keychain-only-secret\n")
+    with patch.dict(
+        "os.environ", {"ELEVENLABS_API_KEY": "environment-only-secret"}
+    ), patch(
+        "dubbing.transcription.teacher_cli.sys.platform", "darwin"
+    ), patch(
+        "dubbing.transcription.teacher_cli.subprocess.run", return_value=completed
+    ) as run:
+        credential = _macos_keychain_credential(
+            "dubbing-studio-elevenlabs", "operator"
+        )
+
+    assert credential == "keychain-only-secret"
+    command = run.call_args.args[0]
+    assert command == [
+        "/usr/bin/security",
+        "find-generic-password",
+        "-w",
+        "-s",
+        "dubbing-studio-elevenlabs",
+        "-a",
+        "operator",
+    ]
+    assert credential not in command
+    assert run.call_args.kwargs["stderr"] is not None
+    assert "ELEVENLABS_API_KEY" not in run.call_args.kwargs["env"]
+
+
+def test_macos_keychain_lookup_fails_closed_without_leaking_provider_error():
+    completed = SimpleNamespace(returncode=44, stdout=b"")
+    with patch(
+        "dubbing.transcription.teacher_cli.sys.platform", "darwin"
+    ), patch(
+        "dubbing.transcription.teacher_cli.subprocess.run", return_value=completed
+    ), pytest.raises(ValueError, match="could not read") as error:
+        _macos_keychain_credential("service", "account")
+
+    assert "ElevenLabs API key" not in str(error.value)
+
+
 def test_teacher_policy_forbids_discontinuous_diarization_packets():
     document = _teacher_policy()
     document["compaction"]["maximum_slices_per_packet"] = 64
@@ -492,8 +536,9 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
         transport=transport,
         speech_region_detector=Detector(),
         now=datetime(2026, 8, 21, tzinfo=timezone.utc),
+        credential="keychain-only",
     )
-    with patch.dict("os.environ", {"ELEVENLABS_API_KEY": "local-only"}), patch(
+    with patch.dict("os.environ", {}, clear=True), patch(
         "dubbing.transcription.teacher.extract_compacted_flac", side_effect=fake_extract
     ):
         report = runner.run(source, local)
@@ -501,6 +546,7 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
         # before the programme ledger update became durable.
         (tmp_path / "programme-usage.json").unlink()
         replay = runner.run(source, local)
+        assert "ELEVENLABS_API_KEY" not in os.environ
 
     assert len(transport.calls) == 1
     assert report["local_transcript_overwritten"] is False
@@ -508,6 +554,9 @@ def test_cloud_teacher_builds_only_agreement_silver_and_reuses_checkpoint(tmp_pa
     assert report["silver_corpus"]["accepted_count"] == 1
     assert report["silver_corpus"]["excluded_count"] == 1
     assert replay["chunks"][0]["reused"] is True
+    assert "keychain-only" not in json.dumps(report)
+    for evidence in (tmp_path / "teacher").rglob("*.json*"):
+        assert "keychain-only" not in evidence.read_text(encoding="utf-8")
     accepted = (tmp_path / "teacher" / "silver-corpus" / "accepted.jsonl").read_text()
     row = json.loads(accepted)
     assert row["label_class"] == "CONSENSUS_SILVER"

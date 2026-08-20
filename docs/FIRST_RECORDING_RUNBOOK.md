@@ -124,11 +124,25 @@ dubbing-cloud-teacher "$inbox/2026-07-30-full-day.wav" \
   --local-result "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outputs/packages/<capture-id>/transcript.json" \
   --policy /home/gutua/software-factory/dubbing-studio/deploy/cloud_teacher/month-one-2026-08.json \
   --programme-state /home/gutua/software-factory/giga-user/life-logging/audio-processing/state/cloud-teacher-usage.json \
-  --output "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outputs/cloud-teacher/<capture-id>"
+  --output "/home/gutua/software-factory/giga-user/life-logging/audio-processing/outputs/cloud-teacher/<capture-id>" \
+  --keychain-service "dubbing-studio-elevenlabs" \
+  --keychain-account "$USER"
 ```
 
 This command remains blocked until the provider data-use opt-out is attested in the policy and
-`ELEVENLABS_API_KEY` exists only in the local service environment. It automatically removes
+the credential is available from the explicitly selected macOS Keychain item. The existing item
+uses service `dubbing-studio-elevenlabs` and account `$USER`. To update it without placing the API
+key in shell history or process arguments, keep `-w` last so `security` prompts:
+
+```bash
+/usr/bin/security add-generic-password -U \
+  -a "$USER" \
+  -s "dubbing-studio-elevenlabs" \
+  -w
+```
+
+On non-macOS deployments, omit both Keychain options and keep using `ELEVENLABS_API_KEY` only in
+the local service environment. The command automatically removes
 VAD-confirmed long silence while retaining padded speech context; the operator must not cut the
 recording. Pauses up to 15 seconds remain continuous and each cloud packet comes from one source
 interval, preserving provider diarization context. `compaction-plan.json` preserves the exact

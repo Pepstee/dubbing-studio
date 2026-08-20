@@ -249,17 +249,35 @@ upload.
 The programme policy binds the provider, 31-day maximum window, operator authorization,
 privacy attestation, audio ceiling, estimated-cost ceiling, chunk size and training thresholds.
 Before the first upload, the operator must disable ElevenLabs model-improvement data use in the
-provider account, change `model_improvement_opt_out_attested` to `true`, and configure
-`ELEVENLABS_API_KEY` locally. The key is never accepted as a command-line argument or written to
-a receipt. The committed policy starts fail-closed until that account-side action is attested.
+provider account and change `model_improvement_opt_out_attested` to `true`. The command accepts
+the existing `ELEVENLABS_API_KEY` environment variable or an explicitly selected macOS Keychain
+generic-password item. The key itself is never accepted as a command-line argument, copied into
+the environment by Dubbing Studio, or written to a receipt. The committed policy starts
+fail-closed until that account-side action is attested.
+
+On macOS, store the key without placing it in shell history or process arguments. The final `-w`
+causes `security` to prompt for the secret:
+
+```bash
+/usr/bin/security add-generic-password -U \
+  -a "$USER" \
+  -s "dubbing-studio-elevenlabs" \
+  -w
+```
 
 ```bash
 dubbing-cloud-teacher /path/to/full-recording.wav \
   --local-result /path/to/local/result.json \
   --policy deploy/cloud_teacher/month-one-2026-08.json \
   --programme-state /private/state/cloud-teacher-usage.json \
-  --output /private/outputs/cloud-teacher/<recording-id>
+  --output /private/outputs/cloud-teacher/<recording-id> \
+  --keychain-service "dubbing-studio-elevenlabs" \
+  --keychain-account "$USER"
 ```
+
+Omit both Keychain options to preserve the environment-variable path. Supplying only one option,
+missing Keychain access, a malformed secret, or a missing environment variable fails before any
+audio upload.
 
 The command is resumable and source-bound. It records provider/model/configuration, compact audio
 hash, reversible mapping hash, request receipt, candidate provenance and estimated cost based on

@@ -277,6 +277,7 @@ class CloudTeacherRunner:
         transport: CloudTransport | None = None,
         speech_region_detector: SpeechRegionDetector | None = None,
         now: datetime | None = None,
+        credential: str | None = None,
     ) -> None:
         self.policy = policy
         self.output_dir = Path(output_dir).resolve()
@@ -286,6 +287,9 @@ class CloudTeacherRunner:
             speech_region_detector or FasterWhisperSileroSpeechRegionDetector()
         )
         self.now = now
+        # An in-memory credential lets operator surfaces use an OS secret store
+        # without copying the secret into argv, environment, policy, or receipts.
+        self.credential = credential
 
     def _load_usage(self) -> dict:
         if not self.programme_state.exists():
@@ -672,7 +676,11 @@ class CloudTeacherRunner:
         if not local.duration_ms or local.duration_ms <= 0:
             raise TranscriptionError("local transcript must preserve source duration")
         provider = PROVIDERS[self.policy.provider]
-        credential = os.environ.get(provider.credential_environment_variable)
+        credential = (
+            self.credential
+            if self.credential is not None
+            else os.environ.get(provider.credential_environment_variable)
+        )
         if not credential:
             raise TranscriptionError(
                 f"{provider.credential_environment_variable} is not configured locally; no upload occurred"
