@@ -62,6 +62,15 @@ The run remained fail-closed with nine uncertain spans and no GIGA event. Its re
 This establishes long-form format and operational compatibility, not physical-recorder acoustics
 or ground-truth accuracy.
 
+### Recorder settings for the first real capture
+
+Set the DR-10L Pro to `WAV`, `MONO`, `48 kHz`, `32-bit float`. This is the exact format exercised
+by both shadow canaries. `POLY` duplicates the same lavalier signal into two channels and roughly
+doubles storage without adding another acoustic perspective. At these mono settings, four to five
+hours is approximately 2.76–3.46 GB. Keep the original BWF/WAV untouched; do not normalize,
+downmix or convert it before ingest. The supported settings are documented in the
+[official DR-10L Pro specification](https://tascam.com/amer-es/product/dr-10l_pro).
+
 ## 2. Transfer atomically
 
 Never copy directly to its final filename. On the Mac, use the hash-verifying ingest command. It
