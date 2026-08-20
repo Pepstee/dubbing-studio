@@ -326,6 +326,54 @@ def test_teacher_policy_requires_privacy_opt_out_attestation():
         CloudTeacherPolicy.from_dict(document)
 
 
+@pytest.mark.parametrize(
+    ("object_name", "unknown_key", "expected_path"),
+    [
+        (None, "cloud_allowed_override", r"\$\.cloud_allowed_override"),
+        (
+            "privacy",
+            "model_improvement_opt_out_attested ",
+            r"\$\.privacy\.model_improvement_opt_out_attested ",
+        ),
+        (
+            "limits",
+            "max_estimated_cost_usd_override",
+            r"\$\.limits\.max_estimated_cost_usd_override",
+        ),
+        (
+            "compaction",
+            "maximum_slices_per_packet_override",
+            r"\$\.compaction\.maximum_slices_per_packet_override",
+        ),
+        (
+            "training",
+            "cloud_only_label_allowed",
+            r"\$\.training\.cloud_only_label_allowed",
+        ),
+    ],
+)
+def test_teacher_policy_rejects_unknown_fields_at_every_object(
+    object_name, unknown_key, expected_path
+):
+    document = _teacher_policy()
+    target = document if object_name is None else document[object_name]
+    target[unknown_key] = True
+
+    with pytest.raises(ValueError, match=expected_path):
+        CloudTeacherPolicy.from_dict(document)
+
+
+def test_teacher_policy_reports_all_unknown_fields_deterministically():
+    document = _teacher_policy()
+    document["z_override"] = True
+    document["a_override"] = True
+
+    with pytest.raises(ValueError) as error:
+        CloudTeacherPolicy.from_dict(document)
+
+    assert str(error.value).endswith("$.a_override, $.z_override")
+
+
 def test_macos_keychain_lookup_keeps_secret_out_of_command_arguments():
     completed = SimpleNamespace(returncode=0, stdout=b"keychain-only-secret\n")
     with patch.dict(

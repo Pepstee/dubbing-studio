@@ -44,6 +44,67 @@ _POLICY_SCHEMA = "dubbing.cloud-teacher-policy.v1"
 _REPORT_SCHEMA = "dubbing.cloud-teacher-report.v1"
 _CORPUS_SCHEMA = "dubbing.asr-silver-corpus.v1"
 _ALLOWED_LANGUAGES = {"en", "ru", "ro", "ko"}
+_POLICY_KEYS = frozenset(
+    {
+        "schema_version",
+        "programme_id",
+        "provider",
+        "begins_at",
+        "ends_at",
+        "operator_authorization_id",
+        "cloud_allowed",
+        "training_corpus_allowed",
+        "privacy",
+        "limits",
+        "compaction",
+        "training",
+    }
+)
+_PRIVACY_KEYS = frozenset(
+    {"model_improvement_opt_out_attested", "retention_mode"}
+)
+_LIMIT_KEYS = frozenset(
+    {
+        "max_total_audio_seconds",
+        "max_estimated_cost_usd",
+        "estimated_price_per_hour_usd",
+        "chunk_seconds",
+    }
+)
+_COMPACTION_KEYS = frozenset(
+    {
+        "enabled",
+        "padding_ms",
+        "merge_gap_ms",
+        "separator_ms",
+        "maximum_slices_per_packet",
+        "preserve_diarization_context",
+    }
+)
+_TRAINING_KEYS = frozenset({"maximum_agreement_wer", "maximum_agreement_cer"})
+
+
+def _reject_unknown_policy_keys(
+    document: dict,
+    allowed: frozenset[str],
+    *,
+    path: str,
+) -> None:
+    unknown_paths = sorted(
+        (
+            f"{path}.{key}"
+            if isinstance(key, str)
+            else f"{path}[{key!r}]"
+        )
+        for key in document
+        if key not in allowed
+    )
+    if unknown_paths:
+        noun = "field" if len(unknown_paths) == 1 else "fields"
+        raise ValueError(
+            f"cloud teacher policy contains unknown {noun}: "
+            f"{', '.join(unknown_paths)}"
+        )
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -92,6 +153,7 @@ class CloudTeacherPolicy:
 
     @classmethod
     def from_dict(cls, document: dict) -> "CloudTeacherPolicy":
+        _reject_unknown_policy_keys(document, _POLICY_KEYS, path="$")
         if document.get("schema_version") != _POLICY_SCHEMA:
             raise ValueError(f"cloud teacher policy must use schema {_POLICY_SCHEMA}")
         privacy = document.get("privacy")
@@ -104,6 +166,12 @@ class CloudTeacherPolicy:
             raise ValueError(
                 "policy privacy, limits, training and compaction must be objects"
             )
+        _reject_unknown_policy_keys(privacy, _PRIVACY_KEYS, path="$.privacy")
+        _reject_unknown_policy_keys(limits, _LIMIT_KEYS, path="$.limits")
+        _reject_unknown_policy_keys(
+            compaction, _COMPACTION_KEYS, path="$.compaction"
+        )
+        _reject_unknown_policy_keys(training, _TRAINING_KEYS, path="$.training")
         policy = cls(
             programme_id=str(document.get("programme_id", "")).strip(),
             provider=str(document.get("provider", "")).strip(),
