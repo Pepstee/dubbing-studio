@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from dubbing.control_plane.cli import build_backend, build_retry_backend
@@ -19,6 +20,7 @@ from dubbing.transcription.models import (
     TranscriptionOptions,
     transcription_result_from_dict,
 )
+from dubbing.transcription.quality import evaluate_transcript_quality
 
 
 SCHEMA_VERSION = "dubbing.historical-canary.v1"
@@ -245,6 +247,16 @@ def _validate_entry_contract(entry: dict) -> None:
     duration_ms = entry["source"].get("duration_ms")
     if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or duration_ms <= 0:
         raise ValueError(f"{entry_id} source duration_ms must be a positive integer")
+    evaluation_end_ms = entry["source"].get("evaluation_end_ms")
+    if evaluation_end_ms is not None and (
+        isinstance(evaluation_end_ms, bool)
+        or not isinstance(evaluation_end_ms, int)
+        or evaluation_end_ms <= 0
+        or evaluation_end_ms > duration_ms
+    ):
+        raise ValueError(
+            f"{entry_id} source evaluation_end_ms must satisfy 0 < evaluation_end_ms <= duration_ms"
+        )
     reference_kind = entry["reference"].get("kind")
     if not isinstance(reference_kind, str) or not reference_kind.strip():
         raise ValueError(f"{entry_id} reference kind is required")
@@ -315,6 +327,7 @@ def _corpus_binding(manifest: dict) -> tuple[dict, str]:
                 "role": entry["role"],
                 "source_sha256": entry["source"]["sha256"],
                 "source_duration_ms": entry["source"]["duration_ms"],
+                "source_evaluation_end_ms": entry["source"].get("evaluation_end_ms"),
                 "reference_sha256": entry["reference"]["sha256"],
                 "reference_kind": entry["reference"]["kind"],
             }
@@ -658,6 +671,11 @@ def _validate_report(path: Path, entry: dict, fingerprint: str) -> dict:
     for key, value in expected.items():
         if report.get(key) != value:
             raise ValueError(f"{entry['id']} report {key} binding mismatch")
+    scope = report.get("evaluation_scope")
+    if not isinstance(scope, dict) or scope.get("evaluation_end_ms") != entry["source"].get(
+        "evaluation_end_ms"
+    ):
+        raise ValueError(f"{entry['id']} report evaluation scope binding mismatch")
     gate = report.get("operational_gate")
     if not isinstance(gate, dict) or gate.get("passed") is not (gate.get("status") == "PASS"):
         raise ValueError(f"{entry['id']} report operational gate is malformed")
@@ -680,6 +698,61 @@ def _require_development_pass(output: Path, entries: tuple[dict, ...], fingerpri
             raise ValueError(f"development canary {entry['id']} lacks a transcription receipt")
 
 
+def _result_scoped_to_end(result, evaluation_end_ms: int):
+    scoped_segments = []
+    crossing_segment_count = 0
+    for segment in result.segments:
+        if segment.start_ms >= evaluation_end_ms:
+            continue
+        if segment.end_ms <= evaluation_end_ms:
+            scoped_segments.append(segment)
+            continue
+        crossing_segment_count += 1
+        scoped_words = []
+        for word in segment.words:
+            if word.start_ms >= evaluation_end_ms:
+                continue
+            scoped_words.append(replace(word, end_ms=min(word.end_ms, evaluation_end_ms)))
+        scoped_segments.append(
+            replace(
+                segment,
+                end_ms=evaluation_end_ms,
+                words=tuple(scoped_words),
+            )
+        )
+    scoped = replace(
+        result,
+        segments=tuple(scoped_segments),
+        text=" ".join(segment.text for segment in scoped_segments).strip(),
+        duration_ms=evaluation_end_ms,
+        provenance={
+            **(result.provenance or {}),
+            "evaluation_scope": {
+                "kind": "SOURCE_TIME_BOUNDARY",
+                "evaluation_end_ms": evaluation_end_ms,
+                "derived_for_canary_only": True,
+            },
+        },
+    )
+    out_of_scope = tuple(
+        segment for segment in result.segments if segment.end_ms > evaluation_end_ms
+    )
+    out_text = " ".join(segment.text for segment in out_of_scope).strip()
+    observation = {
+        "used_for_operational_gate": False,
+        "start_ms": evaluation_end_ms,
+        "end_ms": result.duration_ms,
+        "segment_count": len(out_of_scope),
+        "wholly_out_of_scope_segment_count": sum(
+            segment.start_ms >= evaluation_end_ms for segment in result.segments
+        ),
+        "boundary_crossing_segment_count": crossing_segment_count,
+        "text_character_count": len(out_text),
+        "text_sha256": hashlib.sha256(out_text.encode("utf-8")).hexdigest(),
+    }
+    return scoped, observation
+
+
 def evaluate_canary_result(
     entry: dict,
     result_document: dict,
@@ -693,7 +766,22 @@ def evaluate_canary_result(
     evaluation_provenance: dict | None = None,
 ) -> dict:
     runtime_seconds = _finite_number(runtime_seconds, "runtime_seconds")
-    result = transcription_result_from_dict(result_document)
+    full_result = transcription_result_from_dict(result_document)
+    evaluation_end_ms = entry["source"].get("evaluation_end_ms")
+    if evaluation_end_ms is not None:
+        result, out_of_scope_observation = _result_scoped_to_end(full_result, evaluation_end_ms)
+        operational_quality = evaluate_transcript_quality(
+            result, expected_duration_ms=evaluation_end_ms
+        ).to_dict()
+    else:
+        result = full_result
+        operational_quality = quality
+        out_of_scope_observation = {
+            "used_for_operational_gate": False,
+            "status": "NOT_APPLICABLE",
+            "reason": "No source evaluation boundary is configured.",
+            "segment_count": 0,
+        }
     reference_path = Path(entry["reference"]["path"])
     reference_text = reference_path.read_text(encoding="utf-8")
     candidate_segments = tuple(
@@ -721,11 +809,11 @@ def evaluate_canary_result(
         reasons.append("CHECKPOINT_REPLAY_RESULT_MISMATCH")
     if not runtime_accounting_complete:
         reasons.append("ATTEMPT_LEDGER_INCOMPLETE")
-    quality_status = str(quality.get("status", "FAILED"))
+    quality_status = str(operational_quality.get("status", "FAILED"))
     allowed_quality_states = set(policy.get("allowed_quality_statuses", ["PASS"]))
     if quality_status not in allowed_quality_states:
         reasons.append(f"QUALITY_{quality_status}")
-    quality_metrics = quality.get("metrics", {})
+    quality_metrics = operational_quality.get("metrics", {})
     if int(quality_metrics.get("repetition_finding_count", 0)):
         reasons.append("PATHOLOGICAL_REPETITION")
     fallback_exhausted_count = sum(
@@ -759,8 +847,34 @@ def evaluate_canary_result(
         "runtime_seconds": runtime_seconds,
         "realtime_factor": realtime_factor,
         "decoder_fallback_exhausted_segment_count": fallback_exhausted_count,
-        "quality": quality,
+        "evaluation_scope": {
+            "kind": ("SOURCE_TIME_BOUNDARY" if evaluation_end_ms is not None else "FULL_SOURCE"),
+            "evaluation_end_ms": evaluation_end_ms,
+            "source_duration_ms": entry["source"]["duration_ms"],
+            "operational_quality_recomputed": evaluation_end_ms is not None,
+            "full_result_preserved": True,
+            "full_quality_report_preserved": True,
+        },
+        "quality": operational_quality,
+        "full_source_quality_observation": {
+            "used_for_operational_gate": evaluation_end_ms is None,
+            "quality": quality,
+        },
+        "full_source_evidence": {
+            "result_document_sha256": _document_sha256(result_document),
+            "quality_document_sha256": _document_sha256(quality),
+            "artifacts_modified_for_scope": False,
+        },
+        "out_of_scope_observation": out_of_scope_observation,
         "provisional_reference_metrics": metrics,
+        "provisional_reference_comparison_scope": {
+            "reference_scope": "WHOLE_UNTIMED_REFERENCE",
+            "candidate_scope": (
+                "SOURCE_TIME_BOUNDARY" if evaluation_end_ms is not None else "FULL_SOURCE"
+            ),
+            "observation_only": True,
+            "reference_text_was_trimmed": False,
+        },
         "operational_gate": {
             "status": "PASS" if not reasons else "FAIL",
             "passed": not reasons,
@@ -772,7 +886,8 @@ def evaluate_canary_result(
             "accuracy_certified": False,
             "limitation": (
                 "MacWhisper text is provisional, untimed and has no speaker labels; "
-                "agreement is drift evidence, not ground-truth accuracy."
+                "it cannot be safely trimmed to a source-time boundary. Whole-reference "
+                "WER is observation-only drift evidence, not ground-truth accuracy."
             ),
         },
         "diarization_claim": {

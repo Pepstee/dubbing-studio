@@ -143,6 +143,9 @@ def test_operational_pass_does_not_claim_provisional_reference_is_ground_truth(t
     assert report["agreement_observation"]["accuracy_certified"] is False
     assert report["diarization_claim"]["status"] == "NOT_MEASURED"
     assert report["giga_admission_allowed"] is False
+    assert report["evaluation_scope"]["kind"] == "FULL_SOURCE"
+    assert report["evaluation_scope"]["operational_quality_recomputed"] is False
+    assert report["quality"]["status"] == "PASS"
 
 
 def test_hallucination_quality_failure_fails_canary(tmp_path):
@@ -198,6 +201,90 @@ def test_uncertain_spans_fail_the_default_canary_policy(tmp_path):
     )
     assert report["operational_gate"]["status"] == "FAIL"
     assert "QUALITY_PASS_WITH_UNCERTAIN_SPANS" in report["operational_gate"]["failure_reasons"]
+
+
+def test_source_boundary_recomputes_gate_quality_and_observes_tail(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {
+            **entry["source"],
+            "duration_ms": 2000,
+            "evaluation_end_ms": 1000,
+        },
+    }
+    result = TranscriptionResult(
+        segments=(
+            TranscriptSegment(0, 1000, "hello привет", language="mixed"),
+            TranscriptSegment(1000, 2000, "loops loops loops loops", language="en"),
+        ),
+        text="hello привет loops loops loops loops",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="mixed",
+        duration_ms=2000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+    full_quality = {
+        "status": "REPROCESS_REQUIRED",
+        "metrics": {"repetition_finding_count": 1},
+    }
+
+    report = evaluate_canary_result(
+        entry,
+        result.to_dict(),
+        full_quality,
+        runtime_seconds=0.1,
+        policy={"maximum_realtime_factor": 0.25},
+        execution_fingerprint="frozen",
+    )
+
+    assert report["operational_gate"]["status"] == "PASS"
+    assert report["quality"]["status"] == "PASS"
+    assert report["full_source_quality_observation"]["quality"] == full_quality
+    assert report["full_source_quality_observation"]["used_for_operational_gate"] is False
+    assert report["out_of_scope_observation"]["segment_count"] == 1
+    assert report["out_of_scope_observation"]["used_for_operational_gate"] is False
+    assert report["provisional_reference_comparison_scope"] == {
+        "reference_scope": "WHOLE_UNTIMED_REFERENCE",
+        "candidate_scope": "SOURCE_TIME_BOUNDARY",
+        "observation_only": True,
+        "reference_text_was_trimmed": False,
+    }
+    assert report["full_source_evidence"]["artifacts_modified_for_scope"] is False
+
+
+def test_source_boundary_clips_crossing_segment_for_quality(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {**entry["source"], "evaluation_end_ms": 500},
+    }
+    result = TranscriptionResult(
+        segments=(TranscriptSegment(0, 1000, "hello привет", language="mixed"),),
+        text="hello привет",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="mixed",
+        duration_ms=1000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+    report = evaluate_canary_result(
+        entry,
+        result.to_dict(),
+        {"status": "PASS", "metrics": {}},
+        runtime_seconds=0.1,
+        policy={},
+        execution_fingerprint="frozen",
+    )
+    assert report["out_of_scope_observation"]["boundary_crossing_segment_count"] == 1
+    assert report["quality"]["metrics"]["duration_ms"] == 500
 
 
 def test_holdout_requires_valid_development_pass_receipt(tmp_path, monkeypatch):
@@ -261,6 +348,7 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
     manifest = _manifest(tmp_path)
     document = json.loads(manifest.read_text())
     document["execution"] = {"candidate_languages": ["en", "ru"]}
+    document["entries"][0]["source"]["evaluation_end_ms"] = 800
     manifest.write_text(json.dumps(document), encoding="utf-8")
     output = tmp_path / "output"
     coordinator = _install_fake_coordinator(monkeypatch)
@@ -277,6 +365,7 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
     assert frozen["retry_backend"]["identity"] == _IndependentLocalBackend.identity
     assert len(frozen["retry_backend"]["implementation"]["source_sha256"]) == 64
     assert frozen["execution"]["candidate_languages"] == ["en", "ru"]
+    assert frozen["corpus"]["entries"][0]["source_evaluation_end_ms"] == 800
     assert coordinator.init_kwargs[0]["retry_backend"].identity == (
         _IndependentLocalBackend.identity
     )
@@ -415,6 +504,14 @@ def test_attempt_ledger_is_immutable_and_runtime_does_not_use_mtime(tmp_path, mo
         (
             lambda document: document.update(execution={"candidate_languages": []}),
             "candidate_languages",
+        ),
+        (
+            lambda document: document["entries"][0]["source"].update(evaluation_end_ms=0),
+            "evaluation_end_ms",
+        ),
+        (
+            lambda document: document["entries"][0]["source"].update(evaluation_end_ms=1001),
+            "evaluation_end_ms",
         ),
     ],
 )
