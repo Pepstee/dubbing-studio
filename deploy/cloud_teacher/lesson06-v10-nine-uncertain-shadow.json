@@ -8,8 +8,8 @@
   "cloud_allowed": true,
   "training_corpus_allowed": true,
   "privacy": {
-    "model_improvement_opt_out_attested": false,
-    "retention_mode": "provider-storage; model-improvement opt-out requires separate operator confirmation before first upload"
+    "model_improvement_opt_out_attested": true,
+    "retention_mode": "provider-storage; model-improvement opt-out verified in ElevenLabs account UI on 2026-08-21"
   },
   "limits": {
     "max_total_audio_seconds": 181,
