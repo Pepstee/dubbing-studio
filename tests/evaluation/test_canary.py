@@ -2,6 +2,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,8 +13,10 @@ from dubbing.evaluation.canary import (
     run_canary,
     validate_canary_bindings,
 )
+from dubbing.transcription.mlx_whisper import MLXWhisperTranscriptionBackend
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
 from dubbing.transcription.speech_regions import FasterWhisperSileroSpeechRegionDetector
+from dubbing.transcription.whisperkit import WhisperKitTranscriptionBackend
 
 
 def _sha256(path: Path) -> str:
@@ -70,7 +73,13 @@ class _LocalSpeechDetector:
     identity = "faster-whisper-silero:synthetic-test"
 
 
-def _install_fake_coordinator(monkeypatch, *, quality_status="PASS", mutate=False):
+def _install_fake_coordinator(
+    monkeypatch,
+    *,
+    quality_status="PASS",
+    mutate=False,
+    after_run=None,
+):
     class FakeCoordinator:
         calls = 0
         init_kwargs = []
@@ -108,6 +117,8 @@ def _install_fake_coordinator(monkeypatch, *, quality_status="PASS", mutate=Fals
             (self.output_dir / "quality-report.json").write_text(
                 json.dumps(quality), encoding="utf-8"
             )
+            if after_run is not None:
+                after_run()
             return result, quality
 
     monkeypatch.setattr(canary_module, "AdaptiveLongFormCoordinator", FakeCoordinator)
@@ -423,6 +434,9 @@ def test_failed_development_blocks_later_roles(tmp_path, monkeypatch):
 def test_execution_freeze_binds_corpus_and_implementation(tmp_path, monkeypatch):
     manifest = _manifest(tmp_path)
     output = tmp_path / "output"
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_bytes(b"fixture ffmpeg")
+    monkeypatch.setattr(canary_module, "ffmpeg_executable", lambda: str(ffmpeg))
     _install_fake_coordinator(monkeypatch)
     run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
 
@@ -437,6 +451,174 @@ def test_execution_freeze_binds_corpus_and_implementation(tmp_path, monkeypatch)
     assert any(
         item["path"] == "dubbing/evaluation/canary.py" for item in frozen["implementation"]["files"]
     )
+    assert any(item["path"] == "dubbing/media.py" for item in frozen["implementation"]["files"])
+    assert frozen["media_runtime"]["ffmpeg"] == {
+        "path": str(ffmpeg.resolve()),
+        "sha256": _sha256(ffmpeg),
+        "size_bytes": ffmpeg.stat().st_size,
+    }
+
+
+def test_ffmpeg_binary_change_invalidates_frozen_execution(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_bytes(b"first ffmpeg")
+    monkeypatch.setattr(canary_module, "ffmpeg_executable", lambda: str(ffmpeg))
+    _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    ffmpeg.write_bytes(b"changed ffmpeg")
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert sorted(path.name for path in (output / "lesson-0/attempts").glob("*.json")) == [
+        "000001-completed.json",
+        "000001-started.json",
+    ]
+
+
+def test_execution_drift_during_transcription_writes_only_failed_terminal(
+    tmp_path, monkeypatch
+):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_bytes(b"first ffmpeg")
+    monkeypatch.setattr(canary_module, "ffmpeg_executable", lambda: str(ffmpeg))
+    _install_fake_coordinator(
+        monkeypatch,
+        after_run=lambda: ffmpeg.write_bytes(b"changed during transcription"),
+    )
+
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    attempts = output / "lesson-0/attempts"
+    assert sorted(path.name for path in attempts.glob("*.json")) == [
+        "000001-failed.json",
+        "000001-started.json",
+    ]
+    assert not (output / "lesson-0/canary-run-receipt.json").exists()
+
+
+def test_whisperkit_executable_change_invalidates_frozen_execution(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    executable = tmp_path / "whisperkit-cli"
+    executable.write_bytes(b"first whisperkit")
+    server = SimpleNamespace(
+        executable=str(executable),
+        model_sha256="a" * 64,
+        model_size_bytes=123,
+        version="v1.0.0",
+    )
+    backend = WhisperKitTranscriptionBackend(model="fixture", server=server)
+    _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, backend, selected_ids={"lesson-0"})
+
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    assert frozen["backend"]["runtime_executable"]["sha256"] == _sha256(executable)
+    executable.write_bytes(b"changed whisperkit")
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(manifest, output, backend, selected_ids={"lesson-0"})
+
+
+def test_unowned_whisperkit_server_is_rejected_before_attempt(tmp_path):
+    output = tmp_path / "output"
+    backend = WhisperKitTranscriptionBackend(model="fixture")
+
+    with pytest.raises(ValueError, match="owned local WhisperKit server"):
+        run_canary(_manifest(tmp_path), output, backend, selected_ids={"lesson-0"})
+
+    assert not (output / "lesson-0/attempts").exists()
+
+
+def test_local_retry_model_tree_and_runtime_are_frozen(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    model = tmp_path / "mlx-model"
+    model.mkdir()
+    weights = model / "weights.safetensors"
+    weights.write_bytes(b"first weights")
+    runtime_version = {"value": "0.4.3"}
+    monkeypatch.setattr(
+        canary_module,
+        "_installed_distribution_version",
+        lambda package: runtime_version["value"],
+    )
+    retry = MLXWhisperTranscriptionBackend(model=str(model), temperature=0)
+    _install_fake_coordinator(monkeypatch)
+    run_canary(
+        manifest,
+        output,
+        _LocalBackend(),
+        retry_backend=retry,
+        selected_ids={"lesson-0"},
+    )
+
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    assert frozen["retry_backend"]["runtime_version"] == "0.4.3"
+    assert frozen["retry_backend"]["local_model"]["path"] == str(model.resolve())
+    first_tree = frozen["retry_backend"]["local_model"]["tree_sha256"]
+    weights.write_bytes(b"changed weights")
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(
+            manifest,
+            output,
+            _LocalBackend(),
+            retry_backend=retry,
+            selected_ids={"lesson-0"},
+        )
+    assert first_tree != canary_module._model_tree_evidence(model)["tree_sha256"]
+
+
+def test_local_retry_runtime_change_invalidates_frozen_execution(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    model = tmp_path / "mlx-model"
+    model.mkdir()
+    (model / "weights.safetensors").write_bytes(b"weights")
+    runtime_version = {"value": "0.4.3"}
+    monkeypatch.setattr(
+        canary_module,
+        "_installed_distribution_version",
+        lambda package: runtime_version["value"],
+    )
+    retry = MLXWhisperTranscriptionBackend(model=str(model), temperature=0)
+    _install_fake_coordinator(monkeypatch)
+    run_canary(
+        manifest,
+        output,
+        _LocalBackend(),
+        retry_backend=retry,
+        selected_ids={"lesson-0"},
+    )
+
+    runtime_version["value"] = "0.4.4"
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(
+            manifest,
+            output,
+            _LocalBackend(),
+            retry_backend=retry,
+            selected_ids={"lesson-0"},
+        )
+
+
+def test_nonlocal_mlx_canary_model_is_rejected_before_attempt(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    monkeypatch.setattr(
+        canary_module,
+        "_installed_distribution_version",
+        lambda package: "0.4.3",
+    )
+    backend = MLXWhisperTranscriptionBackend(model="publisher/remote-model", temperature=0)
+
+    with pytest.raises(ValueError, match="existing local transcription model directory"):
+        run_canary(_manifest(tmp_path), output, backend, selected_ids={"lesson-0"})
+
+    assert not (output / "lesson-0/attempts").exists()
 
 
 def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path, monkeypatch):

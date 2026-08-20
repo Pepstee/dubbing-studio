@@ -10,11 +10,15 @@ import re
 import sys
 import time
 from dataclasses import replace
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from pathlib import Path
 
 from dubbing.control_plane.cli import build_backend, build_retry_backend
 from dubbing.evaluation.metrics import TimedText, evaluate_documents
+from dubbing.media import ffmpeg_executable
 from dubbing.transcription.adaptive import AdaptiveChunkPlanner, AdaptiveLongFormCoordinator
+from dubbing.transcription.faster_whisper import FasterWhisperTranscriptionBackend
+from dubbing.transcription.mlx_whisper import MLXWhisperTranscriptionBackend
 from dubbing.transcription.models import (
     TranscriptionError,
     TranscriptionOptions,
@@ -22,6 +26,7 @@ from dubbing.transcription.models import (
 )
 from dubbing.transcription.quality import evaluate_transcript_quality
 from dubbing.transcription.speech_regions import FasterWhisperSileroSpeechRegionDetector
+from dubbing.transcription.whisperkit import WhisperKitTranscriptionBackend
 
 
 SCHEMA_VERSION = "dubbing.historical-canary.v1"
@@ -88,6 +93,51 @@ def _document_sha256(document: dict) -> str:
         allow_nan=False,
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _file_evidence(path: Path) -> dict:
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise ValueError(f"runtime executable is missing: {resolved}")
+    return {
+        "path": str(resolved),
+        "sha256": _sha256(resolved),
+        "size_bytes": resolved.stat().st_size,
+    }
+
+
+def _model_tree_evidence(path: Path) -> dict:
+    resolved = path.resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"local model directory is missing: {resolved}")
+    digest = hashlib.sha256()
+    total = 0
+    count = 0
+    for item in sorted(candidate for candidate in resolved.rglob("*") if candidate.is_file()):
+        relative = item.relative_to(resolved).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        with item.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                total += len(block)
+                digest.update(block)
+        count += 1
+    if count == 0:
+        raise ValueError(f"local model directory contains no files: {resolved}")
+    return {
+        "path": str(resolved),
+        "algorithm": "sha256-relative-path-content-v1",
+        "tree_sha256": digest.hexdigest(),
+        "size_bytes": total,
+        "file_count": count,
+    }
+
+
+def _installed_distribution_version(package: str) -> str:
+    try:
+        return distribution_version(package)
+    except PackageNotFoundError as exc:
+        raise ValueError(f"local backend runtime is not installed: {package}") from exc
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -368,6 +418,7 @@ def _implementation_binding(*backends) -> tuple[dict, str]:
         Path(__file__).resolve(),
         (project_root / "dubbing/control_plane/cli.py").resolve(),
         (project_root / "dubbing/evaluation/metrics.py").resolve(),
+        (project_root / "dubbing/media.py").resolve(),
     }
     candidates.update((project_root / "dubbing/transcription").glob("*.py"))
     for backend in backends:
@@ -410,13 +461,39 @@ def _backend_evidence(backend, *, label: str) -> dict:
         },
         "cloud_allowed": False,
     }
+    if isinstance(
+        backend,
+        (MLXWhisperTranscriptionBackend, FasterWhisperTranscriptionBackend),
+    ):
+        package = (
+            "mlx-whisper"
+            if isinstance(backend, MLXWhisperTranscriptionBackend)
+            else "faster-whisper"
+        )
+        backend_evidence["runtime_version"] = _installed_distribution_version(package)
+        model_path = Path(backend.model).expanduser().resolve()
+        model_must_be_local = (
+            isinstance(backend, MLXWhisperTranscriptionBackend) or label == "retry"
+        )
+        if model_must_be_local and not model_path.is_dir():
+            raise ValueError(
+                f"historical canary requires an existing local {label} model directory"
+            )
+        if model_path.is_dir():
+            backend_evidence["local_model"] = _model_tree_evidence(model_path)
     server = getattr(backend, "server", None)
+    if isinstance(backend, WhisperKitTranscriptionBackend) and server is None:
+        raise ValueError(
+            "historical canary requires an owned local WhisperKit server "
+            "to bind its runtime executable"
+        )
     if server is not None:
         backend_evidence.update(
             {
                 "model_tree_sha256": server.model_sha256,
                 "model_size_bytes": server.model_size_bytes,
                 "runtime_version": server.version,
+                "runtime_executable": _file_evidence(Path(server.executable)),
             }
         )
     return backend_evidence
@@ -465,6 +542,7 @@ def _execution_fingerprint(
     )
     execution_config = dict(manifest.get("execution", {}))
     execution_config["candidate_languages"] = list(_candidate_languages(manifest))
+    ffmpeg = ffmpeg_executable()
     execution = {
         "schema_version": "dubbing.historical-canary-execution.v2",
         "backend": backend_evidence,
@@ -478,6 +556,9 @@ def _execution_fingerprint(
         "corpus_sha256": corpus_sha256,
         "implementation": implementation,
         "implementation_sha256": implementation_sha256,
+        "media_runtime": {
+            "ffmpeg": _file_evidence(Path(ffmpeg)) if ffmpeg is not None else None,
+        },
         "giga_admission_allowed": False,
     }
     return execution, _document_sha256(execution)
@@ -1157,6 +1238,19 @@ def run_canary(
                     Path(entry["source"]["path"]),
                     TranscriptionOptions(task="transcribe", word_timestamps=True),
                     processing_end_ms=entry["source"].get("processing_end_ms"),
+                )
+                current_execution, current_fingerprint = _execution_fingerprint(
+                    manifest,
+                    backend,
+                    retry_backend,
+                    resolved_silence_verification_detector,
+                    resolved_targeted_retry_region_detector,
+                )
+                _admit_frozen_execution(
+                    output / "frozen-execution.json",
+                    current_execution,
+                    current_fingerprint,
+                    roles={entry["role"] for entry in entries},
                 )
             else:
                 if not result_path.is_file() or not quality_path.is_file():
