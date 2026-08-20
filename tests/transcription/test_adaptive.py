@@ -20,6 +20,7 @@ from dubbing.transcription.audio_candidates import AudioCandidate, AudioCandidat
 from dubbing.transcription.models import (
     DecodeDiagnostics,
     TranscriptSegment,
+    TranscriptWord,
     TranscriptionOptions,
     TranscriptionResult,
 )
@@ -109,6 +110,37 @@ def test_chunk_extraction_merges_every_audio_stream_as_discrete_channels(tmp_pat
     )
     assert command[command.index("-ac") + 1] == "3"
     assert command[command.index("-ar") + 1] == "48000"
+
+
+def test_reconciliation_resorts_words_collapsed_by_boundary_clamping():
+    chunk = AdaptiveChunk(0, 10, 30, 0, 30, "end-of-media")
+    result = TranscriptionResult(
+        segments=(
+            TranscriptSegment(
+                9,
+                20,
+                "two words",
+                words=(
+                    TranscriptWord(9, 20, " wide"),
+                    TranscriptWord(10, 11, " short"),
+                ),
+            ),
+        ),
+        text="two words",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=30,
+        confidence_available=False,
+    )
+
+    reconciled = reconcile_chunks([(chunk, result)])
+
+    assert [(word.start_ms, word.end_ms) for word in reconciled[0].words] == [
+        (10, 11),
+        (10, 20),
+    ]
 
 
 class _RetryingBackend(TranscriptionBackend):
@@ -494,9 +526,8 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
 
 
 def test_targeted_retry_without_independent_backend_fails_closed(tmp_path):
-    coordinator = AdaptiveLongFormCoordinator(
-        _RetryingBackend(), tmp_path / "job"
-    )
+    backend = _RetryingBackend()
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
     attempts = []
     with patch.object(
         coordinator,
@@ -512,7 +543,8 @@ def test_targeted_retry_without_independent_backend_fails_closed(tmp_path):
         )
 
     assert replacement is None
-    assert attempts[-1]["status"] == "NO_HEALTHY_INDEPENDENT_CANDIDATE"
+    assert backend.calls == 0
+    assert attempts[-1]["status"] == "NO_INDEPENDENT_BACKEND_CONFIGURED"
 
 
 def test_audio_candidate_can_rescue_raw_only_with_independent_consensus(tmp_path):

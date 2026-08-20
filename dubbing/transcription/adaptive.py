@@ -450,6 +450,7 @@ def reconcile_chunks(
                             end_ms=word_end,
                         )
                     )
+            words.sort(key=lambda item: (item.start_ms, item.end_ms))
             segment = replace(
                 segment,
                 start_ms=start_ms,
@@ -793,6 +794,18 @@ class AdaptiveLongFormCoordinator:
             and self.retry_backend.identity != self.backend.identity
             else None
         )
+        if independent_retry is None:
+            attempts.append(
+                {
+                    "kind": "targeted-span-adjudication",
+                    "source_start_ms": start_ms,
+                    "source_end_ms": end_ms,
+                    "status": "NO_INDEPENDENT_BACKEND_CONFIGURED",
+                    "independent_backend_count": 0,
+                    "selected": False,
+                }
+            )
+            return None
         if independent_retry is not None:
             candidates.append((self.retry_backend, options))
         retry_backend = independent_retry or self.backend
