@@ -15,19 +15,35 @@ from dubbing.diarization.models import (
 )
 from dubbing.diarization.pyannote import PyannoteCommunityBackend
 from dubbing.diarization.sherpa import SherpaOnnxDiarizationBackend
+from dubbing.diarization.stability import (
+    CannotLinkEvidence,
+    CandidateAgreement,
+    DiarizationStabilityPolicy,
+    DiarizationStabilityReport,
+    DiarizationStabilityStatus,
+    ThresholdPartition,
+    evaluate_diarization_stability,
+)
 
 __all__ = [
     "DiarizationBackend",
     "ResumableDiarizationJob",
     "DiarizationError",
     "DiarizationResult",
+    "DiarizationStabilityPolicy",
+    "DiarizationStabilityReport",
+    "DiarizationStabilityStatus",
+    "CannotLinkEvidence",
+    "CandidateAgreement",
     "PyannoteCommunityBackend",
     "SegmentAttribution",
     "SherpaOnnxDiarizationBackend",
     "SpeakerConstraints",
     "SpeakerTurn",
+    "ThresholdPartition",
     "UnsupportedSpeakerConstraintError",
     "attribute_timed_segments",
     "attribute_window",
     "attributed_segment_plan",
+    "evaluate_diarization_stability",
 ]
