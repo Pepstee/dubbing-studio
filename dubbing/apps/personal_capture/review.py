@@ -21,14 +21,9 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-from dubbing.apps.personal_capture.config import load_config
+from dubbing.apps.personal_capture.config import SUPPORTED_MEDIA_SUFFIXES, load_config
 from dubbing.apps.personal_capture.runtime import build_control_service
 
-_ALLOWED = {
-    ".aac", ".aiff", ".avi", ".flac", ".m4a", ".m4v", ".mkv", ".mov",
-    ".mp3", ".mp4", ".mpeg", ".mpg", ".oga", ".ogg", ".opus", ".wav",
-    ".weba", ".webm", ".wmv",
-}
 _CAPTURE_ID = re.compile(r"^[a-f0-9]{64}$")
 
 def _safe_source(inbox: Path, name: str) -> Path:
@@ -112,7 +107,7 @@ def create_capture_app(config_path: str | Path) -> Flask:
         if item is None or not item.filename:
             abort(400)
         name = secure_filename(item.filename)
-        if not name or Path(name).suffix.lower() not in _ALLOWED:
+        if not name or Path(name).suffix.lower() not in SUPPORTED_MEDIA_SUFFIXES:
             abort(415)
         destination = inbox / name
         if destination.exists():

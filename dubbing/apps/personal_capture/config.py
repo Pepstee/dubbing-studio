@@ -3,6 +3,31 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+
+SUPPORTED_MEDIA_SUFFIXES = frozenset(
+    {
+        ".aac",
+        ".aiff",
+        ".avi",
+        ".flac",
+        ".m4a",
+        ".m4v",
+        ".mkv",
+        ".mov",
+        ".mp3",
+        ".mp4",
+        ".mpeg",
+        ".mpg",
+        ".oga",
+        ".ogg",
+        ".opus",
+        ".wav",
+        ".weba",
+        ".webm",
+        ".wmv",
+    }
+)
+
 _SCHEMA = "dubbing.personal-capture-deployment.v1"
 
 

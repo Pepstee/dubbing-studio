@@ -64,8 +64,23 @@ or ground-truth accuracy.
 
 ## 2. Transfer atomically
 
-Never copy directly to its final filename. Copy using a hidden `.partial`
-suffix and rename only after the transfer has completed.
+Never copy directly to its final filename. On the Mac, use the hash-verifying ingest command. It
+rejects symlinks, source mutation and filename collisions; copies through an exclusive hidden
+partial; verifies the exact bytes; atomically publishes without overwrite; and writes an idempotent
+receipt under the capture state directory:
+
+```bash
+cd /Users/admin/Documents/dubbing-studio
+.venv/bin/dubbing-capture-ingest "/Volumes/<TASCAM CARD>/<recording>.wav" \
+  --config deploy/personal_capture/mac/personal-capture.json
+```
+
+The command lands the untouched file in the configured inbox. It does not split, normalize,
+approve, upload to cloud or emit a GIGA event. Run the watcher afterward, or leave the continuous
+watcher active.
+
+On WSL deployments without the ingest CLI, copy using a hidden `.partial` suffix and rename only
+after the transfer has completed.
 
 From WSL:
 
