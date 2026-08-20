@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from dubbing.transcription.adaptive import (
     AdaptiveChunk,
     AdaptiveChunkPlanner,
@@ -21,11 +23,11 @@ from dubbing.transcription.models import (
     DecodeDiagnostics,
     TranscriptSegment,
     TranscriptWord,
+    TranscriptionError,
     TranscriptionOptions,
     TranscriptionResult,
 )
 from dubbing.transcription.speech_regions import SpeechRegion, SpeechRegionPlan
-
 
 
 def _pcm_wave(path, samples, sample_rate=16000):
@@ -40,8 +42,9 @@ def test_native_pcm_wave_probe_silence_and_extraction_without_ffmpeg(tmp_path):
     source = tmp_path / "source.wav"
     _pcm_wave(source, [10000, -10000] * 4000 + [0] * 16000 + [10000, -10000] * 4000)
 
-    with patch("dubbing.transcription.adaptive.shutil.which", return_value=None), patch(
-        "dubbing.transcription.adaptive.ffmpeg_executable", return_value=None
+    with (
+        patch("dubbing.transcription.adaptive.shutil.which", return_value=None),
+        patch("dubbing.transcription.adaptive.ffmpeg_executable", return_value=None),
     ):
         probe = probe_media(source)
         silences = detect_silence_intervals(source)
@@ -68,11 +71,10 @@ def test_ffmpeg_silence_detection_maps_only_the_first_audio_stream(tmp_path):
         stderr="silence_start: 1.0\nsilence_end: 2.0 | silence_duration: 1.0\n",
     )
 
-    with patch(
-        "dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"
-    ), patch(
-        "dubbing.transcription.adaptive.subprocess.run", return_value=completed
-    ) as run:
+    with (
+        patch("dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"),
+        patch("dubbing.transcription.adaptive.subprocess.run", return_value=completed) as run,
+    ):
         assert detect_silence_intervals(source) == ((1000, 2000),)
 
     command = run.call_args.args[0]
@@ -92,11 +94,10 @@ def test_chunk_extraction_merges_every_audio_stream_as_discrete_channels(tmp_pat
     )
     completed = SimpleNamespace(returncode=0, stderr="")
 
-    with patch(
-        "dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"
-    ), patch(
-        "dubbing.transcription.adaptive.subprocess.run", return_value=completed
-    ) as run:
+    with (
+        patch("dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"),
+        patch("dubbing.transcription.adaptive.subprocess.run", return_value=completed) as run,
+    ):
         AdaptiveLongFormCoordinator._extract(
             source,
             streams,
@@ -105,9 +106,7 @@ def test_chunk_extraction_merges_every_audio_stream_as_discrete_channels(tmp_pat
         )
 
     command = run.call_args.args[0]
-    assert command[command.index("-filter_complex") + 1] == (
-        "[0:1][0:2]amerge=inputs=2[all_audio]"
-    )
+    assert command[command.index("-filter_complex") + 1] == ("[0:1][0:2]amerge=inputs=2[all_audio]")
     assert command[command.index("-ac") + 1] == "3"
     assert command[command.index("-ar") + 1] == "48000"
 
@@ -242,17 +241,21 @@ def test_dual_evidence_silence_skips_asr_and_replays_empty_checkpoint(tmp_path):
     def extract(source, streams, selected_chunk, output):
         output.write_bytes(b"confirmed silence")
 
-    with patch(
-        "dubbing.transcription.adaptive.probe_media",
-        return_value=MediaProbe(
-            1_034_499,
-            6,
-            (AudioStream(0, "pcm", 1, 16_000),),
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(
+                1_034_499,
+                6,
+                (AudioStream(0, "pcm", 1, 16_000),),
+            ),
         ),
-    ), patch(
-        "dubbing.transcription.adaptive.detect_silence_intervals",
-        return_value=((955_118, 1_034_499),),
-    ), patch.object(coordinator, "_extract", side_effect=extract):
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=((955_118, 1_034_499),),
+        ),
+        patch.object(coordinator, "_extract", side_effect=extract),
+    ):
         result, _ = coordinator.run(source)
         replay, _ = coordinator.run(source)
 
@@ -261,21 +264,18 @@ def test_dual_evidence_silence_skips_asr_and_replays_empty_checkpoint(tmp_path):
     assert replay == result
     assert backend.calls == 0
     assert detector.calls == 1
-    chunk_document = json.loads(
-        (tmp_path / "job" / "chunks" / "000015.json").read_text()
-    )
+    manifest = json.loads((tmp_path / "job" / "manifest.json").read_text())
+    assert manifest["silence_verification_detector_identity"] == detector.identity
+    assert manifest["targeted_retry_region_detector_identity"] == detector.identity
+    chunk_document = json.loads((tmp_path / "job" / "chunks" / "000015.json").read_text())
     assert chunk_document["segments"] == []
     assert chunk_document["provenance"]["classification"] == "confirmed_silence"
-    receipt = json.loads(
-        (tmp_path / "job" / "receipts" / "000015.json").read_text()
-    )
+    receipt = json.loads((tmp_path / "job" / "receipts" / "000015.json").read_text())
     assert receipt["selected_attempt"] == 0
     assert receipt["targeted_retry_exhausted"] is False
     assert receipt["attempts"][0]["status"] == "CONFIRMED_SILENCE"
     assert receipt["attempts"][0]["energy_silence_coverage_ms"] == 65_407
-    assert not any(
-        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
-    )
+    assert not any(item["kind"] == "targeted-span-redecode" for item in receipt["attempts"])
 
 
 def test_silence_short_of_full_extracted_range_preserves_asr(tmp_path):
@@ -291,21 +291,25 @@ def test_silence_short_of_full_extracted_range_preserves_asr(tmp_path):
         speech_region_detector=detector,
     )
 
-    with patch(
-        "dubbing.transcription.adaptive.probe_media",
-        return_value=MediaProbe(
-            1_034_499,
-            6,
-            (AudioStream(0, "pcm", 1, 16_000),),
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(
+                1_034_499,
+                6,
+                (AudioStream(0, "pcm", 1, 16_000),),
+            ),
         ),
-    ), patch(
-        "dubbing.transcription.adaptive.detect_silence_intervals",
-        return_value=((955_118, chunk.extract_end_ms - 1),),
-    ), patch.object(
-        coordinator,
-        "_extract",
-        side_effect=lambda source, streams, selected_chunk, output: output.write_bytes(
-            b"not fully covered"
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=((955_118, chunk.extract_end_ms - 1),),
+        ),
+        patch.object(
+            coordinator,
+            "_extract",
+            side_effect=lambda source, streams, selected_chunk, output: output.write_bytes(
+                b"not fully covered"
+            ),
         ),
     ):
         coordinator.run(source)
@@ -342,7 +346,13 @@ def test_semantic_vad_speech_overrides_full_energy_silence(tmp_path):
 def test_energy_silence_without_configured_detector_preserves_asr(tmp_path):
     chunk = _lesson_silence_chunk()
     backend = _IndependentBackend()
-    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+    targeted_detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        silence_verification_detector=None,
+        targeted_retry_region_detector=targeted_detector,
+    )
     audio = tmp_path / "chunk.wav"
     audio.write_bytes(b"unverified silence")
 
@@ -355,6 +365,7 @@ def test_energy_silence_without_configured_detector_preserves_asr(tmp_path):
 
     assert result.text == "clean ordinary phrase"
     assert backend.calls == 1
+    assert targeted_detector.calls == 0
 
 
 class _ConstantBackend(TranscriptionBackend):
@@ -597,6 +608,32 @@ def test_v3_checkpoint_manifest_migrates_only_when_other_contract_fields_match(t
     assert json.loads(manifest.read_text(encoding="utf-8")) == expected
 
 
+def test_detector_role_change_invalidates_adaptive_checkpoint_manifest(tmp_path):
+    detector = _SpeechDetector()
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
+    chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
+    both_roles = AdaptiveLongFormCoordinator(
+        _RetryingBackend(),
+        tmp_path / "job",
+        speech_region_detector=detector,
+    )
+    both_roles._admit_manifest(both_roles._manifest(source, "0" * 64, probe, chunks))
+    silence_only = AdaptiveLongFormCoordinator(
+        _RetryingBackend(),
+        tmp_path / "job",
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+
+    with pytest.raises(
+        TranscriptionError,
+        match="adaptive checkpoint does not match source or configuration",
+    ):
+        silence_only._admit_manifest(silence_only._manifest(source, "0" * 64, probe, chunks))
+
+
 def test_overlap_reconciliation_drops_duplicate_boundary_segment():
     chunks = [
         AdaptiveChunk(0, 0, 10_000, 0, 12_000, "silence"),
@@ -604,11 +641,23 @@ def test_overlap_reconciliation_drops_duplicate_boundary_segment():
     ]
     first = TranscriptionResult(
         (TranscriptSegment(9_000, 10_500, "same boundary"),),
-        "same boundary", "x", "x", "x", "en", 12_000, False,
+        "same boundary",
+        "x",
+        "x",
+        "x",
+        "en",
+        12_000,
+        False,
     )
     second = TranscriptionResult(
         (TranscriptSegment(1_000, 2_500, "same boundary"),),
-        "same boundary", "x", "x", "x", "en", 12_000, False,
+        "same boundary",
+        "x",
+        "x",
+        "x",
+        "en",
+        12_000,
+        False,
     )
     assert len(reconcile_chunks(list(zip(chunks, (first, second))))) == 1
 
@@ -620,11 +669,23 @@ def test_overlap_context_is_clipped_to_non_overlapping_logical_chunks():
     ]
     first = TranscriptionResult(
         (TranscriptSegment(8_500, 10_500, "before boundary"),),
-        "before boundary", "x", "x", "x", "en", 12_000, False,
+        "before boundary",
+        "x",
+        "x",
+        "x",
+        "en",
+        12_000,
+        False,
     )
     second = TranscriptionResult(
         (TranscriptSegment(1_500, 3_000, "after boundary"),),
-        "after boundary", "x", "x", "x", "en", 12_000, False,
+        "after boundary",
+        "x",
+        "x",
+        "x",
+        "en",
+        12_000,
+        False,
     )
 
     segments = reconcile_chunks(list(zip(chunks, (first, second))))
@@ -655,13 +716,14 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     def extract_retry(source, segment, destination):
         destination.write_bytes(b"retry span")
 
-    with patch(
-        "dubbing.transcription.adaptive.probe_media",
-        return_value=MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),)),
-    ), patch(
-        "dubbing.transcription.adaptive.detect_silence_centres", return_value=()
-    ), patch.object(coordinator, "_extract", side_effect=extract), patch.object(
-        coordinator, "_extract_language_span", side_effect=extract_retry
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),)),
+        ),
+        patch("dubbing.transcription.adaptive.detect_silence_centres", return_value=()),
+        patch.object(coordinator, "_extract", side_effect=extract),
+        patch.object(coordinator, "_extract_language_span", side_effect=extract_retry),
     ):
         result, quality = coordinator.run(source)
         coordinator.run(source)
@@ -670,9 +732,7 @@ def test_coordinator_retries_only_failed_span_and_checkpoints(tmp_path):
     assert result.text == "clean ordinary phrase"
     assert quality["status"] == "PASS"
     assert (tmp_path / "job" / "chunks" / "000000.json").is_file()
-    receipt = json.loads(
-        (tmp_path / "job" / "receipts" / "000000.json").read_text()
-    )
+    receipt = json.loads((tmp_path / "job" / "receipts" / "000000.json").read_text())
     targeted = [
         attempt
         for attempt in receipt["attempts"]
@@ -738,13 +798,16 @@ def test_audio_candidate_can_rescue_raw_only_with_independent_consensus(tmp_path
         retry_backend=independent,
     )
     attempts = []
-    with patch.object(
-        coordinator,
-        "_extract_language_span",
-        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
-    ), patch(
-        "dubbing.transcription.adaptive.build_audio_candidates",
-        return_value=_audio_candidate_set(tmp_path),
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
     ):
         replacement = coordinator._decode_target_span(
             tmp_path / "source.wav",
@@ -778,13 +841,16 @@ def test_divergent_channel_consensuses_fail_closed(tmp_path):
         retry_backend=independent,
     )
     attempts = []
-    with patch.object(
-        coordinator,
-        "_extract_language_span",
-        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
-    ), patch(
-        "dubbing.transcription.adaptive.build_audio_candidates",
-        return_value=_audio_candidate_set(tmp_path),
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
     ):
         replacement = coordinator._decode_target_span(
             tmp_path / "source.wav",
@@ -815,13 +881,16 @@ def test_raw_consensus_wins_even_when_processed_candidates_disagree(tmp_path):
         retry_backend=independent,
     )
     attempts = []
-    with patch.object(
-        coordinator,
-        "_extract_language_span",
-        side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
-    ), patch(
-        "dubbing.transcription.adaptive.build_audio_candidates",
-        return_value=_audio_candidate_set(tmp_path),
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
     ):
         replacement = coordinator._decode_target_span(
             tmp_path / "source.wav",
@@ -961,9 +1030,7 @@ def test_exact_single_token_agreement_remains_uncertain_even_at_high_confidence(
 
 
 def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(tmp_path):
-    coordinator = AdaptiveLongFormCoordinator(
-        _RetryingBackend(), tmp_path / "job"
-    )
+    coordinator = AdaptiveLongFormCoordinator(_RetryingBackend(), tmp_path / "job")
 
     assert coordinator._target_languages("English hallucination") == (
         "en",
@@ -1000,7 +1067,7 @@ def test_targeted_retry_microdecodes_regions_and_marks_long_uncovered_intervals(
         _ConstantBackend("fixture:primary"),
         tmp_path / "job",
         retry_backend=_ConstantBackend("fixture:independent"),
-        speech_region_detector=_Detector(),
+        targeted_retry_region_detector=_Detector(),
     )
     attempts = []
     with patch.object(
@@ -1027,6 +1094,41 @@ def test_targeted_retry_microdecodes_regions_and_marks_long_uncovered_intervals(
     ]
     assert attempts[0]["kind"] == "targeted-speech-region-plan"
     assert attempts[-1]["kind"] == "targeted-speech-region-result"
+
+
+def test_explicit_none_disables_retry_isolation_but_keeps_silence_detector(tmp_path):
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        _ConstantBackend("fixture:primary"),
+        tmp_path / "job",
+        retry_backend=_ConstantBackend("fixture:independent"),
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    attempts = []
+    audio_candidates = _audio_candidate_set(tmp_path)
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=audio_candidates,
+        ),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (10_000, 10_500),
+            "failed hallucination",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert replacement is not None
+    assert detector.calls == 0
+    assert not any(item["kind"] == "targeted-speech-region-plan" for item in attempts)
 
 
 def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):
@@ -1087,9 +1189,7 @@ def test_detected_korean_chunk_uses_always_forced_retry(tmp_path):
                         2000,
                         text,
                         language="ko",
-                        diagnostics=DecodeDiagnostics(
-                            avg_log_probability=-0.2 if forced else -0.1
-                        ),
+                        diagnostics=DecodeDiagnostics(avg_log_probability=-0.2 if forced else -0.1),
                     ),
                 ),
                 text,
@@ -1117,9 +1217,7 @@ def test_detected_korean_chunk_uses_always_forced_retry(tmp_path):
 
     assert result.text == "강제 한국어"
     retry = next(
-        item
-        for item in receipt["attempts"]
-        if item["kind"] == "detected-chunk-language-redecode"
+        item for item in receipt["attempts"] if item["kind"] == "detected-chunk-language-redecode"
     )
     assert retry["selected"] is True
 

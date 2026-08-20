@@ -64,6 +64,13 @@ _EXECUTION_KEYS = {
 }
 
 
+class _UnsetSpeechRegionDetector:
+    pass
+
+
+_UNSET_SPEECH_REGION_DETECTOR = _UnsetSpeechRegionDetector()
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -423,7 +430,8 @@ def _execution_fingerprint(
     manifest: dict,
     backend,
     retry_backend=None,
-    speech_region_detector=None,
+    silence_verification_detector=None,
+    targeted_retry_region_detector=None,
 ) -> tuple[dict, str]:
     backend_evidence = _backend_evidence(backend, label="transcription")
     retry_evidence = (
@@ -433,15 +441,19 @@ def _execution_fingerprint(
         raise ValueError("independent retry backend resolved to the primary backend identity")
     corpus, corpus_sha256 = _corpus_binding(manifest)
     implementation, implementation_sha256 = _implementation_binding(
-        backend, retry_backend, speech_region_detector
+        backend,
+        retry_backend,
+        silence_verification_detector,
+        targeted_retry_region_detector,
     )
     execution_config = dict(manifest.get("execution", {}))
     execution_config["candidate_languages"] = list(_candidate_languages(manifest))
     execution = {
-        "schema_version": "dubbing.historical-canary-execution.v1",
+        "schema_version": "dubbing.historical-canary-execution.v2",
         "backend": backend_evidence,
         "retry_backend": retry_evidence,
-        "speech_region_detector": _detector_evidence(speech_region_detector),
+        "silence_verification_detector": _detector_evidence(silence_verification_detector),
+        "targeted_retry_region_detector": _detector_evidence(targeted_retry_region_detector),
         "required_languages": manifest.get("required_languages", []),
         "execution": execution_config,
         "policy": manifest.get("policy", {}),
@@ -995,9 +1007,21 @@ def run_canary(
     *,
     retry_backend=None,
     speech_region_detector=None,
+    silence_verification_detector=_UNSET_SPEECH_REGION_DETECTOR,
+    targeted_retry_region_detector=_UNSET_SPEECH_REGION_DETECTOR,
     selected_ids: set[str] | None = None,
     evaluate_only: bool = False,
 ) -> dict:
+    resolved_silence_verification_detector = (
+        speech_region_detector
+        if isinstance(silence_verification_detector, _UnsetSpeechRegionDetector)
+        else silence_verification_detector
+    )
+    resolved_targeted_retry_region_detector = (
+        speech_region_detector
+        if isinstance(targeted_retry_region_detector, _UnsetSpeechRegionDetector)
+        else targeted_retry_region_detector
+    )
     manifest_path, manifest = load_canary_manifest(manifest_path)
     all_entries = tuple(dict(entry) for entry in manifest["entries"])
     if selected_ids:
@@ -1024,7 +1048,8 @@ def run_canary(
         manifest,
         backend,
         retry_backend,
-        speech_region_detector,
+        resolved_silence_verification_detector,
+        resolved_targeted_retry_region_detector,
     )
     _admit_frozen_execution(
         output / "frozen-execution.json",
@@ -1078,7 +1103,8 @@ def run_canary(
                     entry_output,
                     planner=planner,
                     retry_backend=retry_backend,
-                    speech_region_detector=speech_region_detector,
+                    silence_verification_detector=(resolved_silence_verification_detector),
+                    targeted_retry_region_detector=(resolved_targeted_retry_region_detector),
                     candidate_languages=candidate_languages,
                     minimum_silence_seconds=float(config.get("minimum_silence_seconds", 0.7)),
                     language_retry_policy=dict(config.get("language_retry_policy", {})),
@@ -1231,14 +1257,15 @@ def main() -> None:
     args = parser.parse_args()
     backend = build_backend(args)
     retry_backend = build_retry_backend(args)
-    speech_region_detector = FasterWhisperSileroSpeechRegionDetector()
+    silence_verification_detector = FasterWhisperSileroSpeechRegionDetector()
     try:
         summary = run_canary(
             args.manifest,
             args.output,
             backend,
             retry_backend=retry_backend,
-            speech_region_detector=speech_region_detector,
+            silence_verification_detector=silence_verification_detector,
+            targeted_retry_region_detector=None,
             selected_ids=set(args.selected or ()),
             evaluate_only=args.evaluate_only,
         )

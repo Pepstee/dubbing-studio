@@ -13,6 +13,7 @@ from dubbing.evaluation.canary import (
     validate_canary_bindings,
 )
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
+from dubbing.transcription.speech_regions import FasterWhisperSileroSpeechRegionDetector
 
 
 def _sha256(path: Path) -> str:
@@ -362,24 +363,77 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
         output,
         _LocalBackend(),
         retry_backend=_IndependentLocalBackend(),
-        speech_region_detector=_LocalSpeechDetector(),
+        silence_verification_detector=_LocalSpeechDetector(),
+        targeted_retry_region_detector=None,
         selected_ids={"lesson-0"},
     )
 
     frozen = json.loads((output / "frozen-execution.json").read_text())
     assert frozen["retry_backend"]["identity"] == _IndependentLocalBackend.identity
-    assert frozen["speech_region_detector"]["identity"] == _LocalSpeechDetector.identity
-    assert len(frozen["speech_region_detector"]["implementation"]["source_sha256"]) == 64
+    assert frozen["silence_verification_detector"]["identity"] == _LocalSpeechDetector.identity
+    assert frozen["targeted_retry_region_detector"] is None
+    assert len(frozen["silence_verification_detector"]["implementation"]["source_sha256"]) == 64
     assert len(frozen["retry_backend"]["implementation"]["source_sha256"]) == 64
     assert frozen["execution"]["candidate_languages"] == ["en", "ru"]
     assert frozen["corpus"]["entries"][0]["source_evaluation_end_ms"] == 800
     assert coordinator.init_kwargs[0]["retry_backend"].identity == (
         _IndependentLocalBackend.identity
     )
-    assert coordinator.init_kwargs[0]["speech_region_detector"].identity == (
+    assert coordinator.init_kwargs[0]["silence_verification_detector"].identity == (
         _LocalSpeechDetector.identity
     )
+    assert coordinator.init_kwargs[0]["targeted_retry_region_detector"] is None
     assert coordinator.init_kwargs[0]["candidate_languages"] == ("en", "ru")
+
+
+def test_legacy_speech_detector_populates_both_frozen_roles(tmp_path, monkeypatch):
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+
+    run_canary(
+        _manifest(tmp_path),
+        output,
+        _LocalBackend(),
+        speech_region_detector=_LocalSpeechDetector(),
+        selected_ids={"lesson-0"},
+    )
+
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    assert frozen["silence_verification_detector"]["identity"] == _LocalSpeechDetector.identity
+    assert frozen["targeted_retry_region_detector"]["identity"] == _LocalSpeechDetector.identity
+    assert (
+        coordinator.init_kwargs[0]["silence_verification_detector"].identity
+        == _LocalSpeechDetector.identity
+    )
+    assert (
+        coordinator.init_kwargs[0]["targeted_retry_region_detector"].identity
+        == _LocalSpeechDetector.identity
+    )
+
+
+def test_detector_role_change_is_rejected_after_execution_freeze(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+    detector = _LocalSpeechDetector()
+    run_canary(
+        manifest,
+        output,
+        _LocalBackend(),
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+        selected_ids={"lesson-0"},
+    )
+
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(
+            manifest,
+            output,
+            _LocalBackend(),
+            silence_verification_detector=detector,
+            targeted_retry_region_detector=detector,
+            selected_ids={"lesson-0"},
+        )
 
 
 def test_retry_backend_must_be_independent(tmp_path):
@@ -586,6 +640,8 @@ def test_cli_builds_and_forwards_matching_retry_arguments(tmp_path, monkeypatch)
 
     def fake_run(*args, **kwargs):
         observed["forwarded"] = kwargs["retry_backend"]
+        observed["silence_verification_detector"] = kwargs["silence_verification_detector"]
+        observed["targeted_retry_region_detector"] = kwargs["targeted_retry_region_detector"]
         return {"status": "PASS"}
 
     monkeypatch.setattr(canary_module, "build_retry_backend", fake_build_retry)
@@ -614,12 +670,14 @@ def test_cli_builds_and_forwards_matching_retry_arguments(tmp_path, monkeypatch)
 
     canary_module.main()
 
-    assert observed == {
-        "retry_backend": "faster-whisper",
-        "retry_model": "/tmp/retry-model",
-        "retry_device": "cpu",
-        "retry_compute_type": "int8",
-        "retry_mlx_temperature": [0.0],
-        "forwarded": observed["forwarded"],
-    }
+    assert observed["retry_backend"] == "faster-whisper"
+    assert observed["retry_model"] == "/tmp/retry-model"
+    assert observed["retry_device"] == "cpu"
+    assert observed["retry_compute_type"] == "int8"
+    assert observed["retry_mlx_temperature"] == [0.0]
     assert observed["forwarded"].identity == _IndependentLocalBackend.identity
+    assert (
+        observed["silence_verification_detector"].identity
+        == FasterWhisperSileroSpeechRegionDetector().identity
+    )
+    assert observed["targeted_retry_region_detector"] is None

@@ -44,8 +44,15 @@ _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
-_COORDINATOR_VERSION = "adaptive-long-form-v11"
+_COORDINATOR_VERSION = "adaptive-long-form-v12"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
+
+
+class _UnsetSpeechRegionDetector:
+    pass
+
+
+_UNSET_SPEECH_REGION_DETECTOR = _UnsetSpeechRegionDetector()
 
 
 @dataclass(frozen=True)
@@ -152,7 +159,13 @@ def probe_media(path: str | Path) -> MediaProbe:
             for item in document.get("streams", [])
             if item.get("codec_type") == "audio"
         )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+        subprocess.CalledProcessError,
+    ) as exc:
         raise TranscriptionError(f"could not probe media: {source.name}") from exc
     if duration_ms <= 0 or not streams:
         raise TranscriptionError("media must contain at least one positive-duration audio stream")
@@ -298,7 +311,9 @@ def _detect_pcm_wave_silence(
     for window_start in range(0, frame_count, window_frames):
         sample_start = window_start * channels
         sample_end = min(frame_count, window_start + window_frames) * channels
-        silent = max((abs(value) for value in samples[sample_start:sample_end]), default=0) <= threshold
+        silent = (
+            max((abs(value) for value in samples[sample_start:sample_end]), default=0) <= threshold
+        )
         if silent and silence_start is None:
             silence_start = window_start
         if not silent and silence_start is not None:
@@ -500,6 +515,12 @@ class AdaptiveLongFormCoordinator:
         planner: AdaptiveChunkPlanner | None = None,
         retry_backend: TranscriptionBackend | None = None,
         speech_region_detector: SpeechRegionDetector | None = None,
+        silence_verification_detector: (
+            SpeechRegionDetector | None | _UnsetSpeechRegionDetector
+        ) = _UNSET_SPEECH_REGION_DETECTOR,
+        targeted_retry_region_detector: (
+            SpeechRegionDetector | None | _UnsetSpeechRegionDetector
+        ) = _UNSET_SPEECH_REGION_DETECTOR,
         candidate_languages: tuple[str, ...] = ("en", "ru", "ro", "ko"),
         minimum_silence_seconds: float = 0.7,
         language_retry_policy: dict[str, str] | None = None,
@@ -517,7 +538,19 @@ class AdaptiveLongFormCoordinator:
             raise ValueError("language retry policy must use always or confidence")
         self.backend = backend
         self.retry_backend = retry_backend
+        # `speech_region_detector` remains the backward-compatible alias for
+        # callers that intentionally use one detector for both decisions.
         self.speech_region_detector = speech_region_detector
+        self.silence_verification_detector = (
+            speech_region_detector
+            if isinstance(silence_verification_detector, _UnsetSpeechRegionDetector)
+            else silence_verification_detector
+        )
+        self.targeted_retry_region_detector = (
+            speech_region_detector
+            if isinstance(targeted_retry_region_detector, _UnsetSpeechRegionDetector)
+            else targeted_retry_region_detector
+        )
         self.checkpoint_dir = Path(checkpoint_dir)
         self.planner = planner or AdaptiveChunkPlanner()
         self.candidate_languages = candidate_languages
@@ -544,9 +577,7 @@ class AdaptiveLongFormCoordinator:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
             if source.suffix.casefold() == ".wav" and len(streams) == 1:
-                _extract_pcm_wave(
-                    source, chunk.extract_start_ms, chunk.extract_end_ms, output
-                )
+                _extract_pcm_wave(source, chunk.extract_start_ms, chunk.extract_end_ms, output)
                 return
             raise TranscriptionError("ffmpeg is required for non-WAV adaptive transcription")
         command = [
@@ -597,9 +628,11 @@ class AdaptiveLongFormCoordinator:
         if process.returncode:
             raise TranscriptionError(f"chunk extraction failed: {process.stderr.strip()}")
 
-    def _manifest(self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]) -> dict:
+    def _manifest(
+        self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]
+    ) -> dict:
         manifest = {
-            "schema_version": "dubbing.adaptive-transcription-checkpoint.v1",
+            "schema_version": "dubbing.adaptive-transcription-checkpoint.v2",
             "coordinator_version": _COORDINATOR_VERSION,
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
@@ -607,9 +640,14 @@ class AdaptiveLongFormCoordinator:
             "probe": probe.to_dict(),
             "backend_identity": self.backend.identity,
             "retry_backend_identity": self.retry_backend.identity if self.retry_backend else None,
-            "speech_region_detector_identity": (
-                self.speech_region_detector.identity
-                if self.speech_region_detector is not None
+            "silence_verification_detector_identity": (
+                self.silence_verification_detector.identity
+                if self.silence_verification_detector is not None
+                else None
+            ),
+            "targeted_retry_region_detector_identity": (
+                self.targeted_retry_region_detector.identity
+                if self.targeted_retry_region_detector is not None
                 else None
             ),
             "candidate_languages": list(self.candidate_languages),
@@ -629,9 +667,7 @@ class AdaptiveLongFormCoordinator:
                 "independent_minimum_acoustic_confidence": (
                     _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
                 ),
-                "independent_minimum_consensus_tokens": (
-                    _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
-                ),
+                "independent_minimum_consensus_tokens": (_INDEPENDENT_MINIMUM_CONSENSUS_TOKENS),
             },
             "silence_admission": {
                 "policy": _SILENCE_ADMISSION_POLICY,
@@ -663,7 +699,9 @@ class AdaptiveLongFormCoordinator:
                 migrated["targeted_retry"] = expected["targeted_retry"]
                 compatible_v3 = migrated == expected
             if existing != expected and not compatible_v3:
-                raise TranscriptionError("adaptive checkpoint does not match source or configuration")
+                raise TranscriptionError(
+                    "adaptive checkpoint does not match source or configuration"
+                )
             if compatible_v3:
                 _atomic_json(path, expected)
         else:
@@ -688,9 +726,8 @@ class AdaptiveLongFormCoordinator:
         ]
         previous: TranscriptSegment | None = None
         for segment in result.segments:
-            if (
-                segment.text == _FAILED_SPAN_TEXT
-                or (segment.diagnostics and segment.diagnostics.fallback_exhausted)
+            if segment.text == _FAILED_SPAN_TEXT or (
+                segment.diagnostics and segment.diagnostics.fallback_exhausted
             ):
                 intervals.append((segment.start_ms, segment.end_ms))
             if previous is not None:
@@ -706,7 +743,10 @@ class AdaptiveLongFormCoordinator:
                     and segment.start_ms < previous.end_ms
                 ):
                     intervals.append(
-                        (min(previous.start_ms, segment.start_ms), max(previous.end_ms, segment.end_ms))
+                        (
+                            min(previous.start_ms, segment.start_ms),
+                            max(previous.end_ms, segment.end_ms),
+                        )
                     )
             previous = segment
         if not intervals:
@@ -727,10 +767,7 @@ class AdaptiveLongFormCoordinator:
         for start_ms, end_ms in sorted(intervals):
             start_ms = max(0, start_ms - _TARGET_RETRY_PADDING_MS)
             end_ms = min(duration_ms, end_ms + _TARGET_RETRY_PADDING_MS)
-            if (
-                duration_ms >= _TARGET_RETRY_MIN_MS
-                and end_ms - start_ms < _TARGET_RETRY_MIN_MS
-            ):
+            if duration_ms >= _TARGET_RETRY_MIN_MS and end_ms - start_ms < _TARGET_RETRY_MIN_MS:
                 centre = start_ms + (end_ms - start_ms) // 2
                 start_ms = max(0, centre - _TARGET_RETRY_MIN_MS // 2)
                 end_ms = min(duration_ms, start_ms + _TARGET_RETRY_MIN_MS)
@@ -748,9 +785,7 @@ class AdaptiveLongFormCoordinator:
                 eligible = [
                     point
                     for point in silence_centres
-                    if cursor + _TARGET_RETRY_MIN_MS
-                    <= point
-                    <= cursor + _TARGET_RETRY_MAX_MS
+                    if cursor + _TARGET_RETRY_MIN_MS <= point <= cursor + _TARGET_RETRY_MAX_MS
                 ]
                 target = cursor + _TARGET_RETRY_TARGET_MS
                 boundary = (
@@ -782,7 +817,10 @@ class AdaptiveLongFormCoordinator:
         retained = [
             segment
             for segment in original.segments
-            if not any(segment.start_ms < end_ms and segment.end_ms > start_ms for start_ms, end_ms in spans)
+            if not any(
+                segment.start_ms < end_ms and segment.end_ms > start_ms
+                for start_ms, end_ms in spans
+            )
         ]
         segments = tuple(
             sorted(retained + replacements, key=lambda item: (item.start_ms, item.end_ms))
@@ -799,9 +837,7 @@ class AdaptiveLongFormCoordinator:
         elif evidence["latin"]:
             preferred = ("en", "ro")
         return preferred + tuple(
-            language
-            for language in self.candidate_languages
-            if language not in preferred
+            language for language in self.candidate_languages if language not in preferred
         )
 
     def _decode_target_span(
@@ -854,8 +890,8 @@ class AdaptiveLongFormCoordinator:
             retry_audio = Path(directory) / "span.wav"
             marker = TranscriptSegment(start_ms, end_ms, "targeted retry span")
             self._extract_language_span(audio, marker, retry_audio)
-            if _allow_isolation and self.speech_region_detector is not None:
-                plan = self.speech_region_detector.detect(retry_audio)
+            if _allow_isolation and self.targeted_retry_region_detector is not None:
+                plan = self.targeted_retry_region_detector.detect(retry_audio)
                 source_regions = tuple(
                     (region_start, region_end)
                     for item in plan.selected_regions
@@ -880,12 +916,10 @@ class AdaptiveLongFormCoordinator:
                     }
                 )
                 total_region_ms = sum(
-                    region_end - region_start
-                    for region_start, region_end in source_regions
+                    region_end - region_start for region_start, region_end in source_regions
                 )
                 use_isolation = bool(source_regions) and (
-                    len(source_regions) > 1
-                    or total_region_ms < 0.8 * (end_ms - start_ms)
+                    len(source_regions) > 1 or total_region_ms < 0.8 * (end_ms - start_ms)
                 )
                 if use_isolation:
                     replacements: list[TranscriptSegment] = []
@@ -964,9 +998,7 @@ class AdaptiveLongFormCoordinator:
                             "selected_region_count": len(source_regions),
                             "selected_region_coverage_ms": total_region_ms,
                             "replacement_segment_count": len(replacements),
-                            "uncertain_segment_count": sum(
-                                item.uncertain for item in replacements
-                            ),
+                            "uncertain_segment_count": sum(item.uncertain for item in replacements),
                         }
                     )
                     return tuple(
@@ -1020,8 +1052,7 @@ class AdaptiveLongFormCoordinator:
                     log_probabilities = [
                         item.diagnostics.avg_log_probability
                         for item in candidate.segments
-                        if item.diagnostics
-                        and item.diagnostics.avg_log_probability is not None
+                        if item.diagnostics and item.diagnostics.avg_log_probability is not None
                     ]
                     average_log_probability = (
                         sum(log_probabilities) / len(log_probabilities)
@@ -1050,9 +1081,7 @@ class AdaptiveLongFormCoordinator:
                         if average_acoustic_confidence is not None
                         else None
                     )
-                    shifted = tuple(
-                        item.shifted(start_ms) for item in candidate.segments
-                    )
+                    shifted = tuple(item.shifted(start_ms) for item in candidate.segments)
                     eligible.append(
                         _SpanCandidate(
                             audio_candidate.identifier,
@@ -1069,9 +1098,7 @@ class AdaptiveLongFormCoordinator:
                         )
                     )
 
-        best_by_backend_language: dict[
-            tuple[str, str, str | None], _SpanCandidate
-        ] = {}
+        best_by_backend_language: dict[tuple[str, str, str | None], _SpanCandidate] = {}
         for candidate in eligible:
             key = (
                 candidate.audio_candidate_id,
@@ -1095,12 +1122,8 @@ class AdaptiveLongFormCoordinator:
                     "status": "NO_HEALTHY_INDEPENDENT_CANDIDATE",
                     "independent_backend_count": 0,
                     "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
-                    "minimum_acoustic_confidence": (
-                        _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
-                    ),
-                    "minimum_consensus_tokens": (
-                        _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
-                    ),
+                    "minimum_acoustic_confidence": (_INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE),
+                    "minimum_consensus_tokens": (_INDEPENDENT_MINIMUM_CONSENSUS_TOKENS),
                     "selected": False,
                 }
             )
@@ -1152,10 +1175,7 @@ class AdaptiveLongFormCoordinator:
             for item in paired_candidates
             if item[0] is not None
             and item[0] >= _INDEPENDENT_AGREEMENT_THRESHOLD
-            and (
-                item[1] is None
-                or item[1] >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
-            )
+            and (item[1] is None or item[1] >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE)
             and item[2] >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
         ]
         best_corroborated_by_audio = {}
@@ -1269,17 +1289,11 @@ class AdaptiveLongFormCoordinator:
                 "agreement": round(agreement, 6) if agreement is not None else None,
                 "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
                 "acoustic_confidence_floor": (
-                    round(confidence_floor, 6)
-                    if confidence_floor is not None
-                    else None
+                    round(confidence_floor, 6) if confidence_floor is not None else None
                 ),
-                "minimum_acoustic_confidence": (
-                    _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
-                ),
+                "minimum_acoustic_confidence": (_INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE),
                 "consensus_token_count": consensus_token_count,
-                "minimum_consensus_tokens": (
-                    _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
-                ),
+                "minimum_consensus_tokens": (_INDEPENDENT_MINIMUM_CONSENSUS_TOKENS),
                 "selected_uncertain": not consensus,
             }
         )
@@ -1331,16 +1345,13 @@ class AdaptiveLongFormCoordinator:
                 else:
                     replacements.extend(replacement)
             repaired = self._splice_retry_spans(repaired, spans, replacements)
-            report = evaluate_transcript_quality(
-                repaired, expected_duration_ms=duration_ms
-            )
+            report = evaluate_transcript_quality(repaired, expected_duration_ms=duration_ms)
             attempts.append(
                 {
                     "kind": "targeted-repair-round",
                     "round": round_index + 1,
                     "spans": [
-                        {"start_ms": start_ms, "end_ms": end_ms}
-                        for start_ms, end_ms in spans
+                        {"start_ms": start_ms, "end_ms": end_ms} for start_ms, end_ms in spans
                     ],
                     "quality": report.to_dict(),
                 }
@@ -1364,15 +1375,13 @@ class AdaptiveLongFormCoordinator:
         duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
         if (
             energy_silence_coverage_ms == duration_ms
-            and self.speech_region_detector is not None
+            and self.silence_verification_detector is not None
         ):
-            plan = self.speech_region_detector.detect(audio)
+            plan = self.silence_verification_detector.detect(audio)
             silence_attempt = {
                 "kind": "chunk-silence-classification",
                 "status": (
-                    "CONFIRMED_SILENCE"
-                    if not plan.selected_regions
-                    else "SEMANTIC_SPEECH_DETECTED"
+                    "CONFIRMED_SILENCE" if not plan.selected_regions else "SEMANTIC_SPEECH_DETECTED"
                 ),
                 "policy": _SILENCE_ADMISSION_POLICY,
                 "energy_silence_coverage_ms": energy_silence_coverage_ms,
@@ -1395,7 +1404,7 @@ class AdaptiveLongFormCoordinator:
                         "classification": "confirmed_silence",
                         "silence_admission_policy": _SILENCE_ADMISSION_POLICY,
                         "energy_silence_coverage_ms": energy_silence_coverage_ms,
-                        "speech_region_detector": plan.detector_identity,
+                        "silence_verification_detector": plan.detector_identity,
                     },
                 )
                 return result, {
@@ -1404,9 +1413,7 @@ class AdaptiveLongFormCoordinator:
                     "targeted_retry_exhausted": False,
                 }
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
-        result = self._retry_detected_chunk_language(
-            audio, result, options, duration_ms, attempts
-        )
+        result = self._retry_detected_chunk_language(audio, result, options, duration_ms, attempts)
         result = self._resolve_uncertain_turns(
             audio,
             result,
@@ -1447,8 +1454,7 @@ class AdaptiveLongFormCoordinator:
         values = [
             segment.diagnostics.avg_log_probability
             for segment in result.segments
-            if segment.diagnostics
-            and segment.diagnostics.avg_log_probability is not None
+            if segment.diagnostics and segment.diagnostics.avg_log_probability is not None
         ]
         return sum(values) / len(values) if values else None
 
@@ -1469,9 +1475,7 @@ class AdaptiveLongFormCoordinator:
         forced = annotate_transcript_languages(
             self.backend.transcribe(audio, replace(options, language=language))
         )
-        forced_quality = evaluate_transcript_quality(
-            forced, expected_duration_ms=duration_ms
-        )
+        forced_quality = evaluate_transcript_quality(forced, expected_duration_ms=duration_ms)
         automatic_score = self._average_log_probability(automatic)
         forced_score = self._average_log_probability(forced)
         eligible = forced_quality.status not in {
@@ -1609,8 +1613,7 @@ class AdaptiveLongFormCoordinator:
                         log_probabilities = [
                             item.diagnostics.avg_log_probability
                             for item in candidate.segments
-                            if item.diagnostics
-                            and item.diagnostics.avg_log_probability is not None
+                            if item.diagnostics and item.diagnostics.avg_log_probability is not None
                         ]
                         average_log_probability = (
                             sum(log_probabilities) / len(log_probabilities)
@@ -1632,9 +1635,7 @@ class AdaptiveLongFormCoordinator:
                             average_log_probability,
                         )
                         attempts[-1]["candidate_score"] = list(score)
-                        eligible_replacements.append(
-                            (score, language, candidate_segments)
-                        )
+                        eligible_replacements.append((score, language, candidate_segments))
             if eligible_replacements:
                 _, selected_language, replacement = max(
                     eligible_replacements, key=lambda item: item[0]
@@ -1675,8 +1676,7 @@ class AdaptiveLongFormCoordinator:
             source, minimum_silence_seconds=self.minimum_silence_seconds
         )
         silence_centres = tuple(
-            round((start_ms + end_ms) / 2)
-            for start_ms, end_ms in silence_intervals
+            round((start_ms + end_ms) / 2) for start_ms, end_ms in silence_intervals
         )
         chunks = self.planner.plan(
             probe.duration_ms,
@@ -1692,9 +1692,13 @@ class AdaptiveLongFormCoordinator:
             receipt_path = self.checkpoint_dir / "receipts" / f"{chunk.index:06d}.json"
             if checkpoint.is_file():
                 try:
-                    result = transcription_result_from_dict(json.loads(checkpoint.read_text(encoding="utf-8")))
+                    result = transcription_result_from_dict(
+                        json.loads(checkpoint.read_text(encoding="utf-8"))
+                    )
                 except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
-                    raise TranscriptionError(f"malformed adaptive chunk: {checkpoint.name}") from exc
+                    raise TranscriptionError(
+                        f"malformed adaptive chunk: {checkpoint.name}"
+                    ) from exc
                 if any(item.text == _FAILED_SPAN_TEXT for item in result.segments):
                     checkpoint.unlink()
                     receipt_path.unlink(missing_ok=True)
