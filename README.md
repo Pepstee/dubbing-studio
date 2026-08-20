@@ -382,9 +382,10 @@ CC-BY-NC-4.0 and is not the eventual commercial translation backend.
 The permanent Gigabyte paths and safety boundaries are versioned in
 `deploy/personal_capture/gigabyte/personal-capture.json`. The landing inbox is Windows-visible,
 while the ledger and derived evidence remain on the WSL filesystem. Production
-ASR and translation directories are also bound to exact commit revisions and
-complete file hashes by `dubbing-capture-model-manifest`; watcher startup fails
-if the approved manifest no longer matches.
+ASR and translation directories are bound to exact commit revisions and complete
+file hashes by `dubbing-capture-model-manifest`. The Sherpa segmentation and
+embedding ONNX files are independently bound by exact byte size and SHA-256;
+watcher startup fails if the approved manifest no longer matches.
 
 ---
 

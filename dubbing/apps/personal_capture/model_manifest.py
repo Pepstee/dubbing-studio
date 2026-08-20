@@ -7,7 +7,7 @@ import os
 import re
 from pathlib import Path
 
-_SCHEMA = "dubbing.personal-capture-model-manifest.v1"
+_SCHEMA = "dubbing.personal-capture-model-manifest.v2"
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 
 
@@ -47,12 +47,25 @@ def _model_entry(directory: str | Path, revision: str) -> dict:
     }
 
 
+def _model_file_entry(model: str | Path) -> dict:
+    path = Path(model).resolve()
+    if not path.is_file():
+        raise ValueError(f"model file not found: {path}")
+    return {
+        "path": str(path),
+        "size_bytes": path.stat().st_size,
+        "sha256": _sha256(path),
+    }
+
+
 def create_model_manifest(
     *,
     asr_directory: str | Path,
     asr_revision: str,
     translation_directory: str | Path,
     translation_revision: str,
+    segmentation_model: str | Path,
+    embedding_model: str | Path,
     output: str | Path,
     asr_retry_directory: str | Path | None = None,
     asr_retry_revision: str | None = None,
@@ -66,6 +79,8 @@ def create_model_manifest(
                 translation_directory,
                 translation_revision,
             ),
+            "diarization_segmentation": _model_file_entry(segmentation_model),
+            "diarization_embedding": _model_file_entry(embedding_model),
         },
     }
     if (asr_retry_directory is None) != (asr_retry_revision is None):
@@ -121,6 +136,29 @@ def verify_model_manifest(config: dict) -> dict:
         actual_files = _inventory(expected_directory)
         if actual_files != expected_files:
             raise ValueError(f"{name} model files do not match the approved manifest")
+    expected_model_files = {
+        "diarization_segmentation": Path(
+            config["defaults"]["segmentation_model"]
+        ).resolve(),
+        "diarization_embedding": Path(config["defaults"]["embedding_model"]).resolve(),
+    }
+    for name, expected_path in expected_model_files.items():
+        entry = models.get(name)
+        if not isinstance(entry, dict):
+            raise ValueError(f"model manifest is missing {name}")
+        if Path(entry.get("path", "")).resolve() != expected_path:
+            raise ValueError(f"{name} manifest path does not match deployment config")
+        expected_size = entry.get("size_bytes")
+        expected_sha256 = entry.get("sha256")
+        if not isinstance(expected_size, int) or expected_size < 0:
+            raise ValueError(f"{name} manifest size is invalid")
+        if not isinstance(expected_sha256, str) or not re.fullmatch(
+            r"[a-f0-9]{64}", expected_sha256
+        ):
+            raise ValueError(f"{name} manifest SHA-256 is invalid")
+        actual = _model_file_entry(expected_path)
+        if actual != entry:
+            raise ValueError(f"{name} model file does not match the approved manifest")
     return document
 
 
@@ -134,6 +172,8 @@ def main() -> None:
     parser.add_argument("--asr-retry-revision", required=True)
     parser.add_argument("--translation-directory", required=True)
     parser.add_argument("--translation-revision", required=True)
+    parser.add_argument("--segmentation-model", required=True)
+    parser.add_argument("--embedding-model", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     destination = create_model_manifest(
@@ -143,6 +183,8 @@ def main() -> None:
         asr_retry_revision=args.asr_retry_revision,
         translation_directory=args.translation_directory,
         translation_revision=args.translation_revision,
+        segmentation_model=args.segmentation_model,
+        embedding_model=args.embedding_model,
         output=args.output,
     )
     print(destination)

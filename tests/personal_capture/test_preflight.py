@@ -33,6 +33,8 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
         asr_retry_revision="c" * 40,
         translation_directory=translation_model,
         translation_revision="b" * 40,
+        segmentation_model=config["defaults"]["segmentation_model"],
+        embedding_model=config["defaults"]["embedding_model"],
         output=config["defaults"]["model_manifest"],
     )
     token = tmp_path / "capture.token"
@@ -81,6 +83,9 @@ def test_preflight_prepares_paths_and_certifies_required_runtime(tmp_path):
     assert report["ready"] is True
     assert report["model_load_certified"] is True
     assert all(item["status"] == "pass" for item in report["checks"])
+    assert report["diarization_model_integrity"]["diarization_embedding"][
+        "size_bytes"
+    ] == 5
     vad_probe.detect.assert_called_once()
 
 

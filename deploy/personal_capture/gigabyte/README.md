@@ -29,9 +29,9 @@ there from one pinned release, verify its publisher-provided SHA-256 before
 extraction, and record the release tag, archive name and digest in the host
 release receipt.
 
-The three model settings in `personal-capture.json` are absolute local directories,
-not registry identifiers. Production runtime sets local-only loading, so a cache
-miss cannot trigger a network download after audio is admitted.
+The model settings in `personal-capture.json` are absolute local directories or
+files, not registry identifiers. Production runtime sets local-only loading, so
+a cache miss cannot trigger a network download after audio is admitted.
 
 After downloading each model at an exact 40-character repository commit—not a
 moving branch or tag—create the approved manifest:
@@ -44,12 +44,14 @@ dubbing-capture-model-manifest \
   --asr-retry-revision edaa852ec7e145841d8ffdb056a99866b5f0a478 \
   --translation-directory /home/gutua/software-factory/.control/dubbing-models/nllb-200-distilled-600M \
   --translation-revision NLLB_COMMIT_SHA \
+  --segmentation-model /home/gutua/software-factory/.control/dubbing-models/sherpa/segmentation.onnx \
+  --embedding-model /home/gutua/software-factory/.control/dubbing-models/sherpa/embedding.onnx \
   --output /home/gutua/software-factory/.control/dubbing-models/personal-capture-model-manifest.json
 ```
 
-This rejects symlinked/cache-dependent directories and hashes every model file.
-Watcher startup and host preflight both fail closed if a revision, file set or
-file hash differs.
+This rejects symlinked/cache-dependent directories and hashes every model file,
+including the two Sherpa ONNX files. Watcher startup and host preflight both
+fail closed if a revision, file set, byte size or file hash differs.
 
 ## Operations
 

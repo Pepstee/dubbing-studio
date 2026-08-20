@@ -234,12 +234,28 @@ def inspect_environment(
         revisions = {
             name: entry["revision"]
             for name, entry in model_manifest["models"].items()
+            if "revision" in entry
+        }
+        diarization_integrity = {
+            name: {
+                "path": entry["path"],
+                "size_bytes": entry["size_bytes"],
+                "sha256": entry["sha256"],
+            }
+            for name, entry in model_manifest["models"].items()
+            if name.startswith("diarization_")
         }
         _check(
             checks,
             "model-manifest",
             "pass",
             json.dumps(revisions, sort_keys=True),
+        )
+        _check(
+            checks,
+            "diarization-model-integrity",
+            "pass",
+            json.dumps(diarization_integrity, sort_keys=True),
         )
 
     if load_models and model_manifest is not None:
@@ -363,6 +379,17 @@ def inspect_environment(
         "schema_version": "dubbing.personal-capture-preflight.v1",
         "ready": ready,
         "model_load_certified": load_models and ready,
+        "diarization_model_integrity": (
+            {
+                name: model_manifest["models"][name]
+                for name in (
+                    "diarization_segmentation",
+                    "diarization_embedding",
+                )
+            }
+            if model_manifest is not None
+            else None
+        ),
         "checks": checks,
         "audio": audio_document,
     }

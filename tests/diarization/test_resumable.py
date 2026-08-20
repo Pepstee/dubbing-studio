@@ -131,6 +131,65 @@ def test_diarization_checkpoint_rejects_changed_source(tmp_path):
             job.run(audio)
 
 
+class _IntegrityBackend(_Backend):
+    def __init__(self, model: Path):
+        super().__init__()
+        self.model_path = model
+
+    @property
+    def model_integrity(self):
+        import hashlib
+
+        content = self.model_path.read_bytes()
+        return {
+            "segmentation": {
+                "path": str(self.model_path.resolve()),
+                "size_bytes": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+        }
+
+    @property
+    def identity(self):
+        evidence = self.model_integrity["segmentation"]
+        return f"test:integrity:{evidence['sha256']}:{evidence['size_bytes']}"
+
+
+def test_diarization_checkpoint_rejects_changed_model_bytes(tmp_path):
+    audio = tmp_path / "day.wav"
+    audio.write_bytes(b"source")
+    model = tmp_path / "segmentation.onnx"
+    model.write_bytes(b"approved")
+    backend = _IntegrityBackend(model)
+    job = ResumableDiarizationJob(backend, tmp_path / "job", chunk_seconds=60)
+    with patch(
+        "dubbing.diarization.job.media_duration_ms",
+        return_value=60_000,
+    ), patch.object(job, "_extract_chunk", side_effect=_fake_extract):
+        job.run(audio)
+        model.write_bytes(b"tampered")
+        with pytest.raises(DiarizationError, match="does not match"):
+            job.run(audio)
+
+    manifest = (tmp_path / "job" / "manifest.json").read_text(encoding="utf-8")
+    assert "dubbing.diarization-checkpoint.v3" in manifest
+    assert "backend_model_integrity" in manifest
+
+    model.write_bytes(b"approved")
+    (tmp_path / "job" / "manifest.json").write_text(
+        manifest.replace(
+            "dubbing.diarization-checkpoint.v3",
+            "dubbing.diarization-checkpoint.v2",
+        ),
+        encoding="utf-8",
+    )
+    with patch(
+        "dubbing.diarization.job.media_duration_ms",
+        return_value=60_000,
+    ), pytest.raises(DiarizationError, match="does not match"):
+        job.run(audio)
+
+
 class _TwoSpeakerBackend(DiarizationBackend):
     @property
     def identity(self):

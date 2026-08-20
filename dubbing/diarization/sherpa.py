@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import shutil
 import subprocess
@@ -55,10 +56,55 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
 
     @property
     def identity(self) -> str:
+        integrity = self.model_integrity
+        return self._identity_from_integrity(integrity)
+
+    def _identity_from_integrity(
+        self, integrity: dict[str, dict[str, str | int]]
+    ) -> str:
+        segmentation = integrity["segmentation"]
+        embedding = integrity["embedding"]
         return (
             f"sherpa-onnx:{_MODEL_NAME}:{self.device}:{self.num_threads}:"
-            f"{self.cluster_threshold}:{self.min_duration_on}:{self.min_duration_off}"
+            f"{self.cluster_threshold}:{self.min_duration_on}:{self.min_duration_off}:"
+            f"segmentation={segmentation['sha256']}:{segmentation['size_bytes']}:"
+            f"embedding={embedding['sha256']}:{embedding['size_bytes']}"
         )
+
+    @staticmethod
+    def _model_file_integrity(path: Path, kind: str) -> dict[str, str | int]:
+        if not path.is_file():
+            raise DiarizationError(
+                f"{kind} model not found at {path}. Download the public "
+                "Sherpa-ONNX speaker diarization models or pass the correct path."
+            )
+        digest = hashlib.sha256()
+        size_bytes = 0
+        try:
+            with path.open("rb") as handle:
+                for block in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(block)
+                    size_bytes += len(block)
+        except OSError as exc:
+            raise DiarizationError(f"could not hash {kind} model at {path}") from exc
+        return {
+            "path": str(path.resolve()),
+            "size_bytes": size_bytes,
+            "sha256": digest.hexdigest(),
+        }
+
+    @property
+    def model_integrity(self) -> dict[str, dict[str, str | int]]:
+        """Exact model-byte evidence used by identities and checkpoints."""
+
+        return {
+            "segmentation": self._model_file_integrity(
+                self.segmentation_model, "segmentation"
+            ),
+            "embedding": self._model_file_integrity(
+                self.embedding_model, "speaker embedding"
+            ),
+        }
 
     def _dependencies(self):
         try:
@@ -236,6 +282,8 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
         constraints = constraints or SpeakerConstraints()
         num_clusters = self._validate_constraints(constraints)
         self._validate_models()
+        model_integrity = self.model_integrity
+        backend_identity = self._identity_from_integrity(model_integrity)
         sherpa_onnx, numpy = self._dependencies()
 
         config = sherpa_onnx.OfflineSpeakerDiarizationConfig(
@@ -305,6 +353,10 @@ class SherpaOnnxDiarizationBackend(DiarizationBackend):
             model=_MODEL_NAME,
             device=self.device,
             confidence_available=False,
+            provenance={
+                "backend_identity": backend_identity,
+                "model_integrity": model_integrity,
+            },
         )
 
     @staticmethod

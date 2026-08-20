@@ -52,7 +52,9 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
     29 labels in ten minutes. The fallback now exposes and deploys Sherpa's documented distance
     threshold (`0.85`), while global reconciliation uses overlap-safe complete-link clustering
     (`0.80`) and can repair non-overlapping same-chunk fragments. Diarization checkpoint schema
-    v2 binds both the diarizer and independent embedding provider. pyannote Community-1 is wired
+    v3 binds both the diarizer and independent embedding provider, including exact SHA-256 and
+    byte size for Sherpa segmentation and embedding weights; old checkpoints fail closed.
+    pyannote Community-1 is wired
     as the preferred local backend but remains fail-closed until an absolute local gated-model
     path exists; no terms or private-audio upload are performed by migration.
 14. Adaptive extraction now preserves every source audio stream as discrete lossless channels.

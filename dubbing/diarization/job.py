@@ -17,7 +17,7 @@ from dubbing.diarization.models import (
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.job import media_duration_ms, source_sha256
 
-_CHECKPOINT_SCHEMA = "dubbing.diarization-checkpoint.v2"
+_CHECKPOINT_SCHEMA = "dubbing.diarization-checkpoint.v3"
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -90,6 +90,22 @@ class ResumableDiarizationJob:
         )
 
     @staticmethod
+    def _model_integrity(backend: DiarizationBackend) -> dict | None:
+        integrity = getattr(backend, "model_integrity", None)
+        if integrity is None:
+            return None
+        if not isinstance(integrity, dict):
+            raise DiarizationError("diarization backend model integrity is malformed")
+        # A JSON round-trip both copies the backend-owned document and proves that
+        # checkpoint evidence is deterministic and serializable before processing.
+        try:
+            return json.loads(json.dumps(integrity, sort_keys=True))
+        except (TypeError, ValueError) as exc:
+            raise DiarizationError(
+                "diarization backend model integrity is not JSON serializable"
+            ) from exc
+
+    @staticmethod
     def _extract_chunk(source: Path, start_ms: int, end_ms: int, output: Path) -> None:
         ffmpeg = ffmpeg_executable()
         if ffmpeg is None:
@@ -134,12 +150,17 @@ class ResumableDiarizationJob:
         digest: str,
         constraints: SpeakerConstraints,
     ) -> dict:
+        backend_model_integrity = self._model_integrity(self.backend)
+        embedding_model_integrity = self._model_integrity(
+            self.speaker_embedding_backend
+        )
         return {
             "schema_version": _CHECKPOINT_SCHEMA,
             "source_name": source.name,
             "source_sha256": digest,
             "duration_ms": duration_ms,
             "backend_identity": self.backend_identity,
+            "backend_model_integrity": backend_model_integrity,
             "speaker_embedding_backend_identity": str(
                 getattr(
                     self.speaker_embedding_backend,
@@ -147,6 +168,7 @@ class ResumableDiarizationJob:
                     type(self.speaker_embedding_backend).__qualname__,
                 )
             ),
+            "speaker_embedding_backend_model_integrity": embedding_model_integrity,
             "chunk_seconds": self.chunk_seconds,
             "speaker_constraints": {
                 "num_speakers": constraints.num_speakers,
@@ -446,6 +468,7 @@ class ResumableDiarizationJob:
                     model=local.model,
                     device=local.device,
                     confidence_available=local.confidence_available,
+                    provenance=local.provenance,
                 )
                 chunk_embeddings = {
                     f"CHUNK_{index:04d}_{speaker}": self._normalise_embedding(values)
@@ -488,7 +511,21 @@ class ResumableDiarizationJob:
             model=f"{model or 'unspecified'}+chunked",
             device=f"chunked/{device or 'unspecified'}",
             confidence_available=confidence_available,
-            provenance={"global_speaker_reconciliation": global_receipt},
+            provenance={
+                "backend_identity": self.backend_identity,
+                "backend_model_integrity": self._model_integrity(self.backend),
+                "speaker_embedding_backend_identity": str(
+                    getattr(
+                        self.speaker_embedding_backend,
+                        "identity",
+                        type(self.speaker_embedding_backend).__qualname__,
+                    )
+                ),
+                "speaker_embedding_backend_model_integrity": self._model_integrity(
+                    self.speaker_embedding_backend
+                ),
+                "global_speaker_reconciliation": global_receipt,
+            },
         )
         _atomic_json(self.checkpoint_dir / "result.json", final.to_dict())
         return final
