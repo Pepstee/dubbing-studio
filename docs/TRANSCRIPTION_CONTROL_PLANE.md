@@ -228,6 +228,34 @@ runs ElevenLabs Scribe v2 beside the completed local transcript, automatically c
 bounded lossless FLAC speech packets, and checkpoints each provider response. The original
 local transcript and the cloud transcript remain separate immutable candidates.
 
+Before the first live request, a deliberately small shadow canary can be prepared entirely
+offline from a hash-bound local result:
+
+```bash
+dubbing-prepare-cloud-teacher-canary \
+  "/path/to/source.mov" \
+  --parent-local-result "/path/to/local/result.json" \
+  --span-manifest \
+    benchmarks/fixtures/lesson-2026-08-01-193908/cloud-teacher-shadow-canary-spans.json \
+  --output "/private/evaluation/elevenlabs-shadow-canary-v1"
+```
+
+This is an evaluation preparer, not another cloud runner. It accepts only 20–60 second,
+non-overlapping `control` or `hard` ranges. It verifies the parent source and transcript hashes,
+rejects ranges that cut through a transcript segment, extracts a lossless FLAC representation of
+the decoded source PCM, shifts segment and word timestamps onto the derived clip, and binds the
+new local result to the clip hash. All files are built in a temporary sibling directory and made
+visible together; an existing output, symlink, extraction-duration drift or expected derived-hash
+drift fails without replacing operator data.
+
+The preparation manifest explicitly records `network_used=false`,
+`credentials_accessed=false`, `cloud_allowed=false` and `giga_admission_allowed=false`. The
+preparer neither imports the provider transport nor reads a credential or policy. Its output can
+later be supplied to the existing `dubbing-cloud-teacher` command only after the separate privacy,
+credential, authorization and cost gates below have passed. The committed Lesson 6 fixture pairs
+the 29.98-second v4 independent-disagreement hole with a 50-second clean English/Russian control;
+it is evaluation evidence, never human ground truth.
+
 Cloud packets are silence-compacted before upload. The existing local Faster-Whisper Silero
 detector supplies both strict and sensitive speech regions; compaction uses the inclusive union
 of both passes plus every local transcript interval. Each retained interval receives configurable

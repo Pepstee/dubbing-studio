@@ -1,0 +1,26 @@
+{
+  "schema_version": "dubbing.cloud-teacher-canary-spans.v1",
+  "canary_id": "lesson06-elevenlabs-shadow-v1",
+  "parent_source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "parent_local_result_sha256": "f5e6f9d10d096434080d151b3238dac2148368e0b1e104b2bcd0c308d9a9dfc3",
+  "network_allowed": false,
+  "giga_admission_allowed": false,
+  "spans": [
+    {
+      "id": "independent-disagreement-hole",
+      "role": "hard",
+      "start_ms": 442002,
+      "end_ms": 471982,
+      "expected_clip_sha256": "de2a0ab96028bbd69bcdc7a45c5ba5c14c5985f9047318631b244e15f97dd412",
+      "expected_local_result_sha256": "576007fadc6d4fb719003ec9eaa7d476fd40627753b85ab37ab5b6b0a7cf9a11"
+    },
+    {
+      "id": "clean-english-russian-control",
+      "role": "control",
+      "start_ms": 1455000,
+      "end_ms": 1505000,
+      "expected_clip_sha256": "a6bdfdd0011fe2a5fe9d555c5c59b652f45ef857d2ec579c8e474fbf04d6420b",
+      "expected_local_result_sha256": "e62167a36b8a9d3fbc90ced751234a2252c3bf5540d0dcd5e735c75763701c99"
+    }
+  ]
+}
