@@ -45,7 +45,7 @@ _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
 _LANGUAGE_RETRY_CONTEXT_MS = 1_000
-_COORDINATOR_VERSION = "adaptive-long-form-v14"
+_COORDINATOR_VERSION = "adaptive-long-form-v15"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 
 
@@ -1630,6 +1630,18 @@ class AdaptiveLongFormCoordinator:
             else:
                 languages = ()
             if not languages:
+                resolved.append(segment)
+                continue
+            if result.duration_ms is not None and segment.end_ms > result.duration_ms:
+                attempts.append(
+                    {
+                        "kind": "turn-language-redecode-skipped",
+                        "source_start_ms": segment.start_ms,
+                        "source_end_ms": segment.end_ms,
+                        "audio_duration_ms": result.duration_ms,
+                        "reason": "TARGET_OUTSIDE_AUDIO_DURATION",
+                    }
+                )
                 resolved.append(segment)
                 continue
             eligible_replacements: list[

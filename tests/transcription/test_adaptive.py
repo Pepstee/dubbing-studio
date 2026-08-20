@@ -1288,6 +1288,56 @@ def test_language_retry_rejects_context_without_target_turn(tmp_path):
     assert resolved == original
 
 
+def test_language_retry_preserves_turn_beyond_audio_duration_as_uncertain(tmp_path):
+    class _MustNotRunBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:must-not-run"
+
+        def transcribe(self, audio, options=None):
+            raise AssertionError("out-of-audio language retry must not run")
+
+    original_segment = TranscriptSegment(
+        74_100,
+        74_120,
+        "Продолжение следует...",
+        language="en",
+        uncertain=True,
+        words=(TranscriptWord(74_100, 74_120, " следует..."),),
+    )
+    original = TranscriptionResult(
+        (original_segment,),
+        original_segment.text,
+        "fixture",
+        "real-like-overflow",
+        "test",
+        "en",
+        65_407,
+        False,
+    )
+    coordinator = AdaptiveLongFormCoordinator(_MustNotRunBackend(), tmp_path / "job")
+    attempts = []
+
+    resolved = coordinator._resolve_uncertain_turns(
+        tmp_path / "audio.wav",
+        original,
+        coordinator.backend,
+        TranscriptionOptions(),
+        attempts,
+    )
+
+    assert resolved == original
+    assert attempts == [
+        {
+            "kind": "turn-language-redecode-skipped",
+            "source_start_ms": 74_100,
+            "source_end_ms": 74_120,
+            "audio_duration_ms": 65_407,
+            "reason": "TARGET_OUTSIDE_AUDIO_DURATION",
+        }
+    ]
+
+
 def test_detected_korean_chunk_uses_always_forced_retry(tmp_path):
     class _KoreanBackend(TranscriptionBackend):
         @property
