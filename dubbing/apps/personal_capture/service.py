@@ -30,7 +30,11 @@ from dubbing.transcription import (
     transcript_to_srt,
     transcript_to_text,
 )
-from dubbing.transcription.job import media_duration_ms
+from dubbing.transcription.job import (
+    create_source_binding,
+    media_duration_ms,
+    validate_source_binding,
+)
 from dubbing.transcription.adaptive import (
     AdaptiveChunkPlanner,
     AdaptiveLongFormCoordinator,
@@ -422,22 +426,27 @@ class CaptureService:
     def process(self, source: str | Path) -> CaptureOutcome:
         if self.transcription_backend is None:
             raise RuntimeError("a transcription backend is required to process captures")
-        path = Path(source).resolve()
-        if path.is_symlink() or not path.is_file():
-            raise ValueError(f"capture source is not a regular file: {path}")
-        stat = path.stat()
+        source_binding = create_source_binding(Path(source))
+        path = source_binding.path
+        digest = source_binding.sha256
         existing = self.store.find_by_source_snapshot(
             path.name,
-            stat.st_size,
-            stat.st_mtime_ns,
+            source_binding.stat.size_bytes,
+            source_binding.stat.mtime_ns,
         )
-        if existing is not None and existing.state in {
-            "review",
-            "approved",
-            "rejected",
-            "failed",
-            "processing",
-        }:
+        if (
+            existing is not None
+            and existing.capture_id == digest
+            and existing.source_sha256 == digest
+            and existing.state
+            in {
+                "review",
+                "approved",
+                "rejected",
+                "failed",
+                "processing",
+            }
+        ):
             return CaptureOutcome(
                 existing.capture_id,
                 existing.source_name,
@@ -445,13 +454,12 @@ class CaptureService:
                 Path(existing.package_path) if existing.package_path else None,
                 replayed=True,
             )
-        digest = _sha256(path)
         record, claimed = self.store.claim(
             capture_id=digest,
             source_name=path.name,
             source_sha256=digest,
-            source_size=stat.st_size,
-            source_mtime_ns=stat.st_mtime_ns,
+            source_size=source_binding.stat.size_bytes,
+            source_mtime_ns=source_binding.stat.mtime_ns,
         )
         package = Path(record.package_path) if record.package_path else None
         if not claimed:
@@ -506,7 +514,7 @@ class CaptureService:
                     ).run(
                         path,
                         self.transcription_options,
-                        source_digest=digest,
+                        source_binding=source_binding,
                     )
                     quality_report = TranscriptQualityReport.from_dict(
                         quality_document
@@ -578,13 +586,7 @@ class CaptureService:
                         backend=self.translation_backend,
                         target_language=self.translation_target,
                     )
-            final_stat = path.stat()
-            if (
-                final_stat.st_size != stat.st_size
-                or final_stat.st_mtime_ns != stat.st_mtime_ns
-                or _sha256(path) != digest
-            ):
-                raise RuntimeError("capture source changed while it was being processed")
+            validate_source_binding(path, source_binding)
             package = self._write_package(
                 path,
                 record,

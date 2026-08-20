@@ -15,10 +15,12 @@ from dubbing.apps.personal_capture import CaptureService
 from dubbing.transcription import (
     TranscriptSegment,
     TranscriptionBackend,
+    TranscriptionError,
     TranscriptionOptions,
     TranscriptionResult,
     evaluate_transcript_quality,
 )
+from dubbing.transcription.job import create_source_binding
 from dubbing.translation.base import LanguageDetector, TranslationBackend
 
 
@@ -170,6 +172,25 @@ def test_discovery_ignores_symlinks_unknown_files_and_recent_writes(tmp_path):
     assert discovered == (old,)
 
 
+def test_process_rejects_direct_symlink_before_claim_or_backend(tmp_path):
+    target = media(tmp_path / "target.wav")
+    source = tmp_path / "link.wav"
+    source.symlink_to(target)
+    backend = FakeASR()
+    service = CaptureService(
+        tmp_path / "workspace",
+        backend,
+        resumable=False,
+    )
+
+    with pytest.raises(TranscriptionError, match="symbolic link"):
+        service.process(source)
+
+    assert service.records() == ()
+    assert not service.packages.exists()
+    assert backend.calls == 0
+
+
 def test_configurable_runtime_paths_stay_inside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     service = CaptureService(
@@ -250,7 +271,10 @@ def test_adaptive_capture_owns_long_file_chunking_and_preserves_checkpoints(tmp_
     run = coordinator.return_value.run
     assert run.call_count == 1
     assert run.call_args.args[0] == source.resolve()
-    assert run.call_args.kwargs["source_digest"] == hashlib.sha256(b"audio").hexdigest()
+    assert "source_digest" not in run.call_args.kwargs
+    binding = run.call_args.kwargs["source_binding"]
+    assert binding.path == source.resolve()
+    assert binding.sha256 == hashlib.sha256(b"audio").hexdigest()
     assert (
         coordinator.call_args.kwargs["silence_verification_detector"]
         is speech_detector
@@ -264,6 +288,53 @@ def test_adaptive_capture_owns_long_file_chunking_and_preserves_checkpoints(tmp_
         == speech_detector.identity
     )
     assert manifest["execution"]["targeted_retry_region_detector"] is None
+
+
+def test_adaptive_capture_does_not_rehash_source_in_service(tmp_path):
+    source = media(tmp_path / "one-long-recording.wav")
+    result = FakeASR().transcribe(source)
+    quality = evaluate_transcript_quality(
+        result, expected_duration_ms=result.duration_ms
+    ).to_dict()
+    service = CaptureService(
+        tmp_path / "workspace",
+        FakeASR(),
+        transcription_strategy="adaptive",
+        transcription_chunk_seconds=240,
+        transcription_minimum_chunk_seconds=60,
+        transcription_maximum_chunk_seconds=480,
+    )
+    hashed_paths = []
+
+    from dubbing.apps.personal_capture import service as service_module
+
+    artifact_sha256 = service_module._sha256
+
+    def track_artifact_hash(path):
+        hashed_paths.append(Path(path).resolve())
+        return artifact_sha256(path)
+
+    with patch(
+        "dubbing.apps.personal_capture.service.media_duration_ms",
+        return_value=1_000,
+    ), patch(
+        "dubbing.apps.personal_capture.service.AdaptiveLongFormCoordinator"
+    ) as coordinator, patch(
+        "dubbing.apps.personal_capture.service.create_source_binding",
+        wraps=service_module.create_source_binding,
+    ) as create_binding, patch(
+        "dubbing.apps.personal_capture.service._sha256",
+        side_effect=track_artifact_hash,
+    ):
+        coordinator.return_value.run.return_value = (result, quality)
+        outcome = service.process(source)
+
+    assert outcome.state == "review", outcome.error
+    assert create_binding.call_count == 1
+    assert source.resolve() not in hashed_paths
+    assert coordinator.return_value.run.call_args.kwargs["source_binding"].sha256 == (
+        outcome.capture_id
+    )
 
 
 def test_legacy_capture_detector_binds_both_provenance_roles(tmp_path):
@@ -340,7 +411,37 @@ def test_capture_fails_when_source_changes_during_processing(tmp_path):
     outcome = service.process(source)
 
     assert outcome.state == "failed"
-    assert "source changed" in outcome.error
+    assert "source binding stat identity" in outcome.error
+    assert not (
+        tmp_path / "workspace" / "outputs" / "packages" / outcome.capture_id
+    ).exists()
+
+
+def test_capture_fails_when_source_path_is_replaced_during_processing(tmp_path):
+    source = media(tmp_path / "source.wav")
+
+    class ReplacingASR(FakeASR):
+        def transcribe(self, audio, options=None):
+            result = super().transcribe(audio, options)
+            replacement = Path(audio).with_suffix(".replacement")
+            replacement.write_bytes(Path(audio).read_bytes())
+            os.replace(replacement, audio)
+            os.utime(audio, (1, 1))
+            return result
+
+    service = CaptureService(
+        tmp_path / "workspace",
+        ReplacingASR(),
+        resumable=False,
+    )
+
+    outcome = service.process(source)
+
+    assert outcome.state == "failed"
+    assert "source binding stat identity" in outcome.error
+    assert not (
+        tmp_path / "workspace" / "outputs" / "packages" / outcome.capture_id
+    ).exists()
 
 
 def test_capture_enforces_free_space_reserve(tmp_path):
@@ -362,23 +463,51 @@ def test_capture_enforces_free_space_reserve(tmp_path):
     assert "free-space reserve" in outcome.error
 
 
-def test_unchanged_reviewed_source_is_not_rehashed_on_later_scans(tmp_path):
+def test_unchanged_reviewed_source_is_bound_once_and_skips_backend_on_replay(tmp_path):
     source = media(tmp_path / "source.wav")
+    backend = FakeASR()
     service = CaptureService(
         tmp_path / "workspace",
-        FakeASR(),
+        backend,
         resumable=False,
     )
-    first = service.process(source)
 
     with patch(
-        "dubbing.apps.personal_capture.service._sha256",
-        side_effect=AssertionError("unchanged source was rehashed"),
-    ):
+        "dubbing.apps.personal_capture.service.create_source_binding",
+        wraps=create_source_binding,
+    ) as create_binding:
+        first = service.process(source)
+        assert create_binding.call_count == 1
+        create_binding.reset_mock()
         replay = service.process(source)
+        assert create_binding.call_count == 1
 
     assert first.state == replay.state == "review"
     assert replay.replayed is True
+    assert backend.calls == 1
+
+
+def test_same_size_same_mtime_replacement_does_not_replay_stale_capture(tmp_path):
+    source = media(tmp_path / "source.wav", b"first")
+    backend = FakeASR()
+    service = CaptureService(
+        tmp_path / "workspace",
+        backend,
+        resumable=False,
+    )
+    first = service.process(source)
+    original_mtime_ns = source.stat().st_mtime_ns
+
+    source.write_bytes(b"other")
+    os.utime(source, ns=(original_mtime_ns, original_mtime_ns))
+    second = service.process(source)
+
+    assert first.capture_id == hashlib.sha256(b"first").hexdigest()
+    assert second.capture_id == hashlib.sha256(b"other").hexdigest()
+    assert second.capture_id != first.capture_id
+    assert second.state == "review"
+    assert second.replayed is False
+    assert backend.calls == 2
 
 
 def test_processing_capture_is_not_claimed_concurrently(tmp_path):
