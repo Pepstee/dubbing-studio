@@ -9,7 +9,7 @@ from typing import Iterable
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
 
 
-QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v4"
+QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v5"
 
 
 class TranscriptQualityStatus(str, Enum):
@@ -402,6 +402,7 @@ def evaluate_transcript_quality(
     word_timestamp_out_of_bounds_count = 0
     word_recording_bounds_violation_count = 0
     word_segment_containment_violation_count = 0
+    word_parent_boundary_straddle_count = 0
     for segment_index, segment in enumerate(segments):
         segment_interval_invalid = (
             segment.start_ms < 0 or segment.end_ms <= segment.start_ms
@@ -436,9 +437,15 @@ def evaluate_transcript_quality(
                 for name, bound in duration_bounds.items()
                 if word.end_ms > bound
             }
-            outside_segment = (
+            straddles_segment_boundary = (
                 word.start_ms < segment.start_ms or word.end_ms > segment.end_ms
             )
+            word_midpoint_ms = word.start_ms + (word.end_ms - word.start_ms) // 2
+            outside_segment = not (
+                segment.start_ms <= word_midpoint_ms < segment.end_ms
+            )
+            if straddles_segment_boundary:
+                word_parent_boundary_straddle_count += 1
             if not (word_interval_invalid or word_duration_bounds or outside_segment):
                 continue
             word_timestamp_out_of_bounds_count += 1
@@ -461,8 +468,12 @@ def evaluate_transcript_quality(
                         "observed_end_ms": word.end_ms,
                         "parent_segment_start_ms": segment.start_ms,
                         "parent_segment_end_ms": segment.end_ms,
+                        "word_midpoint_ms": word_midpoint_ms,
                         "violated_duration_bounds": word_duration_bounds,
                         "outside_parent_segment": outside_segment,
+                        "straddles_parent_segment_boundary": (
+                            straddles_segment_boundary
+                        ),
                     },
                 )
             )
@@ -690,6 +701,9 @@ def evaluate_transcript_quality(
             ),
             "word_segment_containment_violation_count": (
                 word_segment_containment_violation_count
+            ),
+            "word_parent_boundary_straddle_count": (
+                word_parent_boundary_straddle_count
             ),
             "timestamp_overlap_count": timestamp_overlaps,
             "large_gap_count": len(large_gaps),

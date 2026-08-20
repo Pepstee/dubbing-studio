@@ -213,6 +213,7 @@ def test_word_beyond_duration_and_parent_segment_fails_closed_once():
     assert issue.evidence["kind"] == "word"
     assert issue.evidence["word_index"] == 0
     assert issue.evidence["outside_parent_segment"] is True
+    assert issue.evidence["straddles_parent_segment_boundary"] is True
     assert issue.evidence["violated_duration_bounds"] == {
         "expected_duration_ms": 1_000,
         "transcript_duration_ms": 1_000,
@@ -222,7 +223,7 @@ def test_word_beyond_duration_and_parent_segment_fails_closed_once():
     assert report.metrics["word_segment_containment_violation_count"] == 1
 
 
-def test_word_must_remain_contained_by_parent_segment():
+def test_word_boundary_straddle_owned_by_midpoint_is_not_rejected():
     word = TranscriptWord(900, 1_100, "boundary")
     segment = TranscriptSegment(1_000, 2_000, "boundary", words=(word,))
 
@@ -230,13 +231,30 @@ def test_word_must_remain_contained_by_parent_segment():
         _result("boundary", (segment,)),
         expected_duration_ms=2_000,
     )
+    assert report.status is TranscriptQualityStatus.PASS
+    assert "timestamp_out_of_bounds" not in {item.code for item in report.issues}
+    assert report.metrics["word_recording_bounds_violation_count"] == 0
+    assert report.metrics["word_segment_containment_violation_count"] == 0
+    assert report.metrics["word_parent_boundary_straddle_count"] == 1
+
+
+def test_word_midpoint_outside_parent_segment_fails_closed():
+    word = TranscriptWord(800, 1_000, "misassigned")
+    segment = TranscriptSegment(1_000, 2_000, "misassigned", words=(word,))
+
+    report = evaluate_transcript_quality(
+        _result("misassigned", (segment,)),
+        expected_duration_ms=2_000,
+    )
     issue = next(item for item in report.issues if item.code == "timestamp_out_of_bounds")
 
     assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
     assert issue.evidence["violated_duration_bounds"] == {}
     assert issue.evidence["outside_parent_segment"] is True
-    assert report.metrics["word_recording_bounds_violation_count"] == 0
+    assert issue.evidence["word_midpoint_ms"] == 900
+    assert issue.evidence["straddles_parent_segment_boundary"] is True
     assert report.metrics["word_segment_containment_violation_count"] == 1
+    assert report.metrics["word_parent_boundary_straddle_count"] == 1
 
 
 def test_scattered_legitimate_duplicate_segments_do_not_form_a_loop():

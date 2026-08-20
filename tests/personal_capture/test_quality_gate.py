@@ -6,6 +6,7 @@ from dubbing.apps.personal_capture.outbox import export_approved
 from dubbing.apps.personal_capture.service import CaptureService
 from dubbing.transcription.base import TranscriptionBackend
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
+from dubbing.transcription.quality import QUALITY_POLICY_VERSION
 
 
 class _Backend(TranscriptionBackend):
@@ -64,10 +65,8 @@ def test_approval_refreshes_stale_quality_policy_before_blocking(tmp_path):
 
     refreshed_quality = json.loads(quality_path.read_text())
     refreshed_manifest = json.loads(manifest_path.read_text())
-    assert refreshed_quality["policy_version"] == "dubbing.transcript-quality-policy.v4"
-    assert refreshed_manifest["quality"]["policy_version"] == (
-        "dubbing.transcript-quality-policy.v4"
-    )
+    assert refreshed_quality["policy_version"] == QUALITY_POLICY_VERSION
+    assert refreshed_manifest["quality"]["policy_version"] == QUALITY_POLICY_VERSION
 
 
 def test_passing_transcript_emits_quality_bound_evidence(tmp_path):
