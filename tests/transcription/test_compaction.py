@@ -187,6 +187,31 @@ def test_diarization_context_retains_natural_pause_as_contiguous_audio():
     assert plan.packets[0].slices[0].original_end_ms == 12_000
 
 
+def test_padding_does_not_expand_the_diarization_merge_threshold():
+    regions = _regions(
+        48_346,
+        sensitive=(
+            SpeechRegion(0, 5_956, "sensitive"),
+            SpeechRegion(23_983, 48_346, "sensitive"),
+        ),
+    )
+    plan = build_speech_compaction_plan(
+        regions,
+        _local(48_346),
+        padding_ms=1_500,
+        merge_gap_ms=15_000,
+        separator_ms=500,
+        maximum_packet_ms=60_000,
+    )
+    assert 23_983 - 5_956 == 18_027
+    assert [(item.start_ms, item.end_ms) for item in plan.retained_intervals] == [
+        (0, 7_456),
+        (22_483, 48_346),
+    ]
+    assert [len(item.slices) for item in plan.packets] == [1, 1]
+    assert plan.removed_ms == 15_027
+
+
 def test_real_ffmpeg_compaction_matches_the_mapping_duration(tmp_path):
     if ffmpeg_executable() is None:
         pytest.skip("ffmpeg is not installed")

@@ -179,18 +179,33 @@ class SpeechCompactionPlan:
 def _merge_intervals(
     intervals: list[tuple[int, int]], *, duration_ms: int, padding_ms: int, merge_gap_ms: int
 ) -> tuple[RetainedInterval, ...]:
-    padded = sorted(
-        (max(0, start - padding_ms), min(duration_ms, end + padding_ms))
+    bounded = sorted(
+        (max(0, start), min(duration_ms, end))
         for start, end in intervals
-        if end > start
+        if end > start and min(duration_ms, end) > max(0, start)
     )
-    merged: list[list[int]] = []
-    for start, end in padded:
-        if merged and start - merged[-1][1] <= merge_gap_ms:
-            merged[-1][1] = max(merged[-1][1], end)
+    raw_merged: list[list[int]] = []
+    for start, end in bounded:
+        if raw_merged and start - raw_merged[-1][1] <= merge_gap_ms:
+            raw_merged[-1][1] = max(raw_merged[-1][1], end)
         else:
-            merged.append([start, end])
-    return tuple(RetainedInterval(start, end) for start, end in merged if end > start)
+            raw_merged.append([start, end])
+
+    # Padding must not change the semantic gap threshold. Otherwise two speech
+    # regions separated by merge_gap + 2*padding are incorrectly treated as one
+    # diarization context. If padding from deliberately separate regions ever
+    # overlaps, divide the context at the midpoint of the original silent gap.
+    padded: list[list[int]] = []
+    for index, (start, end) in enumerate(raw_merged):
+        padded_start = max(0, start - padding_ms)
+        padded_end = min(duration_ms, end + padding_ms)
+        if padded and padded_start < padded[-1][1]:
+            previous_raw_end = raw_merged[index - 1][1]
+            boundary = (previous_raw_end + start) // 2
+            padded[-1][1] = min(padded[-1][1], boundary)
+            padded_start = max(padded_start, boundary)
+        padded.append([padded_start, padded_end])
+    return tuple(RetainedInterval(start, end) for start, end in padded if end > start)
 
 
 def _split_long_intervals(
