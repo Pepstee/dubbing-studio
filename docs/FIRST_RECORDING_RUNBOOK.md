@@ -54,6 +54,14 @@ Tascam path acoustically certified until a real, unedited recorder file complete
 path and its speaker-attributed review package is inspected. The format-shadow package remains in
 review because one genuine overlap requires acknowledgement; it emitted no GIGA event.
 
+The same production path also completed a 56m40s mono 48 kHz 32-bit-float BWF shadow in 582.58
+seconds, including 50 adaptive chunks, source-integrity verification, diarization and package
+construction. An unchanged replay took 2.27 seconds and produced byte-identical package evidence.
+The run remained fail-closed with nine uncertain spans and no GIGA event. Its receipt is
+`benchmarks/fixtures/lesson-2026-08-01-193908/dr10l-pro-long-format-shadow-receipt.json`.
+This establishes long-form format and operational compatibility, not physical-recorder acoustics
+or ground-truth accuracy.
+
 ## 2. Transfer atomically
 
 Never copy directly to its final filename. Copy using a hidden `.partial`
