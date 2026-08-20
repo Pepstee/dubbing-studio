@@ -265,6 +265,22 @@ def _validate_entry_contract(entry: dict) -> None:
         raise ValueError(
             f"{entry_id} source evaluation_end_ms must satisfy 0 < evaluation_end_ms <= duration_ms"
         )
+    processing_end_ms = entry["source"].get("processing_end_ms")
+    if processing_end_ms is not None and (
+        isinstance(processing_end_ms, bool)
+        or not isinstance(processing_end_ms, int)
+        or processing_end_ms <= 0
+        or processing_end_ms > duration_ms
+    ):
+        raise ValueError(
+            f"{entry_id} source processing_end_ms must satisfy 0 < processing_end_ms <= duration_ms"
+        )
+    if (
+        evaluation_end_ms is not None
+        and processing_end_ms is not None
+        and evaluation_end_ms > processing_end_ms
+    ):
+        raise ValueError(f"{entry_id} source evaluation_end_ms must not exceed processing_end_ms")
     reference_kind = entry["reference"].get("kind")
     if not isinstance(reference_kind, str) or not reference_kind.strip():
         raise ValueError(f"{entry_id} reference kind is required")
@@ -336,6 +352,7 @@ def _corpus_binding(manifest: dict) -> tuple[dict, str]:
                 "source_sha256": entry["source"]["sha256"],
                 "source_duration_ms": entry["source"]["duration_ms"],
                 "source_evaluation_end_ms": entry["source"].get("evaluation_end_ms"),
+                "source_processing_end_ms": entry["source"].get("processing_end_ms"),
                 "reference_sha256": entry["reference"]["sha256"],
                 "reference_kind": entry["reference"]["kind"],
             }
@@ -718,6 +735,11 @@ def _validate_report(path: Path, entry: dict, fingerprint: str) -> dict:
         "evaluation_end_ms"
     ):
         raise ValueError(f"{entry['id']} report evaluation scope binding mismatch")
+    processing_scope = report.get("processing_scope")
+    if not isinstance(processing_scope, dict) or processing_scope.get("processing_end_ms") != entry[
+        "source"
+    ].get("processing_end_ms"):
+        raise ValueError(f"{entry['id']} report processing scope binding mismatch")
     gate = report.get("operational_gate")
     if not isinstance(gate, dict) or gate.get("passed") is not (gate.get("status") == "PASS"):
         raise ValueError(f"{entry['id']} report operational gate is malformed")
@@ -809,6 +831,9 @@ def evaluate_canary_result(
 ) -> dict:
     runtime_seconds = _finite_number(runtime_seconds, "runtime_seconds")
     full_result = transcription_result_from_dict(result_document)
+    source_duration_ms = int(entry["source"]["duration_ms"])
+    processing_end_ms = entry["source"].get("processing_end_ms")
+    processed_duration_ms = processing_end_ms or source_duration_ms
     evaluation_end_ms = entry["source"].get("evaluation_end_ms")
     if evaluation_end_ms is not None:
         result, out_of_scope_observation = _result_scoped_to_end(full_result, evaluation_end_ms)
@@ -847,6 +872,13 @@ def evaluate_canary_result(
     reasons = []
     if result.source_sha256 != expected_source:
         reasons.append("RESULT_SOURCE_BINDING_MISMATCH")
+    result_escapes_processing_scope = any(
+        segment.end_ms > processed_duration_ms
+        or any(word.end_ms > processed_duration_ms for word in segment.words)
+        for segment in full_result.segments
+    )
+    if full_result.duration_ms != processed_duration_ms or result_escapes_processing_scope:
+        reasons.append("RESULT_PROCESSING_SCOPE_MISMATCH")
     if replay_result_byte_identical is False:
         reasons.append("CHECKPOINT_REPLAY_RESULT_MISMATCH")
     if not runtime_accounting_complete:
@@ -863,8 +895,10 @@ def evaluate_canary_result(
     )
     if fallback_exhausted_count:
         reasons.append("DECODER_FALLBACK_EXHAUSTED")
-    duration_seconds = max(0.001, int(entry["source"]["duration_ms"]) / 1000)
-    realtime_factor = runtime_seconds / duration_seconds
+    processed_duration_seconds = max(0.001, processed_duration_ms / 1000)
+    full_source_duration_seconds = max(0.001, source_duration_ms / 1000)
+    realtime_factor = runtime_seconds / processed_duration_seconds
+    full_source_realtime_factor_observation = runtime_seconds / full_source_duration_seconds
     if realtime_factor > float(policy.get("maximum_realtime_factor", 0.25)):
         reasons.append("RUNTIME_FACTOR_EXCEEDED")
     provisional_wer = float(metrics["wer"]["rate"])
@@ -888,6 +922,16 @@ def evaluate_canary_result(
         },
         "runtime_seconds": runtime_seconds,
         "realtime_factor": realtime_factor,
+        "processing_scope": {
+            "kind": "SOURCE_TIME_CAP" if processing_end_ms is not None else "FULL_SOURCE",
+            "processing_end_ms": processing_end_ms,
+            "processed_duration_ms": processed_duration_ms,
+            "full_source_duration_ms": source_duration_ms,
+            "unprocessed_tail_duration_ms": source_duration_ms - processed_duration_ms,
+            "full_source_sha256_bound": True,
+            "realtime_factor_gate_denominator": "processed_duration_ms",
+            "full_source_realtime_factor_observation": (full_source_realtime_factor_observation),
+        },
         "decoder_fallback_exhausted_segment_count": fallback_exhausted_count,
         "evaluation_scope": {
             "kind": ("SOURCE_TIME_BOUNDARY" if evaluation_end_ms is not None else "FULL_SOURCE"),
@@ -1112,6 +1156,7 @@ def run_canary(
                 _, quality = coordinator.run(
                     Path(entry["source"]["path"]),
                     TranscriptionOptions(task="transcribe", word_timestamps=True),
+                    processing_end_ms=entry["source"].get("processing_end_ms"),
                 )
             else:
                 if not result_path.is_file() or not quality_path.is_file():

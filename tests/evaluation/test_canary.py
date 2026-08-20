@@ -74,24 +74,27 @@ def _install_fake_coordinator(monkeypatch, *, quality_status="PASS", mutate=Fals
     class FakeCoordinator:
         calls = 0
         init_kwargs = []
+        processing_ends = []
 
         def __init__(self, backend, output_dir, **kwargs):
             self.output_dir = Path(output_dir)
             type(self).init_kwargs.append(kwargs)
 
-        def run(self, source, options):
+        def run(self, source, options, *, processing_end_ms=None):
             type(self).calls += 1
+            type(self).processing_ends.append(processing_end_ms)
             self.output_dir.mkdir(parents=True, exist_ok=True)
             source_hash = _sha256(Path(source))
             text = "changed" if mutate and type(self).calls > 1 else "hello привет"
+            duration_ms = processing_end_ms or 1000
             result = TranscriptionResult(
-                segments=(TranscriptSegment(0, 1000, text, language="mixed"),),
+                segments=(TranscriptSegment(0, duration_ms, text, language="mixed"),),
                 text=text,
                 backend="mlx-whisper",
                 model="synthetic-test",
                 device="test",
                 language="mixed",
-                duration_ms=1000,
+                duration_ms=duration_ms,
                 confidence_available=False,
                 source_sha256=source_hash,
             )
@@ -292,6 +295,93 @@ def test_source_boundary_clips_crossing_segment_for_quality(tmp_path):
     assert report["quality"]["metrics"]["duration_ms"] == 500
 
 
+def test_processing_cap_binds_result_scope_and_realtime_factor(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {
+            **entry["source"],
+            "duration_ms": 2000,
+            "evaluation_end_ms": 1000,
+            "processing_end_ms": 1000,
+        },
+    }
+    result = TranscriptionResult(
+        segments=(TranscriptSegment(0, 1000, "hello привет", language="mixed"),),
+        text="hello привет",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="mixed",
+        duration_ms=1000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+
+    report = evaluate_canary_result(
+        entry,
+        result.to_dict(),
+        {"status": "PASS", "metrics": {}},
+        runtime_seconds=0.2,
+        policy={"maximum_realtime_factor": 0.25},
+        execution_fingerprint="frozen",
+    )
+
+    assert report["operational_gate"]["status"] == "PASS"
+    assert report["realtime_factor"] == pytest.approx(0.2)
+    assert report["processing_scope"] == {
+        "kind": "SOURCE_TIME_CAP",
+        "processing_end_ms": 1000,
+        "processed_duration_ms": 1000,
+        "full_source_duration_ms": 2000,
+        "unprocessed_tail_duration_ms": 1000,
+        "full_source_sha256_bound": True,
+        "realtime_factor_gate_denominator": "processed_duration_ms",
+        "full_source_realtime_factor_observation": pytest.approx(0.1),
+    }
+
+
+def test_processing_cap_rejects_result_that_contains_source_tail(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {
+            **entry["source"],
+            "duration_ms": 2000,
+            "evaluation_end_ms": 1000,
+            "processing_end_ms": 1000,
+        },
+    }
+    result = TranscriptionResult(
+        segments=(
+            TranscriptSegment(0, 1000, "hello привет", language="mixed"),
+            TranscriptSegment(1000, 2000, "unrelated tail", language="en"),
+        ),
+        text="hello привет unrelated tail",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="mixed",
+        duration_ms=2000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+
+    report = evaluate_canary_result(
+        entry,
+        result.to_dict(),
+        {"status": "PASS", "metrics": {}},
+        runtime_seconds=0.1,
+        policy={},
+        execution_fingerprint="frozen",
+    )
+
+    assert report["operational_gate"]["status"] == "FAIL"
+    assert "RESULT_PROCESSING_SCOPE_MISMATCH" in report["operational_gate"]["failure_reasons"]
+
+
 def test_holdout_requires_valid_development_pass_receipt(tmp_path, monkeypatch):
     manifest = _manifest(tmp_path)
     output = tmp_path / "output"
@@ -354,6 +444,7 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
     document = json.loads(manifest.read_text())
     document["execution"] = {"candidate_languages": ["en", "ru"]}
     document["entries"][0]["source"]["evaluation_end_ms"] = 800
+    document["entries"][0]["source"]["processing_end_ms"] = 800
     manifest.write_text(json.dumps(document), encoding="utf-8")
     output = tmp_path / "output"
     coordinator = _install_fake_coordinator(monkeypatch)
@@ -376,6 +467,7 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
     assert len(frozen["retry_backend"]["implementation"]["source_sha256"]) == 64
     assert frozen["execution"]["candidate_languages"] == ["en", "ru"]
     assert frozen["corpus"]["entries"][0]["source_evaluation_end_ms"] == 800
+    assert frozen["corpus"]["entries"][0]["source_processing_end_ms"] == 800
     assert coordinator.init_kwargs[0]["retry_backend"].identity == (
         _IndependentLocalBackend.identity
     )
@@ -384,6 +476,7 @@ def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path
     )
     assert coordinator.init_kwargs[0]["targeted_retry_region_detector"] is None
     assert coordinator.init_kwargs[0]["candidate_languages"] == ("en", "ru")
+    assert coordinator.processing_ends == [800]
 
 
 def test_legacy_speech_detector_populates_both_frozen_roles(tmp_path, monkeypatch):
@@ -576,6 +669,16 @@ def test_attempt_ledger_is_immutable_and_runtime_does_not_use_mtime(tmp_path, mo
         (
             lambda document: document["entries"][0]["source"].update(evaluation_end_ms=1001),
             "evaluation_end_ms",
+        ),
+        (
+            lambda document: document["entries"][0]["source"].update(processing_end_ms=0),
+            "processing_end_ms",
+        ),
+        (
+            lambda document: document["entries"][0]["source"].update(
+                evaluation_end_ms=900, processing_end_ms=800
+            ),
+            "must not exceed processing_end_ms",
         ),
     ],
 )

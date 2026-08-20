@@ -44,7 +44,7 @@ _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
-_COORDINATOR_VERSION = "adaptive-long-form-v12"
+_COORDINATOR_VERSION = "adaptive-long-form-v13"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 
 
@@ -629,8 +629,15 @@ class AdaptiveLongFormCoordinator:
             raise TranscriptionError(f"chunk extraction failed: {process.stderr.strip()}")
 
     def _manifest(
-        self, source: Path, digest: str, probe: MediaProbe, chunks: tuple[AdaptiveChunk, ...]
+        self,
+        source: Path,
+        digest: str,
+        probe: MediaProbe,
+        chunks: tuple[AdaptiveChunk, ...],
+        processing_end_ms: int | None = None,
     ) -> dict:
+        if processing_end_ms is None:
+            processing_end_ms = probe.duration_ms
         manifest = {
             "schema_version": "dubbing.adaptive-transcription-checkpoint.v2",
             "coordinator_version": _COORDINATOR_VERSION,
@@ -638,6 +645,13 @@ class AdaptiveLongFormCoordinator:
             "source_name": source.name,
             "source_sha256": digest,
             "probe": probe.to_dict(),
+            "processing_scope": {
+                "start_ms": 0,
+                "end_ms": processing_end_ms,
+                "processed_duration_ms": processing_end_ms,
+                "full_source_duration_ms": probe.duration_ms,
+                "full_source_sha256_bound": True,
+            },
             "backend_identity": self.backend.identity,
             "retry_backend_identity": self.retry_backend.identity if self.retry_backend else None,
             "silence_verification_detector_identity": (
@@ -1663,6 +1677,7 @@ class AdaptiveLongFormCoordinator:
         options: TranscriptionOptions | None = None,
         *,
         source_digest: str | None = None,
+        processing_end_ms: int | None = None,
     ) -> tuple[TranscriptionResult, dict]:
         source = Path(media).resolve()
         if not source.is_file():
@@ -1672,19 +1687,37 @@ class AdaptiveLongFormCoordinator:
         if not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise TranscriptionError("source_digest must be a lowercase SHA-256 digest")
         probe = probe_media(source)
-        silence_intervals = detect_silence_intervals(
+        if processing_end_ms is None:
+            effective_duration_ms = probe.duration_ms
+        elif (
+            isinstance(processing_end_ms, bool)
+            or not isinstance(processing_end_ms, int)
+            or processing_end_ms <= 0
+            or processing_end_ms > probe.duration_ms
+        ):
+            raise TranscriptionError(
+                "processing_end_ms must satisfy 0 < processing_end_ms <= source duration"
+            )
+        else:
+            effective_duration_ms = processing_end_ms
+        detected_silence_intervals = detect_silence_intervals(
             source, minimum_silence_seconds=self.minimum_silence_seconds
+        )
+        silence_intervals = tuple(
+            (max(0, start_ms), min(effective_duration_ms, end_ms))
+            for start_ms, end_ms in detected_silence_intervals
+            if start_ms < effective_duration_ms and end_ms > 0
         )
         silence_centres = tuple(
             round((start_ms + end_ms) / 2) for start_ms, end_ms in silence_intervals
         )
         chunks = self.planner.plan(
-            probe.duration_ms,
+            effective_duration_ms,
             silence_centres,
             silence_intervals=silence_intervals,
         )
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self._admit_manifest(self._manifest(source, digest, probe, chunks))
+        self._admit_manifest(self._manifest(source, digest, probe, chunks, effective_duration_ms))
         streams = probe.audio_streams
         completed: list[tuple[AdaptiveChunk, TranscriptionResult]] = []
         for chunk in chunks:
@@ -1745,21 +1778,28 @@ class AdaptiveLongFormCoordinator:
             model=self.backend.identity,
             device="adaptive-local",
             language=options.language,
-            duration_ms=probe.duration_ms,
+            duration_ms=effective_duration_ms,
             confidence_available=any(item.confidence is not None for item in segments),
             source_sha256=digest,
             provenance={
                 "coordinator": _COORDINATOR_VERSION,
                 "chunk_count": len(chunks),
+                "processing_scope": {
+                    "start_ms": 0,
+                    "end_ms": effective_duration_ms,
+                    "processed_duration_ms": effective_duration_ms,
+                    "full_source_duration_ms": probe.duration_ms,
+                    "full_source_sha256_bound": True,
+                },
                 "audio_streams": [stream.to_dict() for stream in streams],
                 "channel_preservation": "all-streams-merged-with-discrete-channels-v1",
             },
         )
-        quality = evaluate_transcript_quality(result, expected_duration_ms=probe.duration_ms)
+        quality = evaluate_transcript_quality(result, expected_duration_ms=effective_duration_ms)
         if any(issue.code == "large_unexplained_gaps" for issue in quality.issues):
             quality = evaluate_transcript_quality(
                 result,
-                expected_duration_ms=probe.duration_ms,
+                expected_duration_ms=effective_duration_ms,
                 known_silence_intervals=silence_intervals,
             )
         _atomic_json(self.checkpoint_dir / "result.json", result.to_dict())

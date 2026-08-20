@@ -38,6 +38,7 @@
         "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
         "duration_ms": 4987833,
         "evaluation_end_ms": 3400000,
+        "processing_end_ms": 3400000,
         "size_bytes": 3845699125
       },
       "reference": {

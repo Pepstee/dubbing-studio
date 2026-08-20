@@ -1,4 +1,5 @@
 import json
+import hashlib
 import wave
 from array import array
 from pathlib import Path
@@ -1255,3 +1256,123 @@ def test_unknown_latin_turn_stays_uncertain_instead_of_trying_every_language(tmp
     )
     assert backend.calls == 1
     assert result.segments[0].uncertain
+
+
+def test_processing_cap_binds_full_source_and_limits_plan_result_and_replay(tmp_path):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"full source including unrelated tail")
+    backend = _IndependentBackend()
+    observed = {}
+
+    def plan(duration_ms, silence_centres, *, silence_intervals=()):
+        observed["duration_ms"] = duration_ms
+        observed["silence_centres"] = silence_centres
+        observed["silence_intervals"] = silence_intervals
+        return (AdaptiveChunk(0, 0, duration_ms, 0, duration_ms, "end-of-media"),)
+
+    planner = SimpleNamespace(
+        plan=plan,
+        to_dict=lambda: {"fixture": "processing-cap"},
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=planner,
+    )
+
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(
+                10_000,
+                source.stat().st_size,
+                (AudioStream(0, "pcm", 1, 16_000),),
+            ),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=((5_000, 8_000), (9_000, 10_000)),
+        ),
+        patch.object(
+            coordinator,
+            "_extract",
+            side_effect=lambda source, streams, chunk, output: output.write_bytes(
+                b"processed prefix"
+            ),
+        ),
+    ):
+        result, quality = coordinator.run(source, processing_end_ms=6_000)
+        replay, _ = coordinator.run(source, processing_end_ms=6_000)
+
+    assert observed == {
+        "duration_ms": 6_000,
+        "silence_centres": (5_500,),
+        "silence_intervals": ((5_000, 6_000),),
+    }
+    assert result == replay
+    assert result.duration_ms == 6_000
+    assert max(segment.end_ms for segment in result.segments) == 6_000
+    assert result.source_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert result.provenance["processing_scope"] == {
+        "start_ms": 0,
+        "end_ms": 6_000,
+        "processed_duration_ms": 6_000,
+        "full_source_duration_ms": 10_000,
+        "full_source_sha256_bound": True,
+    }
+    assert quality["metrics"]["duration_ms"] == 6_000
+    assert backend.calls == 1
+    manifest = json.loads((tmp_path / "job" / "manifest.json").read_text())
+    assert manifest["probe"]["duration_ms"] == 10_000
+    assert manifest["processing_scope"]["end_ms"] == 6_000
+    assert manifest["chunks"][0]["extract_end_ms"] == 6_000
+
+
+def test_processing_cap_change_or_full_source_change_rejects_checkpoint(tmp_path):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"source with tail")
+    coordinator = AdaptiveLongFormCoordinator(
+        _IndependentBackend(),
+        tmp_path / "job",
+    )
+    probe = MediaProbe(
+        10_000,
+        source.stat().st_size,
+        (AudioStream(0, "pcm", 1, 16_000),),
+    )
+
+    with (
+        patch("dubbing.transcription.adaptive.probe_media", return_value=probe),
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=(),
+        ),
+        patch.object(
+            coordinator,
+            "_extract",
+            side_effect=lambda source, streams, chunk, output: output.write_bytes(b"prefix"),
+        ),
+    ):
+        coordinator.run(source, processing_end_ms=6_000)
+        with pytest.raises(TranscriptionError, match="does not match"):
+            coordinator.run(source, processing_end_ms=5_000)
+        source.write_bytes(b"changed full source tail")
+        with pytest.raises(TranscriptionError, match="does not match"):
+            coordinator.run(source, processing_end_ms=6_000)
+
+
+@pytest.mark.parametrize("processing_end_ms", [0, -1, 10_001, 1.5, True])
+def test_processing_cap_must_fit_probed_source(tmp_path, processing_end_ms):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"source")
+    coordinator = AdaptiveLongFormCoordinator(_IndependentBackend(), tmp_path / "job")
+    with patch(
+        "dubbing.transcription.adaptive.probe_media",
+        return_value=MediaProbe(
+            10_000,
+            source.stat().st_size,
+            (AudioStream(0, "pcm", 1, 16_000),),
+        ),
+    ):
+        with pytest.raises(TranscriptionError, match="processing_end_ms"):
+            coordinator.run(source, processing_end_ms=processing_end_ms)
