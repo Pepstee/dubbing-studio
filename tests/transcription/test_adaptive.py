@@ -192,6 +192,28 @@ class _IndependentBackend(TranscriptionBackend):
         )
 
 
+class _OutOfAudioBackend(TranscriptionBackend):
+    def __init__(self):
+        self.calls = 0
+
+    @property
+    def identity(self):
+        return "fixture:out-of-audio"
+
+    def transcribe(self, audio, options=None):
+        self.calls += 1
+        return TranscriptionResult(
+            segments=(TranscriptSegment(74_100, 74_120, "continuation"),),
+            text="continuation",
+            backend="fixture",
+            model="out-of-audio",
+            device="test",
+            language=options.language or "en",
+            duration_ms=65_407,
+            confidence_available=False,
+        )
+
+
 class _SpeechDetector:
     identity = "fixture:sensitive-vad"
 
@@ -320,6 +342,246 @@ def test_silence_short_of_full_extracted_range_preserves_asr(tmp_path):
 
     assert backend.calls == 1
     assert detector.calls == 0
+
+
+def test_real_six_gap_near_silence_stops_after_empty_bounded_primary(tmp_path):
+    source = tmp_path / "lesson.mov"
+    source.write_bytes(b"source")
+    chunk = _lesson_silence_chunk()
+    backend = _OutOfAudioBackend()
+    retry_backend = _IndependentBackend()
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        planner=_single_chunk_planner(chunk),
+        retry_backend=retry_backend,
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    real_silence_intervals = (
+        (960_400, 961_715),
+        (961_735, 963_064),
+        (963_084, 1_019_110),
+        (1_019_623, 1_022_101),
+        (1_023_308, 1_024_306),
+        (1_024_327, 1_025_491),
+    )
+
+    with (
+        patch(
+            "dubbing.transcription.adaptive.probe_media",
+            return_value=MediaProbe(
+                1_034_499,
+                6,
+                (AudioStream(0, "pcm", 1, 16_000),),
+            ),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.detect_silence_intervals",
+            return_value=real_silence_intervals,
+        ),
+        patch.object(
+            coordinator,
+            "_extract",
+            side_effect=lambda source, streams, selected_chunk, output: output.write_bytes(
+                b"near silence"
+            ),
+        ),
+    ):
+        result, _ = coordinator.run(source)
+        replay, _ = coordinator.run(source)
+
+    assert result.segments == ()
+    assert result.text == ""
+    assert replay == result
+    assert backend.calls == 1
+    assert retry_backend.calls == 0
+    assert detector.calls == 1
+    receipt = json.loads((tmp_path / "job" / "receipts" / "000015.json").read_text())
+    assert [item["kind"] for item in receipt["attempts"]] == [
+        "out-of-audio-segment-rejection",
+        "chunk-silence-classification",
+    ]
+    classification = receipt["attempts"][-1]
+    assert classification["status"] == "CONFIRMED_SILENCE_AFTER_EMPTY_ASR"
+    assert classification["energy_silence_coverage_ms"] == 63_310
+    assert classification["energy_silence_coverage_ratio"] == 0.967939
+    assert classification["total_uncovered_ms"] == 2_097
+    assert classification["maximum_uncovered_gap_ms"] == 1_207
+    assert receipt["selected_attempt"] == 1
+    manifest = json.loads((tmp_path / "job" / "manifest.json").read_text())
+    policy = manifest["silence_admission"]["near_silence_after_empty_asr"]
+    assert policy["minimum_energy_coverage_ratio"] == 0.96
+    assert policy["maximum_total_uncovered_ms"] == 2_500
+    assert policy["maximum_uncovered_gap_ms"] == 1_500
+
+
+def test_near_silence_sensitive_vad_speech_preserves_fail_closed_retry(tmp_path):
+    chunk = _lesson_silence_chunk()
+    backend = _OutOfAudioBackend()
+    detector = _SpeechDetector((SpeechRegion(62_900, 63_200, "sensitive"),))
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        retry_backend=_IndependentBackend(),
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"quiet speech")
+    intervals = (
+        (0, 1_315),
+        (1_335, 2_664),
+        (2_684, 58_710),
+        (59_223, 61_701),
+        (62_908, 63_906),
+        (63_927, 65_091),
+    )
+
+    with patch.object(
+        coordinator,
+        "_repair_rejected_spans",
+        side_effect=lambda audio, result, quality, duration, options, attempts: (
+            result,
+            quality,
+        ),
+    ) as repair:
+        result, receipt = coordinator._decode_chunk(
+            audio,
+            chunk,
+            TranscriptionOptions(),
+            energy_silence_coverage_ms=63_310,
+            energy_silence_intervals=intervals,
+        )
+
+    assert result.segments == ()
+    assert detector.calls == 1
+    assert repair.call_count == 1
+    classifications = [
+        item for item in receipt["attempts"] if item["kind"] == "chunk-silence-classification"
+    ]
+    assert classifications[0]["status"] == "SEMANTIC_SPEECH_DETECTED_AFTER_EMPTY_ASR"
+    assert receipt["targeted_retry_exhausted"] is True
+
+
+@pytest.mark.parametrize(
+    ("coverage_ms", "intervals"),
+    (
+        (62_000, ((0, 62_000),)),
+        (63_500, ((0, 60_000), (61_907, 65_407))),
+    ),
+)
+def test_near_silence_unsafe_energy_shape_preserves_fail_closed_retry(
+    tmp_path, coverage_ms, intervals
+):
+    chunk = _lesson_silence_chunk()
+    detector = _SpeechDetector()
+    coordinator = AdaptiveLongFormCoordinator(
+        _OutOfAudioBackend(),
+        tmp_path / "job",
+        retry_backend=_IndependentBackend(),
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"not safely silent")
+
+    with patch.object(
+        coordinator,
+        "_repair_rejected_spans",
+        side_effect=lambda audio, result, quality, duration, options, attempts: (
+            result,
+            quality,
+        ),
+    ) as repair:
+        coordinator._decode_chunk(
+            audio,
+            chunk,
+            TranscriptionOptions(),
+            energy_silence_coverage_ms=coverage_ms,
+            energy_silence_intervals=intervals,
+        )
+
+    assert detector.calls == 0
+    assert repair.call_count == 1
+
+
+def test_valid_primary_speech_cannot_be_reclassified_as_near_silence(tmp_path):
+    chunk = _lesson_silence_chunk()
+    detector = _SpeechDetector()
+    backend = _IndependentBackend()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        silence_verification_detector=detector,
+        targeted_retry_region_detector=None,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"valid quiet speech")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        chunk,
+        TranscriptionOptions(),
+        energy_silence_coverage_ms=63_310,
+        energy_silence_intervals=(
+            (0, 1_315),
+            (1_335, 2_664),
+            (2_684, 58_710),
+            (59_223, 61_701),
+            (62_908, 63_906),
+            (63_927, 65_091),
+        ),
+    )
+
+    assert result.text == "clean ordinary phrase"
+    assert backend.calls == 1
+    assert detector.calls == 0
+    assert not any(
+        item["kind"] == "chunk-silence-classification" for item in receipt["attempts"]
+    )
+
+
+def test_near_silence_without_detector_preserves_fail_closed_retry(tmp_path):
+    chunk = _lesson_silence_chunk()
+    coordinator = AdaptiveLongFormCoordinator(
+        _OutOfAudioBackend(),
+        tmp_path / "job",
+        retry_backend=_IndependentBackend(),
+        silence_verification_detector=None,
+        targeted_retry_region_detector=None,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"unverified near silence")
+
+    with patch.object(
+        coordinator,
+        "_repair_rejected_spans",
+        side_effect=lambda audio, result, quality, duration, options, attempts: (
+            result,
+            quality,
+        ),
+    ) as repair:
+        _, receipt = coordinator._decode_chunk(
+            audio,
+            chunk,
+            TranscriptionOptions(),
+            energy_silence_coverage_ms=63_310,
+            energy_silence_intervals=(
+                (0, 1_315),
+                (1_335, 2_664),
+                (2_684, 58_710),
+                (59_223, 61_701),
+                (62_908, 63_906),
+                (63_927, 65_091),
+            ),
+        )
+
+    assert repair.call_count == 1
+    assert not any(
+        item["kind"] == "chunk-silence-classification" for item in receipt["attempts"]
+    )
 
 
 def test_semantic_vad_speech_overrides_full_energy_silence(tmp_path):
@@ -637,6 +899,28 @@ def test_detector_role_change_invalidates_adaptive_checkpoint_manifest(tmp_path)
         match="adaptive checkpoint does not match source or configuration",
     ):
         silence_only._admit_manifest(silence_only._manifest(source, "0" * 64, probe, chunks))
+
+
+def test_near_silence_policy_change_invalidates_adaptive_checkpoint_manifest(tmp_path):
+    coordinator = AdaptiveLongFormCoordinator(_RetryingBackend(), tmp_path / "job")
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
+    chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
+    expected = coordinator._manifest(source, "0" * 64, probe, chunks)
+    existing = json.loads(json.dumps(expected))
+    existing["silence_admission"]["near_silence_after_empty_asr"][
+        "maximum_uncovered_gap_ms"
+    ] = 1_501
+    manifest = tmp_path / "job" / "manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps(existing), encoding="utf-8")
+
+    with pytest.raises(
+        TranscriptionError,
+        match="adaptive checkpoint does not match source or configuration",
+    ):
+        coordinator._admit_manifest(expected)
 
 
 def test_overlap_reconciliation_drops_duplicate_boundary_segment():

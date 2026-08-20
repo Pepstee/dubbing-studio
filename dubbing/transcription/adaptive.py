@@ -46,9 +46,15 @@ _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
 _LANGUAGE_RETRY_CONTEXT_MS = 1_000
-_COORDINATOR_VERSION = "adaptive-long-form-v17"
+_NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO = 0.96
+_NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS = 2_500
+_NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
+_COORDINATOR_VERSION = "adaptive-long-form-v18"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
+_NEAR_SILENCE_ADMISSION_POLICY = (
+    "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
+)
 _AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
 
 
@@ -248,6 +254,42 @@ def _interval_coverage_ms(
             covered += cursor_end - cursor_start
             cursor_start, cursor_end = next_start, next_end
     return covered + cursor_end - cursor_start
+
+
+def _clipped_relative_intervals_ms(
+    start_ms: int,
+    end_ms: int,
+    intervals: tuple[tuple[int, int], ...],
+) -> tuple[tuple[int, int], ...]:
+    clipped = sorted(
+        (max(start_ms, start), min(end_ms, end))
+        for start, end in intervals
+        if start < end_ms and end > start_ms
+    )
+    if not clipped:
+        return ()
+    merged: list[tuple[int, int]] = []
+    for interval_start, interval_end in clipped:
+        if merged and interval_start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], interval_end))
+        else:
+            merged.append((interval_start, interval_end))
+    return tuple((start - start_ms, end - start_ms) for start, end in merged)
+
+
+def _uncovered_intervals_ms(
+    duration_ms: int,
+    covered_intervals: tuple[tuple[int, int], ...],
+) -> tuple[tuple[int, int], ...]:
+    uncovered: list[tuple[int, int]] = []
+    cursor = 0
+    for start_ms, end_ms in covered_intervals:
+        if start_ms > cursor:
+            uncovered.append((cursor, start_ms))
+        cursor = max(cursor, end_ms)
+    if cursor < duration_ms:
+        uncovered.append((cursor, duration_ms))
+    return tuple(uncovered)
 
 
 def _detect_silence_seconds(
@@ -702,6 +744,20 @@ class AdaptiveLongFormCoordinator:
                 "policy": _SILENCE_ADMISSION_POLICY,
                 "required_energy_coverage_ratio": 1.0,
                 "semantic_vad_zero_regions_required": True,
+                "near_silence_after_empty_asr": {
+                    "policy": _NEAR_SILENCE_ADMISSION_POLICY,
+                    "minimum_energy_coverage_ratio": (
+                        _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
+                    ),
+                    "maximum_total_uncovered_ms": (
+                        _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
+                    ),
+                    "maximum_uncovered_gap_ms": (
+                        _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+                    ),
+                    "primary_valid_segment_count_required": 0,
+                    "semantic_vad_zero_regions_required": True,
+                },
             },
             "planner": self.planner.to_dict(),
             "chunks": [item.to_dict() for item in chunks],
@@ -1391,9 +1447,42 @@ class AdaptiveLongFormCoordinator:
         options: TranscriptionOptions,
         *,
         energy_silence_coverage_ms: int = 0,
+        energy_silence_intervals: tuple[tuple[int, int], ...] = (),
     ) -> tuple[TranscriptionResult, dict]:
         attempts: list[dict] = []
         duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
+        if energy_silence_coverage_ms == duration_ms and not energy_silence_intervals:
+            energy_silence_intervals = ((0, duration_ms),)
+        covered_interval_ms = sum(end - start for start, end in energy_silence_intervals)
+        uncovered_intervals = _uncovered_intervals_ms(
+            duration_ms, energy_silence_intervals
+        )
+        total_uncovered_ms = duration_ms - energy_silence_coverage_ms
+        maximum_uncovered_gap_ms = max(
+            (end - start for start, end in uncovered_intervals), default=0
+        )
+        coverage_ratio = (
+            energy_silence_coverage_ms / duration_ms if duration_ms else 0.0
+        )
+        energy_evidence = {
+            "energy_silence_coverage_ms": energy_silence_coverage_ms,
+            "energy_silence_coverage_ratio": round(coverage_ratio, 6),
+            "interval_coordinate_space": "extracted-audio-relative",
+            "energy_silence_intervals": [
+                {"start_ms": start, "end_ms": end}
+                for start, end in energy_silence_intervals
+            ],
+            "energy_silence_interval_coverage_ms": covered_interval_ms,
+            "energy_silence_evidence_consistent": (
+                covered_interval_ms == energy_silence_coverage_ms
+            ),
+            "uncovered_intervals": [
+                {"start_ms": start, "end_ms": end}
+                for start, end in uncovered_intervals
+            ],
+            "total_uncovered_ms": total_uncovered_ms,
+            "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
+        }
         if (
             energy_silence_coverage_ms == duration_ms
             and self.silence_verification_detector is not None
@@ -1405,8 +1494,7 @@ class AdaptiveLongFormCoordinator:
                     "CONFIRMED_SILENCE" if not plan.selected_regions else "SEMANTIC_SPEECH_DETECTED"
                 ),
                 "policy": _SILENCE_ADMISSION_POLICY,
-                "energy_silence_coverage_ms": energy_silence_coverage_ms,
-                "energy_silence_coverage_ratio": 1.0,
+                **energy_evidence,
                 "speech_region_plan": plan.to_dict(),
             }
             attempts.append(silence_attempt)
@@ -1436,6 +1524,64 @@ class AdaptiveLongFormCoordinator:
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
         raw_quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
         result = self._enforce_audio_bounds(result, duration_ms, raw_quality, attempts)
+        near_silence_candidate = (
+            not result.segments
+            and self.silence_verification_detector is not None
+            and 0 < energy_silence_coverage_ms < duration_ms
+            and covered_interval_ms == energy_silence_coverage_ms
+            and coverage_ratio >= _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
+            and total_uncovered_ms <= _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
+            and maximum_uncovered_gap_ms <= _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+        )
+        if near_silence_candidate:
+            plan = self.silence_verification_detector.detect(audio)
+            silence_attempt = {
+                "kind": "chunk-silence-classification",
+                "status": (
+                    "CONFIRMED_SILENCE_AFTER_EMPTY_ASR"
+                    if not plan.selected_regions
+                    else "SEMANTIC_SPEECH_DETECTED_AFTER_EMPTY_ASR"
+                ),
+                "policy": _NEAR_SILENCE_ADMISSION_POLICY,
+                **energy_evidence,
+                "minimum_energy_coverage_ratio": (
+                    _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
+                ),
+                "maximum_total_uncovered_ms": (
+                    _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
+                ),
+                "maximum_allowed_uncovered_gap_ms": (
+                    _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
+                ),
+                "primary_valid_segment_count": 0,
+                "speech_region_plan": plan.to_dict(),
+            }
+            attempts.append(silence_attempt)
+            if not plan.selected_regions:
+                return replace(
+                    result,
+                    segments=(),
+                    text="",
+                    provenance={
+                        **(result.provenance or {}),
+                        "coordinator": _COORDINATOR_VERSION,
+                        "classification": "confirmed_silence_after_empty_asr",
+                        "silence_admission_policy": (
+                            _NEAR_SILENCE_ADMISSION_POLICY
+                        ),
+                        "energy_silence_coverage_ms": (
+                            energy_silence_coverage_ms
+                        ),
+                        "energy_silence_coverage_ratio": round(coverage_ratio, 6),
+                        "total_uncovered_ms": total_uncovered_ms,
+                        "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
+                        "silence_verification_detector": plan.detector_identity,
+                    },
+                ), {
+                    "attempts": attempts,
+                    "selected_attempt": len(attempts) - 1,
+                    "targeted_retry_exhausted": False,
+                }
         result = self._retry_detected_chunk_language(audio, result, options, duration_ms, attempts)
         result = self._resolve_uncertain_turns(
             audio,
@@ -1450,6 +1596,7 @@ class AdaptiveLongFormCoordinator:
                 "kind": "chunk",
                 "backend": self.backend.identity,
                 "language": options.language,
+                "energy_silence": energy_evidence,
                 "quality": quality.to_dict(),
             }
         )
@@ -1963,8 +2110,12 @@ class AdaptiveLongFormCoordinator:
                     audio = Path(directory) / f"{chunk.index:06d}.wav"
                     self._extract(source, streams, chunk, audio)
                     extracted_audio_sha256 = source_sha256(audio)
-                    duration_ms = chunk.extract_end_ms - chunk.extract_start_ms
                     energy_silence_coverage_ms = _interval_coverage_ms(
+                        chunk.extract_start_ms,
+                        chunk.extract_end_ms,
+                        silence_intervals,
+                    )
+                    energy_silence_intervals = _clipped_relative_intervals_ms(
                         chunk.extract_start_ms,
                         chunk.extract_end_ms,
                         silence_intervals,
@@ -1973,11 +2124,8 @@ class AdaptiveLongFormCoordinator:
                         audio,
                         chunk,
                         options,
-                        energy_silence_coverage_ms=(
-                            energy_silence_coverage_ms
-                            if energy_silence_coverage_ms == duration_ms
-                            else 0
-                        ),
+                        energy_silence_coverage_ms=energy_silence_coverage_ms,
+                        energy_silence_intervals=energy_silence_intervals,
                     )
                     if (
                         result.source_sha256 is not None
