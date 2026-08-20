@@ -8,6 +8,10 @@
   ],
   "giga_admission_allowed": false,
   "execution": {
+    "candidate_languages": [
+      "en",
+      "ru"
+    ],
     "target_seconds": 240,
     "minimum_seconds": 60,
     "maximum_seconds": 480,

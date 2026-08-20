@@ -1,12 +1,15 @@
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+import dubbing.evaluation.canary as canary_module
 from dubbing.evaluation.canary import (
     evaluate_canary_result,
     load_canary_manifest,
+    run_canary,
     validate_canary_bindings,
 )
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
@@ -52,6 +55,55 @@ def _manifest(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+class _LocalBackend:
+    identity = "mlx-whisper:synthetic-test"
+
+
+class _IndependentLocalBackend:
+    identity = "faster-whisper:synthetic-independent"
+
+
+def _install_fake_coordinator(monkeypatch, *, quality_status="PASS", mutate=False):
+    class FakeCoordinator:
+        calls = 0
+        init_kwargs = []
+
+        def __init__(self, backend, output_dir, **kwargs):
+            self.output_dir = Path(output_dir)
+            type(self).init_kwargs.append(kwargs)
+
+        def run(self, source, options):
+            type(self).calls += 1
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            source_hash = _sha256(Path(source))
+            text = "changed" if mutate and type(self).calls > 1 else "hello привет"
+            result = TranscriptionResult(
+                segments=(TranscriptSegment(0, 1000, text, language="mixed"),),
+                text=text,
+                backend="mlx-whisper",
+                model="synthetic-test",
+                device="test",
+                language="mixed",
+                duration_ms=1000,
+                confidence_available=False,
+                source_sha256=source_hash,
+            )
+            quality = {
+                "status": quality_status,
+                "metrics": {"repetition_finding_count": 0},
+            }
+            (self.output_dir / "result.json").write_text(
+                json.dumps(result.to_dict()), encoding="utf-8"
+            )
+            (self.output_dir / "quality-report.json").write_text(
+                json.dumps(quality), encoding="utf-8"
+            )
+            return result, quality
+
+    monkeypatch.setattr(canary_module, "AdaptiveLongFormCoordinator", FakeCoordinator)
+    return FakeCoordinator
 
 
 def test_manifest_binds_every_source_and_reference(tmp_path):
@@ -145,6 +197,322 @@ def test_uncertain_spans_fail_the_default_canary_policy(tmp_path):
         execution_fingerprint="frozen",
     )
     assert report["operational_gate"]["status"] == "FAIL"
-    assert "QUALITY_PASS_WITH_UNCERTAIN_SPANS" in report["operational_gate"][
-        "failure_reasons"
+    assert "QUALITY_PASS_WITH_UNCERTAIN_SPANS" in report["operational_gate"]["failure_reasons"]
+
+
+def test_holdout_requires_valid_development_pass_receipt(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+
+    with pytest.raises(ValueError, match="development canary before"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+
+    development = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    assert development["status"] == "PARTIAL"
+    holdout = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+    assert holdout["completed_entries"] == ["lesson-0", "lesson-1"]
+    assert holdout["missing_entries"] == ["lesson-2"]
+
+
+def test_full_selection_runs_development_before_later_roles(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+
+    summary = run_canary(manifest, output, _LocalBackend())
+
+    assert summary["status"] == "PASS"
+    assert summary["completed_entries"] == ["lesson-0", "lesson-1", "lesson-2"]
+    assert coordinator.calls == 3
+
+
+def test_failed_development_blocks_later_roles(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch, quality_status="REPROCESS_REQUIRED")
+    summary = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    assert summary["status"] == "FAIL"
+
+    with pytest.raises(ValueError, match="did not PASS"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+
+
+def test_execution_freeze_binds_corpus_and_implementation(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    assert len(frozen["corpus_sha256"]) == 64
+    assert len(frozen["implementation_sha256"]) == 64
+    assert {item["id"] for item in frozen["corpus"]["entries"]} == {
+        "lesson-0",
+        "lesson-1",
+        "lesson-2",
+    }
+    assert any(
+        item["path"] == "dubbing/evaluation/canary.py" for item in frozen["implementation"]["files"]
+    )
+
+
+def test_retry_backend_and_candidate_languages_are_frozen_and_forwarded(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["execution"] = {"candidate_languages": ["en", "ru"]}
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+
+    run_canary(
+        manifest,
+        output,
+        _LocalBackend(),
+        retry_backend=_IndependentLocalBackend(),
+        selected_ids={"lesson-0"},
+    )
+
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    assert frozen["retry_backend"]["identity"] == _IndependentLocalBackend.identity
+    assert len(frozen["retry_backend"]["implementation"]["source_sha256"]) == 64
+    assert frozen["execution"]["candidate_languages"] == ["en", "ru"]
+    assert coordinator.init_kwargs[0]["retry_backend"].identity == (
+        _IndependentLocalBackend.identity
+    )
+    assert coordinator.init_kwargs[0]["candidate_languages"] == ("en", "ru")
+
+
+def test_retry_backend_must_be_independent(tmp_path):
+    with pytest.raises(ValueError, match="primary backend identity"):
+        run_canary(
+            _manifest(tmp_path),
+            tmp_path / "output",
+            _LocalBackend(),
+            retry_backend=_LocalBackend(),
+            selected_ids={"lesson-0"},
+        )
+
+
+def test_retry_backend_must_be_local(tmp_path):
+    class CloudRetryBackend:
+        identity = "elevenlabs:scribe-v2"
+
+    with pytest.raises(ValueError, match="local retry backend"):
+        run_canary(
+            _manifest(tmp_path),
+            tmp_path / "output",
+            _LocalBackend(),
+            retry_backend=CloudRetryBackend(),
+            selected_ids={"lesson-0"},
+        )
+
+
+def test_evaluate_only_requires_and_preserves_transcription_provenance(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+    with pytest.raises(ValueError, match="validated transcription receipt"):
+        run_canary(
+            manifest,
+            output,
+            _LocalBackend(),
+            selected_ids={"lesson-0"},
+            evaluate_only=True,
+        )
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    receipt_path = output / "lesson-0" / "canary-run-receipt.json"
+    origin_hash = _sha256(receipt_path)
+    run_canary(
+        manifest,
+        output,
+        _LocalBackend(),
+        selected_ids={"lesson-0"},
+        evaluate_only=True,
+    )
+    receipt = json.loads(receipt_path.read_text())
+    report = json.loads((output / "lesson-0" / "canary-report.json").read_text())
+    assert receipt["origin"] == "LOCAL_TRANSCRIPTION"
+    assert receipt["evaluation_count"] == 1
+    assert report["evaluation_provenance"]["mode"] == "EVALUATE_ONLY"
+    assert report["evaluation_provenance"]["origin_receipt_sha256"] == origin_hash
+
+
+def test_nonfinite_or_ledger_inconsistent_receipt_is_rejected(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    receipt_path = output / "lesson-0" / "canary-run-receipt.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt["initial_runtime_seconds"] = float("nan")
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="finite"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["status"] == "FAIL"
+    assert "lesson-0" in summary["invalid_evidence"]
+
+
+def test_replay_result_mismatch_fails_closed(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch, mutate=True)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    summary = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    report = json.loads((output / "lesson-0" / "canary-report.json").read_text())
+    assert summary["status"] == "FAIL"
+    assert "CHECKPOINT_REPLAY_RESULT_MISMATCH" in report["operational_gate"]["failure_reasons"]
+    assert report["operational_gate"]["passed"] is False
+
+    third = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    receipt = json.loads((output / "lesson-0" / "canary-run-receipt.json").read_text())
+    assert third["status"] == "FAIL"
+    assert receipt["replay_mismatch_count"] == 1
+
+
+def test_attempt_ledger_is_immutable_and_runtime_does_not_use_mtime(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+    entry_output = output / "lesson-0"
+    entry_output.mkdir(parents=True)
+    (entry_output / "manifest.json").write_text("{}", encoding="utf-8")
+    (entry_output / "progress.json").write_text("{}", encoding="utf-8")
+    (entry_output / "manifest.json").touch()
+    (entry_output / "progress.json").touch()
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    receipt = json.loads((entry_output / "canary-run-receipt.json").read_text())
+    events = sorted((entry_output / "attempts").glob("*.json"))
+    assert [item.name for item in events] == [
+        "000001-completed.json",
+        "000001-started.json",
     ]
+    assert receipt["runtime_measurement"] == "append-only-monotonic-attempt-ledger-v1"
+    assert "recovered_checkpoint_seconds" not in receipt
+    assert receipt["runtime_accounting_complete"] is True
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda document: document["entries"][0].update(id="Bad ID"), "kebab-case"),
+        (
+            lambda document: document.update(policy={"allowed_quality_statuses": ["MADE_UP"]}),
+            "invalid status",
+        ),
+        (
+            lambda document: document.update(policy={"maximum_realtime_factor": float("inf")}),
+            "finite",
+        ),
+        (
+            lambda document: document.update(execution={"candidate_languages": ["en", "en"]}),
+            "candidate_languages",
+        ),
+        (
+            lambda document: document.update(execution={"candidate_languages": []}),
+            "candidate_languages",
+        ),
+    ],
+)
+def test_manifest_strictly_validates_slugs_and_policy(tmp_path, mutation, message):
+    path = _manifest(tmp_path)
+    document = json.loads(path.read_text())
+    mutation(document)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_canary_manifest(path)
+
+
+def test_canary_rejects_nonlocal_backend(tmp_path):
+    class CloudBackend:
+        identity = "elevenlabs:scribe-v2"
+
+    with pytest.raises(ValueError, match="local transcription backend"):
+        run_canary(
+            _manifest(tmp_path),
+            tmp_path / "output",
+            CloudBackend(),
+            selected_ids={"lesson-0"},
+        )
+
+
+def test_cli_returns_nonzero_for_partial_summary(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(canary_module, "build_backend", lambda args: _LocalBackend())
+    monkeypatch.setattr(canary_module, "build_retry_backend", lambda args: None)
+    monkeypatch.setattr(
+        canary_module,
+        "run_canary",
+        lambda *args, **kwargs: {"status": "PARTIAL"},
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "dubbing-canary",
+            "--manifest",
+            str(_manifest(tmp_path)),
+            "--output",
+            str(tmp_path / "output"),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        canary_module.main()
+    assert exc.value.code == 2
+    assert '"status": "PARTIAL"' in capsys.readouterr().out
+
+
+def test_cli_builds_and_forwards_matching_retry_arguments(tmp_path, monkeypatch):
+    observed = {}
+    monkeypatch.setattr(canary_module, "build_backend", lambda args: _LocalBackend())
+
+    def fake_build_retry(args):
+        observed["retry_backend"] = args.retry_backend
+        observed["retry_model"] = args.retry_model
+        observed["retry_device"] = args.retry_device
+        observed["retry_compute_type"] = args.retry_compute_type
+        observed["retry_mlx_temperature"] = args.retry_mlx_temperature
+        return _IndependentLocalBackend()
+
+    def fake_run(*args, **kwargs):
+        observed["forwarded"] = kwargs["retry_backend"]
+        return {"status": "PASS"}
+
+    monkeypatch.setattr(canary_module, "build_retry_backend", fake_build_retry)
+    monkeypatch.setattr(canary_module, "run_canary", fake_run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "dubbing-canary",
+            "--manifest",
+            str(_manifest(tmp_path)),
+            "--output",
+            str(tmp_path / "output"),
+            "--retry-backend",
+            "faster-whisper",
+            "--retry-model",
+            "/tmp/retry-model",
+            "--retry-device",
+            "cpu",
+            "--retry-compute-type",
+            "int8",
+            "--retry-mlx-temperature",
+            "0",
+        ],
+    )
+
+    canary_module.main()
+
+    assert observed == {
+        "retry_backend": "faster-whisper",
+        "retry_model": "/tmp/retry-model",
+        "retry_device": "cpu",
+        "retry_compute_type": "int8",
+        "retry_mlx_temperature": [0.0],
+        "forwarded": observed["forwarded"],
+    }
+    assert observed["forwarded"].identity == _IndependentLocalBackend.identity
