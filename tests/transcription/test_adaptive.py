@@ -59,6 +59,28 @@ def test_native_pcm_wave_probe_silence_and_extraction_without_ffmpeg(tmp_path):
         assert extracted.getnframes() == 16000
 
 
+def test_ffmpeg_silence_detection_maps_only_the_first_audio_stream(tmp_path):
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    completed = SimpleNamespace(
+        returncode=0,
+        stderr="silence_start: 1.0\nsilence_end: 2.0 | silence_duration: 1.0\n",
+    )
+
+    with patch(
+        "dubbing.transcription.adaptive.ffmpeg_executable", return_value="ffmpeg"
+    ), patch(
+        "dubbing.transcription.adaptive.subprocess.run", return_value=completed
+    ) as run:
+        assert detect_silence_intervals(source) == ((1000, 2000),)
+
+    command = run.call_args.args[0]
+    assert command[command.index("-map") + 1] == "0:a:0"
+    assert "-vn" in command
+    assert "-sn" in command
+    assert "-dn" in command
+
+
 def test_chunk_extraction_merges_every_audio_stream_as_discrete_channels(tmp_path):
     source = tmp_path / "source.mov"
     source.write_bytes(b"source")

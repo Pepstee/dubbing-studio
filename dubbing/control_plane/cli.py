@@ -26,6 +26,7 @@ from dubbing.transcription.whisperkit import (
 
 def discover_whisperkit_models() -> tuple[Path, ...]:
     roots = (
+        Path.home() / "Library/Application Support/DubbingStudio/models/whisperkit",
         Path.home() / "Library/Application Support/MacWhisper/models/whisperkit/models",
         Path.home() / ".cache/huggingface/hub",
     )
@@ -40,7 +41,7 @@ def discover_whisperkit_models() -> tuple[Path, ...]:
     return tuple(sorted(set(candidates)))
 
 
-def _backend(args: argparse.Namespace):
+def build_backend(args: argparse.Namespace):
     if args.backend == "mlx":
         options = {"model": args.model or "mlx-community/whisper-large-v3-turbo"}
         if args.mlx_temperature is not None:
@@ -172,7 +173,7 @@ def main() -> None:
         print(json.dumps(document, indent=2, sort_keys=True))
         return
 
-    backend = _backend(args)
+    backend = build_backend(args)
     coordinator = AdaptiveLongFormCoordinator(
         backend,
         output,

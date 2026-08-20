@@ -46,6 +46,34 @@ dubbing-evaluate-transcript \
   --output /tmp/lesson-evaluation.json
 ```
 
+## Historical English/Russian canary
+
+The real lesson canary is separate from the synthetic multilingual benchmark. It binds four
+original videos and their provisional MacWhisper transcripts by SHA-256. Lesson 6 is the only
+development recording, lessons 7 and 9 are untouched holdouts, and lesson 8 is the long-duration
+stress recording. The execution configuration is frozen before a holdout can run.
+
+Run the development recording first from the original video:
+
+```bash
+dubbing-canary \
+  --manifest benchmarks/fixtures/lessons-en-ru-canary-v1/manifest.json \
+  --output output/canary-lessons-en-ru-v1 \
+  --lesson lesson-06 \
+  --backend whisperkit \
+  --start-server
+```
+
+After the development configuration is frozen, run a holdout with the same output directory and
+backend arguments. The command owns chunking, starts one persistent local model process, reuses
+source-bound checkpoints, evaluates pathology and provisional-reference drift, and always records
+`giga_admission_allowed=false`.
+
+An operational canary pass is deliberately narrower than an accuracy claim. The historical text
+has no trusted timestamps or speaker labels and is not human ground truth, so it cannot certify
+window-level WER, DER, JER or speaker-attributed WER. `PASS_WITH_UNCERTAIN_SPANS` also fails the
+canary: unresolved text is useful evidence but is not ready output.
+
 Exit code `2` means the candidate was structurally readable but failed semantic quality.
 The evaluator computes exact Unicode token WER and character error rate. True per-window and
 per-language WER require timestamped, language-labelled reference turns; the current
