@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +16,7 @@ from dubbing.transcription import (
     TranscriptionOptions,
     TranscriptionResult,
 )
+from dubbing.transcription.job import create_source_binding, verify_source_binding
 
 
 class _Backend(TranscriptionBackend):
@@ -40,6 +43,60 @@ class _Backend(TranscriptionBackend):
 
 def _fake_extract(source: Path, start_ms: int, end_ms: int, output: Path):
     output.write_bytes(f"{start_ms}:{end_ms}".encode())
+
+
+def test_source_binding_hashes_one_stable_regular_file_descriptor(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"stable source")
+
+    binding = create_source_binding(source)
+
+    assert binding.path == source.resolve()
+    assert binding.sha256 == hashlib.sha256(b"stable source").hexdigest()
+    assert binding.stat.size_bytes == len(b"stable source")
+    assert verify_source_binding(binding) == binding
+
+
+@pytest.mark.parametrize("kind", ["symlink", "directory"])
+def test_source_binding_rejects_nonregular_or_symlink_input(tmp_path, kind):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    candidate = tmp_path / "candidate"
+    if kind == "symlink":
+        candidate.symlink_to(source)
+    else:
+        candidate.mkdir()
+
+    with pytest.raises(TranscriptionError, match="symbolic link|regular file"):
+        create_source_binding(candidate)
+
+
+def test_source_binding_rejects_mutation_during_hash(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"a" * (1024 * 1024 + 1))
+    real_read = os.read
+    mutated = False
+
+    def mutating_read(descriptor, size):
+        nonlocal mutated
+        block = real_read(descriptor, size)
+        if block and not mutated:
+            mutated = True
+            with source.open("ab") as destination:
+                destination.write(b"changed")
+        return block
+
+    with patch("dubbing.transcription.job.os.read", side_effect=mutating_read):
+        with pytest.raises(TranscriptionError, match="changed while its digest"):
+            create_source_binding(source)
+
+
+def test_source_binding_rejects_wrong_expected_digest(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+
+    with pytest.raises(TranscriptionError, match="does not match expected"):
+        create_source_binding(source, expected_sha256="0" * 64)
 
 
 def test_job_checkpoints_chunks_and_resumes_without_backend_calls(tmp_path):

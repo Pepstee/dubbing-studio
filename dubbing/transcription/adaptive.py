@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import wave
 from array import array
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -17,7 +18,13 @@ from dubbing.evaluation.metrics import token_agreement, word_tokens
 from dubbing.media import ffmpeg_executable
 from dubbing.transcription.audio_candidates import build_audio_candidates
 from dubbing.transcription.base import TranscriptionBackend
-from dubbing.transcription.job import source_sha256
+from dubbing.transcription.job import (
+    SourceBinding,
+    create_source_binding,
+    source_sha256,
+    validate_source_binding,
+    verify_source_binding,
+)
 from dubbing.transcription.language import annotate_transcript_languages, script_evidence
 from dubbing.transcription.models import (
     TranscriptSegment,
@@ -52,13 +59,14 @@ _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
 _UNCERTAIN_TURN_SILENCE_POLICY = (
     "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
 )
-_COORDINATOR_VERSION = "adaptive-long-form-v19"
+_COORDINATOR_VERSION = "adaptive-long-form-v20"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _NEAR_SILENCE_ADMISSION_POLICY = (
     "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
 )
 _AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
+_SOURCE_INTEGRITY_POLICY = "trusted-binding-plus-concurrent-full-rehash-v1"
 
 
 class _UnsetSpeechRegionDetector:
@@ -506,6 +514,91 @@ def _atomic_json(path: Path, document: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _stage_json(path: Path, document: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".stage",
+        dir=path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n"
+            )
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return temporary
+
+
+def _backup_file(path: Path) -> Path:
+    descriptor, backup_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".backup",
+        dir=path.parent,
+    )
+    os.close(descriptor)
+    backup = Path(backup_name)
+    try:
+        shutil.copyfile(path, backup)
+    except BaseException:
+        backup.unlink(missing_ok=True)
+        raise
+    return backup
+
+
+def _publish_json_pair(
+    first_path: Path,
+    first_document: dict,
+    second_path: Path,
+    second_document: dict,
+) -> None:
+    """Publish two canonical JSON files or restore their exact prior bytes."""
+
+    staged: list[Path] = []
+    backups: list[Path | None] = [None, None]
+    targets = (first_path, second_path)
+    existed = tuple(path.is_file() for path in targets)
+    try:
+        staged.append(_stage_json(first_path, first_document))
+        staged.append(_stage_json(second_path, second_document))
+        for index, (path, was_present) in enumerate(zip(targets, existed, strict=True)):
+            if was_present:
+                backups[index] = _backup_file(path)
+        try:
+            os.replace(staged[0], first_path)
+            os.replace(staged[1], second_path)
+        except BaseException as publication_error:
+            rollback_errors: list[BaseException] = []
+            for index, (path, was_present) in enumerate(
+                zip(targets, existed, strict=True)
+            ):
+                try:
+                    backup = backups[index]
+                    if was_present and backup is not None:
+                        os.replace(backup, path)
+                        backups[index] = None
+                    elif not was_present:
+                        path.unlink(missing_ok=True)
+                except BaseException as rollback_error:
+                    rollback_errors.append(rollback_error)
+            if rollback_errors:
+                raise TranscriptionError(
+                    "final artifact pair publication and rollback both failed"
+                ) from publication_error
+            raise TranscriptionError(
+                "final artifact pair publication failed; previous generation restored"
+            ) from publication_error
+    finally:
+        for path in (*staged, *(item for item in backups if item is not None)):
+            path.unlink(missing_ok=True)
+
+
 def _document_sha256(document: dict) -> str:
     payload = json.dumps(
         document,
@@ -691,7 +784,7 @@ class AdaptiveLongFormCoordinator:
     def _manifest(
         self,
         source: Path,
-        digest: str,
+        source_binding: SourceBinding,
         probe: MediaProbe,
         chunks: tuple[AdaptiveChunk, ...],
         processing_end_ms: int | None = None,
@@ -703,7 +796,13 @@ class AdaptiveLongFormCoordinator:
             "coordinator_version": _COORDINATOR_VERSION,
             "quality_policy_version": QUALITY_POLICY_VERSION,
             "source_name": source.name,
-            "source_sha256": digest,
+            "source_sha256": source_binding.sha256,
+            "source_integrity": {
+                "policy": _SOURCE_INTEGRITY_POLICY,
+                "initial_stat": source_binding.stat.to_dict(),
+                "concurrent_full_source_rehash_required": True,
+                "final_stat_recheck_required": True,
+            },
             "probe": probe.to_dict(),
             "processing_scope": {
                 "start_ms": 0,
@@ -781,6 +880,56 @@ class AdaptiveLongFormCoordinator:
         if self.language_retry_policy:
             manifest["language_retry_policy"] = self.language_retry_policy
         return manifest
+
+    def _record_source_integrity_failure(
+        self,
+        binding: SourceBinding,
+        error: Exception,
+    ) -> None:
+        _atomic_json(
+            self.checkpoint_dir / "progress.json",
+            {
+                "schema_version": "dubbing.adaptive-transcription-progress.v1",
+                "status": "INTEGRITY_FAILED",
+                "source_sha256": binding.sha256,
+                "source_integrity_policy": _SOURCE_INTEGRITY_POLICY,
+                "error": str(error),
+            },
+        )
+
+    def _record_processing_failure(self, error: BaseException) -> None:
+        path = self.checkpoint_dir / "progress.json"
+        progress: dict = {
+            "schema_version": "dubbing.adaptive-transcription-progress.v1",
+        }
+        if path.is_file():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(existing, dict):
+                    progress.update(existing)
+            except (OSError, json.JSONDecodeError):
+                pass
+        progress.update({"status": "FAILED", "error": str(error)})
+        _atomic_json(path, progress)
+
+    def _complete_source_verification(
+        self,
+        source: Path,
+        binding: SourceBinding,
+        verifier: Future[SourceBinding],
+        executor: ThreadPoolExecutor,
+    ) -> SourceBinding:
+        try:
+            verified = verifier.result()
+            validate_source_binding(source, binding)
+        except Exception as exc:
+            self._record_source_integrity_failure(binding, exc)
+            raise TranscriptionError(
+                "source integrity verification failed; final artifacts were not published"
+            ) from exc
+        finally:
+            executor.shutdown(wait=True)
+        return verified
 
     def _admit_manifest(self, expected: dict) -> None:
         path = self.checkpoint_dir / "manifest.json"
@@ -2115,15 +2264,23 @@ class AdaptiveLongFormCoordinator:
         options: TranscriptionOptions | None = None,
         *,
         source_digest: str | None = None,
+        source_binding: SourceBinding | None = None,
         processing_end_ms: int | None = None,
     ) -> tuple[TranscriptionResult, dict]:
-        source = Path(media).resolve()
-        if not source.is_file():
-            raise TranscriptionError(f"media input not found: {source}")
+        if source_digest is not None and source_binding is not None:
+            raise TranscriptionError(
+                "source_digest and source_binding are mutually exclusive"
+            )
+        if source_binding is None:
+            source_binding = create_source_binding(
+                media,
+                expected_sha256=source_digest,
+            )
+        else:
+            validate_source_binding(media, source_binding)
+        source = source_binding.path
         options = options or TranscriptionOptions()
-        digest = source_digest or source_sha256(source)
-        if not re.fullmatch(r"[a-f0-9]{64}", digest):
-            raise TranscriptionError("source_digest must be a lowercase SHA-256 digest")
+        digest = source_binding.sha256
         probe = probe_media(source)
         if processing_end_ms is None:
             effective_duration_ms = probe.duration_ms
@@ -2157,99 +2314,79 @@ class AdaptiveLongFormCoordinator:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         expected_manifest = self._manifest(
             source,
-            digest,
+            source_binding,
             probe,
             chunks,
             effective_duration_ms,
         )
         self._admit_manifest(expected_manifest)
-        manifest_sha256 = _document_sha256(expected_manifest)
-        streams = probe.audio_streams
-        completed: list[tuple[AdaptiveChunk, TranscriptionResult]] = []
-        for chunk in chunks:
-            checkpoint = self.checkpoint_dir / "chunks" / f"{chunk.index:06d}.json"
-            receipt_path = self.checkpoint_dir / "receipts" / f"{chunk.index:06d}.json"
-            checkpoint_exists = checkpoint.is_file()
-            receipt_exists = receipt_path.is_file()
-            if checkpoint_exists != receipt_exists:
-                raise TranscriptionError(
-                    f"adaptive chunk checkpoint pair is incomplete: {chunk.index:06d}"
-                )
-            if checkpoint_exists:
-                try:
-                    checkpoint_document = json.loads(checkpoint.read_text(encoding="utf-8"))
-                    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-                    result = transcription_result_from_dict(checkpoint_document)
-                except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        verification_executor: ThreadPoolExecutor | None = None
+        try:
+            verification_executor = ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="dubbing-source-integrity",
+            )
+            verification_future = verification_executor.submit(
+                verify_source_binding,
+                source_binding,
+            )
+        except Exception as exc:
+            if verification_executor is not None:
+                verification_executor.shutdown(wait=True)
+            self._record_source_integrity_failure(source_binding, exc)
+            raise TranscriptionError(
+                "source integrity verifier could not be started"
+            ) from exc
+        assert verification_executor is not None
+        processing_error: BaseException | None = None
+        try:
+            manifest_sha256 = _document_sha256(expected_manifest)
+            streams = probe.audio_streams
+            completed: list[tuple[AdaptiveChunk, TranscriptionResult]] = []
+            for chunk in chunks:
+                checkpoint = self.checkpoint_dir / "chunks" / f"{chunk.index:06d}.json"
+                receipt_path = self.checkpoint_dir / "receipts" / f"{chunk.index:06d}.json"
+                checkpoint_exists = checkpoint.is_file()
+                receipt_exists = receipt_path.is_file()
+                if checkpoint_exists != receipt_exists:
                     raise TranscriptionError(
-                        f"malformed adaptive chunk checkpoint pair: {checkpoint.name}"
-                    ) from exc
-                expected_bindings = {
-                    "schema_version": _CHUNK_RECEIPT_SCHEMA,
-                    "coordinator_version": _COORDINATOR_VERSION,
-                    "quality_policy_version": QUALITY_POLICY_VERSION,
-                    "full_source_sha256": digest,
-                    "manifest_sha256": manifest_sha256,
-                    "chunk": chunk.to_dict(),
-                }
-                for name, expected_value in expected_bindings.items():
-                    if receipt.get(name) != expected_value:
+                        f"adaptive chunk checkpoint pair is incomplete: {chunk.index:06d}"
+                    )
+                if checkpoint_exists:
+                    try:
+                        checkpoint_document = json.loads(checkpoint.read_text(encoding="utf-8"))
+                        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                        result = transcription_result_from_dict(checkpoint_document)
+                    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
                         raise TranscriptionError(
-                            f"adaptive chunk receipt binding mismatch: {chunk.index:06d}:{name}"
-                        )
-                if receipt.get("checkpoint_document_sha256") != _document_sha256(
-                    checkpoint_document
-                ):
-                    raise TranscriptionError(
-                        f"adaptive chunk checkpoint document hash mismatch: {chunk.index:06d}"
-                    )
-                extracted_audio_sha256 = receipt.get("extracted_audio_sha256")
-                if not isinstance(extracted_audio_sha256, str) or not re.fullmatch(
-                    r"[a-f0-9]{64}", extracted_audio_sha256
-                ):
-                    raise TranscriptionError(
-                        f"adaptive chunk extracted audio hash is malformed: {chunk.index:06d}"
-                    )
-                if (
-                    result.source_sha256 is not None
-                    and result.source_sha256 != extracted_audio_sha256
-                ):
-                    raise TranscriptionError(
-                        f"adaptive chunk backend source hash mismatch: {chunk.index:06d}"
-                    )
-                with tempfile.TemporaryDirectory(
-                    prefix="dubbing-adaptive-replay-"
-                ) as directory:
-                    replay_audio = Path(directory) / f"{chunk.index:06d}.wav"
-                    self._extract(source, streams, chunk, replay_audio)
-                    if source_sha256(replay_audio) != extracted_audio_sha256:
+                            f"malformed adaptive chunk checkpoint pair: {checkpoint.name}"
+                        ) from exc
+                    expected_bindings = {
+                        "schema_version": _CHUNK_RECEIPT_SCHEMA,
+                        "coordinator_version": _COORDINATOR_VERSION,
+                        "quality_policy_version": QUALITY_POLICY_VERSION,
+                        "full_source_sha256": digest,
+                        "manifest_sha256": manifest_sha256,
+                        "chunk": chunk.to_dict(),
+                    }
+                    for name, expected_value in expected_bindings.items():
+                        if receipt.get(name) != expected_value:
+                            raise TranscriptionError(
+                                f"adaptive chunk receipt binding mismatch: {chunk.index:06d}:{name}"
+                            )
+                    if receipt.get("checkpoint_document_sha256") != _document_sha256(
+                        checkpoint_document
+                    ):
                         raise TranscriptionError(
-                            f"adaptive chunk extracted audio hash mismatch: {chunk.index:06d}"
+                            f"adaptive chunk checkpoint document hash mismatch: {chunk.index:06d}"
                         )
-            else:
-                result = None
-            if result is None:
-                with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
-                    audio = Path(directory) / f"{chunk.index:06d}.wav"
-                    self._extract(source, streams, chunk, audio)
-                    extracted_audio_sha256 = source_sha256(audio)
-                    energy_silence_coverage_ms = _interval_coverage_ms(
-                        chunk.extract_start_ms,
-                        chunk.extract_end_ms,
-                        silence_intervals,
-                    )
-                    energy_silence_intervals = _clipped_relative_intervals_ms(
-                        chunk.extract_start_ms,
-                        chunk.extract_end_ms,
-                        silence_intervals,
-                    )
-                    result, receipt = self._decode_chunk(
-                        audio,
-                        chunk,
-                        options,
-                        energy_silence_coverage_ms=energy_silence_coverage_ms,
-                        energy_silence_intervals=energy_silence_intervals,
-                    )
+                    extracted_audio_sha256 = receipt.get("extracted_audio_sha256")
+                    if not isinstance(extracted_audio_sha256, str) or not re.fullmatch(
+                        r"[a-f0-9]{64}", extracted_audio_sha256
+                    ):
+                        raise TranscriptionError(
+                            f"adaptive chunk extracted audio hash is malformed: {chunk.index:06d}"
+                        )
                     if (
                         result.source_sha256 is not None
                         and result.source_sha256 != extracted_audio_sha256
@@ -2257,66 +2394,149 @@ class AdaptiveLongFormCoordinator:
                         raise TranscriptionError(
                             f"adaptive chunk backend source hash mismatch: {chunk.index:06d}"
                         )
-                checkpoint_document = result.to_dict()
-                receipt = dict(receipt)
-                receipt.update(
+                    with tempfile.TemporaryDirectory(
+                        prefix="dubbing-adaptive-replay-"
+                    ) as directory:
+                        replay_audio = Path(directory) / f"{chunk.index:06d}.wav"
+                        self._extract(source, streams, chunk, replay_audio)
+                        if source_sha256(replay_audio) != extracted_audio_sha256:
+                            raise TranscriptionError(
+                                f"adaptive chunk extracted audio hash mismatch: {chunk.index:06d}"
+                            )
+                else:
+                    result = None
+                if result is None:
+                    with tempfile.TemporaryDirectory(prefix="dubbing-adaptive-") as directory:
+                        audio = Path(directory) / f"{chunk.index:06d}.wav"
+                        self._extract(source, streams, chunk, audio)
+                        extracted_audio_sha256 = source_sha256(audio)
+                        energy_silence_coverage_ms = _interval_coverage_ms(
+                            chunk.extract_start_ms,
+                            chunk.extract_end_ms,
+                            silence_intervals,
+                        )
+                        energy_silence_intervals = _clipped_relative_intervals_ms(
+                            chunk.extract_start_ms,
+                            chunk.extract_end_ms,
+                            silence_intervals,
+                        )
+                        result, receipt = self._decode_chunk(
+                            audio,
+                            chunk,
+                            options,
+                            energy_silence_coverage_ms=energy_silence_coverage_ms,
+                            energy_silence_intervals=energy_silence_intervals,
+                        )
+                        if (
+                            result.source_sha256 is not None
+                            and result.source_sha256 != extracted_audio_sha256
+                        ):
+                            raise TranscriptionError(
+                                f"adaptive chunk backend source hash mismatch: {chunk.index:06d}"
+                            )
+                    checkpoint_document = result.to_dict()
+                    receipt = dict(receipt)
+                    receipt.update(
+                        {
+                            "schema_version": _CHUNK_RECEIPT_SCHEMA,
+                            "coordinator_version": _COORDINATOR_VERSION,
+                            "quality_policy_version": QUALITY_POLICY_VERSION,
+                            "full_source_sha256": digest,
+                            "manifest_sha256": manifest_sha256,
+                            "chunk": chunk.to_dict(),
+                            "extracted_audio_sha256": extracted_audio_sha256,
+                            "checkpoint_document_sha256": _document_sha256(
+                                checkpoint_document
+                            ),
+                        }
+                    )
+                    _atomic_json(checkpoint, checkpoint_document)
+                    _atomic_json(receipt_path, receipt)
+                completed.append((chunk, result))
+                _atomic_json(
+                    self.checkpoint_dir / "progress.json",
                     {
-                        "schema_version": _CHUNK_RECEIPT_SCHEMA,
-                        "coordinator_version": _COORDINATOR_VERSION,
-                        "quality_policy_version": QUALITY_POLICY_VERSION,
-                        "full_source_sha256": digest,
-                        "manifest_sha256": manifest_sha256,
-                        "chunk": chunk.to_dict(),
-                        "extracted_audio_sha256": extracted_audio_sha256,
-                        "checkpoint_document_sha256": _document_sha256(
-                            checkpoint_document
-                        ),
-                    }
+                        "schema_version": "dubbing.adaptive-transcription-progress.v1",
+                        "status": "RUNNING",
+                        "completed_chunks": chunk.index + 1,
+                        "total_chunks": len(chunks),
+                        "completed_through_ms": chunk.end_ms,
+                    },
                 )
-                _atomic_json(checkpoint, checkpoint_document)
-                _atomic_json(receipt_path, receipt)
-            completed.append((chunk, result))
+            segments = reconcile_chunks(completed)
+            result = TranscriptionResult(
+                segments=segments,
+                text=" ".join(item.text for item in segments),
+                backend=self.backend.identity.split(":", 1)[0],
+                model=self.backend.identity,
+                device="adaptive-local",
+                language=options.language,
+                duration_ms=effective_duration_ms,
+                confidence_available=any(item.confidence is not None for item in segments),
+                source_sha256=digest,
+                provenance={
+                    "coordinator": _COORDINATOR_VERSION,
+                    "chunk_count": len(chunks),
+                    "processing_scope": {
+                        "start_ms": 0,
+                        "end_ms": effective_duration_ms,
+                        "processed_duration_ms": effective_duration_ms,
+                        "full_source_duration_ms": probe.duration_ms,
+                        "full_source_sha256_bound": True,
+                    },
+                    "audio_streams": [stream.to_dict() for stream in streams],
+                    "channel_preservation": "all-streams-merged-with-discrete-channels-v1",
+                },
+            )
+            quality = evaluate_transcript_quality(result, expected_duration_ms=effective_duration_ms)
+            if any(issue.code == "large_unexplained_gaps" for issue in quality.issues):
+                quality = evaluate_transcript_quality(
+                    result,
+                    expected_duration_ms=effective_duration_ms,
+                    known_silence_intervals=silence_intervals,
+                )
+        except BaseException as exc:
+            processing_error = exc
+        verified_binding = self._complete_source_verification(
+            source,
+            source_binding,
+            verification_future,
+            verification_executor,
+        )
+        if processing_error is not None:
+            self._record_processing_failure(processing_error)
+            raise processing_error.with_traceback(processing_error.__traceback__)
+        integrity_evidence = {
+            "policy": _SOURCE_INTEGRITY_POLICY,
+            "source_sha256": source_binding.sha256,
+            "initial_stat": source_binding.stat.to_dict(),
+            "verified_stat": verified_binding.stat.to_dict(),
+            "concurrent_full_source_rehash_passed": True,
+            "final_stat_recheck_passed": True,
+        }
+        provenance = dict(result.provenance or {})
+        provenance["source_integrity"] = integrity_evidence
+        result = replace(result, provenance=provenance)
+        try:
+            _publish_json_pair(
+                self.checkpoint_dir / "result.json",
+                result.to_dict(),
+                self.checkpoint_dir / "quality-report.json",
+                quality.to_dict(),
+            )
             _atomic_json(
                 self.checkpoint_dir / "progress.json",
                 {
                     "schema_version": "dubbing.adaptive-transcription-progress.v1",
-                    "completed_chunks": chunk.index + 1,
+                    "status": "COMPLETE",
+                    "completed_chunks": len(chunks),
                     "total_chunks": len(chunks),
-                    "completed_through_ms": chunk.end_ms,
+                    "completed_through_ms": effective_duration_ms,
+                    "source_sha256": source_binding.sha256,
+                    "source_integrity_policy": _SOURCE_INTEGRITY_POLICY,
                 },
             )
-        segments = reconcile_chunks(completed)
-        result = TranscriptionResult(
-            segments=segments,
-            text=" ".join(item.text for item in segments),
-            backend=self.backend.identity.split(":", 1)[0],
-            model=self.backend.identity,
-            device="adaptive-local",
-            language=options.language,
-            duration_ms=effective_duration_ms,
-            confidence_available=any(item.confidence is not None for item in segments),
-            source_sha256=digest,
-            provenance={
-                "coordinator": _COORDINATOR_VERSION,
-                "chunk_count": len(chunks),
-                "processing_scope": {
-                    "start_ms": 0,
-                    "end_ms": effective_duration_ms,
-                    "processed_duration_ms": effective_duration_ms,
-                    "full_source_duration_ms": probe.duration_ms,
-                    "full_source_sha256_bound": True,
-                },
-                "audio_streams": [stream.to_dict() for stream in streams],
-                "channel_preservation": "all-streams-merged-with-discrete-channels-v1",
-            },
-        )
-        quality = evaluate_transcript_quality(result, expected_duration_ms=effective_duration_ms)
-        if any(issue.code == "large_unexplained_gaps" for issue in quality.issues):
-            quality = evaluate_transcript_quality(
-                result,
-                expected_duration_ms=effective_duration_ms,
-                known_silence_intervals=silence_intervals,
-            )
-        _atomic_json(self.checkpoint_dir / "result.json", result.to_dict())
-        _atomic_json(self.checkpoint_dir / "quality-report.json", quality.to_dict())
+        except BaseException as exc:
+            self._record_processing_failure(exc)
+            raise
         return result, quality.to_dict()

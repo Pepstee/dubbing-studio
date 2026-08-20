@@ -5,11 +5,13 @@ import wave
 from array import array
 from dataclasses import replace
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+import dubbing.transcription.adaptive as adaptive_module
 from dubbing.transcription.adaptive import (
     AdaptiveChunk,
     AdaptiveChunkPlanner,
@@ -30,6 +32,7 @@ from dubbing.transcription.models import (
     TranscriptionOptions,
     TranscriptionResult,
 )
+from dubbing.transcription.job import create_source_binding
 from dubbing.transcription.speech_regions import SpeechRegion, SpeechRegionPlan
 
 
@@ -805,7 +808,7 @@ def test_nondefault_silence_policy_is_checkpoint_bound(tmp_path):
     probe = MediaProbe(10_000, 6, (AudioStream(0, "pcm", 1, 16_000),))
     chunks = (AdaptiveChunk(0, 0, 10_000, 0, 10_000, "end-of-media"),)
 
-    manifest = coordinator._manifest(source, "0" * 64, probe, chunks)
+    manifest = coordinator._manifest(source, create_source_binding(source), probe, chunks)
 
     assert manifest["silence_detection"]["minimum_silence_seconds"] == 0.5
 
@@ -819,7 +822,7 @@ def test_language_retry_policy_is_checkpoint_bound(tmp_path):
     probe = MediaProbe(10_000, 6, (AudioStream(0, "pcm", 1, 16_000),))
     chunks = (AdaptiveChunk(0, 0, 10_000, 0, 10_000, "end-of-media"),)
 
-    manifest = coordinator._manifest(source, "0" * 64, probe, chunks)
+    manifest = coordinator._manifest(source, create_source_binding(source), probe, chunks)
 
     assert manifest["language_retry_policy"] == {"ko": "always"}
 
@@ -871,7 +874,7 @@ def test_legacy_checkpoint_manifest_fails_closed(tmp_path):
     source.write_bytes(b"source")
     probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
     chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
-    expected = coordinator._manifest(source, "0" * 64, probe, chunks)
+    expected = coordinator._manifest(source, create_source_binding(source), probe, chunks)
     existing = dict(expected)
     existing["coordinator_version"] = "adaptive-long-form-v3"
     existing.pop("targeted_retry")
@@ -896,7 +899,8 @@ def test_detector_role_change_invalidates_adaptive_checkpoint_manifest(tmp_path)
         tmp_path / "job",
         speech_region_detector=detector,
     )
-    both_roles._admit_manifest(both_roles._manifest(source, "0" * 64, probe, chunks))
+    binding = create_source_binding(source)
+    both_roles._admit_manifest(both_roles._manifest(source, binding, probe, chunks))
     silence_only = AdaptiveLongFormCoordinator(
         _RetryingBackend(),
         tmp_path / "job",
@@ -908,7 +912,7 @@ def test_detector_role_change_invalidates_adaptive_checkpoint_manifest(tmp_path)
         TranscriptionError,
         match="adaptive checkpoint does not match source or configuration",
     ):
-        silence_only._admit_manifest(silence_only._manifest(source, "0" * 64, probe, chunks))
+        silence_only._admit_manifest(silence_only._manifest(source, binding, probe, chunks))
 
 
 def test_near_silence_policy_change_invalidates_adaptive_checkpoint_manifest(tmp_path):
@@ -917,7 +921,7 @@ def test_near_silence_policy_change_invalidates_adaptive_checkpoint_manifest(tmp
     source.write_bytes(b"source")
     probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
     chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
-    expected = coordinator._manifest(source, "0" * 64, probe, chunks)
+    expected = coordinator._manifest(source, create_source_binding(source), probe, chunks)
     existing = json.loads(json.dumps(expected))
     existing["silence_admission"]["near_silence_after_empty_asr"][
         "maximum_uncovered_gap_ms"
@@ -2142,6 +2146,14 @@ def test_processing_cap_binds_full_source_and_limits_plan_result_and_replay(tmp_
     assert manifest["probe"]["duration_ms"] == 10_000
     assert manifest["processing_scope"]["end_ms"] == 6_000
     assert manifest["chunks"][0]["extract_end_ms"] == 6_000
+    assert manifest["source_integrity"]["policy"] == (
+        "trusted-binding-plus-concurrent-full-rehash-v1"
+    )
+    assert result.provenance["source_integrity"]["source_sha256"] == (
+        result.source_sha256
+    )
+    progress = json.loads((tmp_path / "job/progress.json").read_text())
+    assert progress["status"] == "COMPLETE"
 
 
 def test_processing_cap_change_or_full_source_change_rejects_checkpoint(tmp_path):
@@ -2175,6 +2187,313 @@ def test_processing_cap_change_or_full_source_change_rejects_checkpoint(tmp_path
         source.write_bytes(b"changed full source tail")
         with pytest.raises(TranscriptionError, match="does not match"):
             coordinator.run(source, processing_end_ms=6_000)
+
+
+def test_wrong_legacy_source_digest_fails_before_probe_or_backend(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    with patch("dubbing.transcription.adaptive.probe_media") as probe:
+        with pytest.raises(TranscriptionError, match="does not match expected"):
+            coordinator.run(source, source_digest="0" * 64)
+
+    probe.assert_not_called()
+    assert backend.calls == 0
+
+
+def test_source_digest_and_binding_are_mutually_exclusive(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    binding = create_source_binding(source)
+    coordinator = AdaptiveLongFormCoordinator(_IndependentBackend(), tmp_path / "job")
+
+    with pytest.raises(TranscriptionError, match="mutually exclusive"):
+        coordinator.run(
+            source,
+            source_digest=binding.sha256,
+            source_binding=binding,
+        )
+
+
+def test_source_binding_rejects_changed_stat_before_probe(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    binding = create_source_binding(source)
+    source.write_bytes(b"changed")
+    coordinator = AdaptiveLongFormCoordinator(_IndependentBackend(), tmp_path / "job")
+
+    with patch("dubbing.transcription.adaptive.probe_media") as probe:
+        with pytest.raises(TranscriptionError, match="stat identity"):
+            coordinator.run(source, source_binding=binding)
+
+    probe.assert_not_called()
+
+
+def test_concurrent_source_verifier_overlaps_decode_and_is_awaited(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    verifier_started = Event()
+    decode_released_verifier = Event()
+
+    class _BarrierBackend(_IndependentBackend):
+        def transcribe(self, audio, options=None):
+            assert verifier_started.wait(2)
+            decode_released_verifier.set()
+            return super().transcribe(audio, options)
+
+    backend = _BarrierBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, tmp_path / "job")
+
+    def verify(binding):
+        verifier_started.set()
+        assert decode_released_verifier.wait(2)
+        return binding
+
+    with patch("dubbing.transcription.adaptive.verify_source_binding", side_effect=verify):
+        result, _ = _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    assert backend.calls == 1
+    assert result.provenance["source_integrity"][
+        "concurrent_full_source_rehash_passed"
+    ]
+
+
+def test_tail_mutation_fails_closed_but_preserves_chunks_and_prior_final(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source including unprocessed tail")
+
+    class _MutatingBackend(_IndependentBackend):
+        def transcribe(self, audio, options=None):
+            result = super().transcribe(audio, options)
+            source.write_bytes(b"source with a mutated unprocessed tail")
+            return result
+
+    job = tmp_path / "job"
+    job.mkdir()
+    prior_result = b'{"prior":"valid"}'
+    prior_quality = b'{"prior":"valid-quality"}'
+    (job / "result.json").write_bytes(prior_result)
+    (job / "quality-report.json").write_bytes(prior_quality)
+    coordinator = AdaptiveLongFormCoordinator(_MutatingBackend(), job)
+
+    with pytest.raises(TranscriptionError, match="source integrity verification failed"):
+        with (
+            patch(
+                "dubbing.transcription.adaptive.probe_media",
+                return_value=MediaProbe(
+                    2_000,
+                    source.stat().st_size,
+                    (AudioStream(0, "pcm", 1, 16_000),),
+                ),
+            ),
+            patch(
+                "dubbing.transcription.adaptive.detect_silence_intervals",
+                return_value=(),
+            ),
+            patch.object(
+                coordinator,
+                "_extract",
+                side_effect=lambda source, streams, chunk, output: output.write_bytes(
+                    b"processed prefix"
+                ),
+            ),
+        ):
+            coordinator.run(source, processing_end_ms=1_000)
+
+    assert (job / "chunks/000000.json").is_file()
+    assert (job / "receipts/000000.json").is_file()
+    assert (job / "result.json").read_bytes() == prior_result
+    assert (job / "quality-report.json").read_bytes() == prior_quality
+    progress = json.loads((job / "progress.json").read_text())
+    assert progress["status"] == "INTEGRITY_FAILED"
+
+
+def test_source_mutation_never_publishes_fresh_final_artifacts(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+
+    class _MutatingBackend(_IndependentBackend):
+        def transcribe(self, audio, options=None):
+            result = super().transcribe(audio, options)
+            source.write_bytes(b"mutated")
+            return result
+
+    coordinator = AdaptiveLongFormCoordinator(_MutatingBackend(), tmp_path / "job")
+    with pytest.raises(TranscriptionError, match="source integrity verification failed"):
+        _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    assert not (tmp_path / "job/result.json").exists()
+    assert not (tmp_path / "job/quality-report.json").exists()
+    assert json.loads((tmp_path / "job/progress.json").read_text())["status"] == (
+        "INTEGRITY_FAILED"
+    )
+
+
+def test_decode_failure_awaits_verifier_and_writes_terminal_failed_progress(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    verifier_started = Event()
+    verifier_release = Event()
+    verifier_completed = Event()
+
+    class _FailingBackend(_IndependentBackend):
+        def transcribe(self, audio, options=None):
+            assert verifier_started.wait(2)
+            verifier_release.set()
+            raise RuntimeError("decoder failed")
+
+    def verify(binding):
+        verifier_started.set()
+        assert verifier_release.wait(2)
+        verifier_completed.set()
+        return binding
+
+    coordinator = AdaptiveLongFormCoordinator(_FailingBackend(), tmp_path / "job")
+    with (
+        patch("dubbing.transcription.adaptive.verify_source_binding", side_effect=verify),
+        pytest.raises(RuntimeError, match="decoder failed"),
+    ):
+        _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    assert verifier_completed.is_set()
+    progress = json.loads((tmp_path / "job/progress.json").read_text())
+    assert progress["status"] == "FAILED"
+    assert not (tmp_path / "job/result.json").exists()
+
+
+def test_verifier_start_failure_is_terminal_integrity_failure(tmp_path):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    coordinator = AdaptiveLongFormCoordinator(_IndependentBackend(), tmp_path / "job")
+
+    with (
+        patch(
+            "dubbing.transcription.adaptive.ThreadPoolExecutor",
+            side_effect=RuntimeError("thread unavailable"),
+        ),
+        pytest.raises(TranscriptionError, match="could not be started"),
+    ):
+        _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    progress = json.loads((tmp_path / "job/progress.json").read_text())
+    assert progress["status"] == "INTEGRITY_FAILED"
+    assert not (tmp_path / "job/result.json").exists()
+
+
+def _fail_one_final_stage_replace(target_name):
+    original_replace = adaptive_module.os.replace
+    failed = False
+
+    def replace(source, destination):
+        nonlocal failed
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            not failed
+            and source_path.suffix == ".stage"
+            and destination_path.name == target_name
+        ):
+            failed = True
+            raise OSError(f"injected {target_name} replacement failure")
+        return original_replace(source, destination)
+
+    return replace
+
+
+@pytest.mark.parametrize("failed_target", ["result.json", "quality-report.json"])
+def test_final_pair_failure_restores_both_previous_artifacts(tmp_path, failed_target):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    job = tmp_path / "job"
+    backend = _IndependentBackend(duration_ms=1_000)
+    coordinator = AdaptiveLongFormCoordinator(backend, job)
+    _run_checkpoint_fixture(
+        coordinator,
+        source,
+        1_000,
+        lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+    )
+    previous_result = b'{"generation":"previous-result"}\n'
+    previous_quality = b'{"generation":"previous-quality"}\n'
+    (job / "result.json").write_bytes(previous_result)
+    (job / "quality-report.json").write_bytes(previous_quality)
+
+    with (
+        patch(
+            "dubbing.transcription.adaptive.os.replace",
+            side_effect=_fail_one_final_stage_replace(failed_target),
+        ),
+        pytest.raises(TranscriptionError, match="previous generation restored"),
+    ):
+        _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    assert backend.calls == 1
+    assert (job / "result.json").read_bytes() == previous_result
+    assert (job / "quality-report.json").read_bytes() == previous_quality
+    assert json.loads((job / "progress.json").read_text())["status"] == "FAILED"
+    assert not list(job.glob(".*.stage"))
+    assert not list(job.glob(".*.backup"))
+
+
+@pytest.mark.parametrize("failed_target", ["result.json", "quality-report.json"])
+def test_first_final_pair_publication_failure_leaves_neither_artifact(
+    tmp_path,
+    failed_target,
+):
+    source = tmp_path / "source.wav"
+    source.write_bytes(b"source")
+    job = tmp_path / "job"
+    coordinator = AdaptiveLongFormCoordinator(
+        _IndependentBackend(duration_ms=1_000),
+        job,
+    )
+
+    with (
+        patch(
+            "dubbing.transcription.adaptive.os.replace",
+            side_effect=_fail_one_final_stage_replace(failed_target),
+        ),
+        pytest.raises(TranscriptionError, match="previous generation restored"),
+    ):
+        _run_checkpoint_fixture(
+            coordinator,
+            source,
+            1_000,
+            lambda source, streams, chunk, output: output.write_bytes(b"chunk"),
+        )
+
+    assert not (job / "result.json").exists()
+    assert not (job / "quality-report.json").exists()
+    assert json.loads((job / "progress.json").read_text())["status"] == "FAILED"
+    assert not list(job.glob(".*.stage"))
+    assert not list(job.glob(".*.backup"))
 
 
 def _run_checkpoint_fixture(coordinator, source, duration_ms, extract):

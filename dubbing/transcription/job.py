@@ -4,9 +4,10 @@ import hashlib
 import json
 import os
 import shutil
+import stat as stat_module
 import subprocess
 import tempfile
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from dubbing.media import ffmpeg_executable
@@ -21,6 +22,149 @@ from dubbing.transcription.models import (
 
 _CHECKPOINT_SCHEMA = "dubbing.transcription-checkpoint.v1"
 _MAX_AUDIO_SECONDS = 24 * 60 * 60
+
+
+@dataclass(frozen=True)
+class SourceStatIdentity:
+    device: int
+    inode: int
+    size_bytes: int
+    mtime_ns: int
+    ctime_ns: int
+
+    @classmethod
+    def from_stat(cls, value: os.stat_result) -> SourceStatIdentity:
+        return cls(
+            device=value.st_dev,
+            inode=value.st_ino,
+            size_bytes=value.st_size,
+            mtime_ns=value.st_mtime_ns,
+            ctime_ns=value.st_ctime_ns,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "device": self.device,
+            "inode": self.inode,
+            "size_bytes": self.size_bytes,
+            "mtime_ns": self.mtime_ns,
+            "ctime_ns": self.ctime_ns,
+        }
+
+
+@dataclass(frozen=True)
+class SourceBinding:
+    """A digest and stable filesystem identity created from one trusted open file."""
+
+    path: Path
+    sha256: str
+    stat: SourceStatIdentity
+
+    def to_dict(self) -> dict:
+        return {
+            "path": str(self.path),
+            "sha256": self.sha256,
+            "stat": self.stat.to_dict(),
+        }
+
+
+def _validate_expected_digest(expected_sha256: str | None) -> None:
+    if expected_sha256 is not None and (
+        len(expected_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in expected_sha256)
+    ):
+        raise TranscriptionError("expected source digest must be a lowercase SHA-256 digest")
+
+
+def _resolved_regular_path(path: str | Path) -> Path:
+    candidate = Path(path).expanduser()
+    try:
+        candidate_stat = candidate.lstat()
+    except OSError as exc:
+        raise TranscriptionError(f"media input not found: {candidate}") from exc
+    if stat_module.S_ISLNK(candidate_stat.st_mode):
+        raise TranscriptionError("media input must not be a symbolic link")
+    if not stat_module.S_ISREG(candidate_stat.st_mode):
+        raise TranscriptionError("media input must be a regular file")
+    try:
+        return candidate.resolve(strict=True)
+    except OSError as exc:
+        raise TranscriptionError(f"could not resolve media input: {candidate}") from exc
+
+
+def create_source_binding(
+    path: str | Path,
+    *,
+    expected_sha256: str | None = None,
+) -> SourceBinding:
+    """Hash a stable regular file descriptor and bind it to its resolved path."""
+
+    _validate_expected_digest(expected_sha256)
+    candidate = Path(path).expanduser()
+    resolved = _resolved_regular_path(candidate)
+    flags = os.O_RDONLY
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(candidate, flags)
+    except OSError as exc:
+        raise TranscriptionError(f"could not open media input safely: {candidate}") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat_module.S_ISREG(before.st_mode):
+            raise TranscriptionError("media input must be a regular file")
+        digest = hashlib.sha256()
+        while block := os.read(descriptor, 1024 * 1024):
+            digest.update(block)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    before_identity = SourceStatIdentity.from_stat(before)
+    after_identity = SourceStatIdentity.from_stat(after)
+    if before_identity != after_identity:
+        raise TranscriptionError("media source changed while its digest was computed")
+    try:
+        path_after = candidate.lstat()
+        resolved_after = candidate.resolve(strict=True)
+    except OSError as exc:
+        raise TranscriptionError("media source path changed while its digest was computed") from exc
+    if (
+        stat_module.S_ISLNK(path_after.st_mode)
+        or not stat_module.S_ISREG(path_after.st_mode)
+        or path_after.st_dev != after.st_dev
+        or path_after.st_ino != after.st_ino
+        or resolved_after != resolved
+    ):
+        raise TranscriptionError("media source path changed while its digest was computed")
+    computed = digest.hexdigest()
+    if expected_sha256 is not None and computed != expected_sha256:
+        raise TranscriptionError("media source digest does not match expected SHA-256")
+    return SourceBinding(path=resolved, sha256=computed, stat=after_identity)
+
+
+def validate_source_binding(path: str | Path, binding: SourceBinding) -> None:
+    """Check path and current stat identity without re-reading source bytes."""
+
+    if not isinstance(binding, SourceBinding):
+        raise TranscriptionError("source_binding must be a SourceBinding")
+    resolved = _resolved_regular_path(path)
+    if resolved != binding.path:
+        raise TranscriptionError("source binding path does not match media input")
+    try:
+        current = SourceStatIdentity.from_stat(resolved.stat(follow_symlinks=False))
+    except OSError as exc:
+        raise TranscriptionError("could not stat source-bound media input") from exc
+    if current != binding.stat:
+        raise TranscriptionError("source binding stat identity no longer matches media input")
+
+
+def verify_source_binding(binding: SourceBinding) -> SourceBinding:
+    """Re-hash a binding and require both digest and stat identity to remain stable."""
+
+    verified = create_source_binding(binding.path, expected_sha256=binding.sha256)
+    if verified.stat != binding.stat:
+        raise TranscriptionError("media source stat identity changed after admission")
+    return verified
 
 
 def source_sha256(path: Path) -> str:
