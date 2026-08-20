@@ -1,0 +1,66 @@
+{
+  "schema_version": "dubbing.cloud-teacher-canary-spans.v1",
+  "canary_id": "lesson06-v10-nine-uncertain-elevenlabs-shadow-v1",
+  "parent_source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "parent_local_result_sha256": "1f94f2250937ec09b41393907872632016fd4910ec6ca5464a20f56cde379dff",
+  "network_allowed": false,
+  "giga_admission_allowed": false,
+  "spans": [
+    {
+      "id": "hard-independent-hole",
+      "role": "hard",
+      "start_ms": 424002,
+      "end_ms": 484002,
+      "expected_clip_sha256": "1fbc774005b7becb7c757e331084cf71a27acd98d31bc55e5e15d00879709755",
+      "expected_local_result_sha256": "a940124fb79defd6587e107a80b1b2d09e7f575557362d7257fd330972fcf6b8"
+    },
+    {
+      "id": "hard-leaf-greenery",
+      "role": "hard",
+      "start_ms": 671500,
+      "end_ms": 691500,
+      "expected_clip_sha256": "4d2633a47f6ae29c0484af49d7014e996568c4b6519ac60951eb8353107d2991",
+      "expected_local_result_sha256": "1204fa2d73110206988de20a64759eb228d85ee8f726c08778dfa233b586797f"
+    },
+    {
+      "id": "hard-live-lives",
+      "role": "hard",
+      "start_ms": 1305000,
+      "end_ms": 1325000,
+      "expected_clip_sha256": "f44ed35a1cbb8e43d30ad862e495efb2ff9483204268788f6d7855ea286055ba",
+      "expected_local_result_sha256": "2e338383a9586030d04f24981cc238542bdc076576996b109221d79ded7717b0"
+    },
+    {
+      "id": "hard-properties-code-switch",
+      "role": "hard",
+      "start_ms": 1969605,
+      "end_ms": 1989605,
+      "expected_clip_sha256": "db51efdf0f6e02bbd400d43f10e7e0c504589f034e9e7cb9aa21af9f37819965",
+      "expected_local_result_sha256": "69e6a42524609063d7294d95d5b30f24a5a4d00a004e5e1f44d627efe2693844"
+    },
+    {
+      "id": "hard-yard-code-switch",
+      "role": "hard",
+      "start_ms": 2476411,
+      "end_ms": 2496411,
+      "expected_clip_sha256": "1054ab3be20cf8e572b1d0cb2375d6e3556b2339ca8dc07b7d4478e6cddb58d2",
+      "expected_local_result_sha256": "6038dbdc0a8f664736ac6af9c971aa85b3b3882076ec784efd47e2b368b4f40a"
+    },
+    {
+      "id": "hard-growing-code-switch",
+      "role": "hard",
+      "start_ms": 2607824,
+      "end_ms": 2627824,
+      "expected_clip_sha256": "983dd7cb225b30f1fbdb7c9b0afb09c1084da75215493693c8c4ca8c000b5216",
+      "expected_local_result_sha256": "254f0b9a218c863063f44518da928ac1092d3add5141bb6eb77afccbda72d995"
+    },
+    {
+      "id": "hard-chamomile-code-switch",
+      "role": "hard",
+      "start_ms": 3235000,
+      "end_ms": 3255000,
+      "expected_clip_sha256": "bc31af96cc9bef68ed857d46531416149091bee170fa8d24101ecf6505b12d96",
+      "expected_local_result_sha256": "cb59b8bf4c1170692b25d4c9804c805f51a20f3e285bdf66282319ca876bf93d"
+    }
+  ]
+}
