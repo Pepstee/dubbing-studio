@@ -66,6 +66,27 @@ benefit from a downmix or isolated channel, it creates and adjudicates those can
 the operator must not pre-process or split the recording. Normalization is not enabled in the
 production policy because it failed the human-corrected difficult-span benchmark.
 
+For a direct Mac control-plane run, use the existing WhisperKit model as the primary and an
+already-cached MLX model as the independent rejected-span adjudicator:
+
+```bash
+dubbing-long-transcribe "/path/to/recording.wav" \
+  --output "/path/to/checkpoints/<capture-id>" \
+  --backend whisperkit \
+  --model-path "/path/to/existing/whisperkit-model" \
+  --start-server \
+  --retry-backend mlx \
+  --retry-model mlx-community/whisper-large-v3-turbo \
+  --retry-mlx-temperature 0
+```
+
+The primary and retry models are each instantiated once and reused across chunks. Both identities
+are bound into `manifest.json` and `run-receipt.json`. The retry option accepts only an existing
+model directory or an unambiguous Hugging Face cache entry. If it cannot resolve the model locally,
+the run stops before transcription and performs no download. Faster-Whisper can be selected with
+`--retry-backend faster-whisper --retry-model /path/to/existing/ctranslate2-model`; it is always
+constructed with offline-only model loading.
+
 ## 4. Run the authorized month-one cloud shadow
 
 For recordings made during the month-one programme, run Scribe v2 only after the local

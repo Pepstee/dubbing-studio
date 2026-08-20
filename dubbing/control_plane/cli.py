@@ -24,6 +24,27 @@ from dubbing.transcription.whisperkit import (
 )
 
 
+def _cached_hugging_face_snapshot(model: str) -> Path | None:
+    """Resolve a local Hugging Face model without contacting the network."""
+    supplied = Path(model).expanduser()
+    if supplied.is_dir():
+        return supplied.resolve()
+    if "/" not in model:
+        return None
+    repository = Path.home() / ".cache/huggingface/hub" / ("models--" + model.replace("/", "--"))
+    snapshots = repository / "snapshots"
+    main_ref = repository / "refs/main"
+    if main_ref.is_file():
+        revision = main_ref.read_text(encoding="utf-8").strip()
+        candidate = snapshots / revision
+        if revision and candidate.is_dir():
+            return candidate.resolve()
+    candidates = tuple(path for path in snapshots.glob("*") if path.is_dir())
+    if len(candidates) == 1:
+        return candidates[0].resolve()
+    return None
+
+
 def discover_whisperkit_models() -> tuple[Path, ...]:
     roots = (
         Path.home() / "Library/Application Support/DubbingStudio/models/whisperkit",
@@ -55,7 +76,9 @@ def build_backend(args: argparse.Namespace):
             local_files_only=args.local_files_only,
         )
     models = discover_whisperkit_models()
-    model_path = Path(args.model_path).resolve() if args.model_path else (models[0] if models else None)
+    model_path = (
+        Path(args.model_path).resolve() if args.model_path else (models[0] if models else None)
+    )
     if model_path is None:
         raise SystemExit(
             "No existing WhisperKit Core ML asset was found. A model download is an explicit operator gate."
@@ -63,7 +86,9 @@ def build_backend(args: argparse.Namespace):
     model = args.model or model_path.name.removeprefix("openai_whisper-")
     server = None
     if args.start_server:
-        executable = args.whisperkit_cli or shutil.which("argmax-cli") or shutil.which("whisperkit-cli")
+        executable = (
+            args.whisperkit_cli or shutil.which("argmax-cli") or shutil.which("whisperkit-cli")
+        )
         if not executable:
             size = sum(path.stat().st_size for path in model_path.rglob("*") if path.is_file())
             raise SystemExit(
@@ -82,10 +107,37 @@ def build_backend(args: argparse.Namespace):
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Fail-closed adaptive long-video transcription"
+def build_retry_backend(args: argparse.Namespace):
+    """Build one independent, offline retry backend for coordinator reuse."""
+    if args.retry_backend is None:
+        return None
+    default_model = (
+        "mlx-community/whisper-large-v3-turbo" if args.retry_backend == "mlx" else "large-v3-turbo"
     )
+    requested_model = args.retry_model or default_model
+    local_model = _cached_hugging_face_snapshot(requested_model)
+    if local_model is None:
+        raise SystemExit(
+            f"Independent {args.retry_backend} retry model is not available locally: "
+            f"{requested_model!r}. No download was performed; provide --retry-model "
+            "with an existing model directory or populate the Hugging Face cache under "
+            "a separate, explicitly authorized download gate."
+        )
+    if args.retry_backend == "mlx":
+        options = {"model": str(local_model)}
+        if args.retry_mlx_temperature is not None:
+            options["temperature"] = tuple(args.retry_mlx_temperature)
+        return MLXWhisperTranscriptionBackend(**options)
+    return FasterWhisperTranscriptionBackend(
+        model=str(local_model),
+        device=args.retry_device,
+        compute_type=args.retry_compute_type,
+        local_files_only=True,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Fail-closed adaptive long-video transcription")
     parser.add_argument("media")
     parser.add_argument("--output", required=True)
     parser.add_argument(
@@ -124,6 +176,41 @@ def main() -> None:
             "Use once with 0 for deterministic fail-fast adjudication."
         ),
     )
+    parser.add_argument(
+        "--retry-backend",
+        choices=("mlx", "faster-whisper"),
+        help=(
+            "Independent local backend for rejected-span adjudication. The model must "
+            "already exist locally; this command never downloads it."
+        ),
+    )
+    parser.add_argument(
+        "--retry-model",
+        help=(
+            "Existing local retry model directory or an already-cached Hugging Face "
+            "model identifier."
+        ),
+    )
+    parser.add_argument(
+        "--retry-device",
+        choices=("auto", "cpu", "cuda"),
+        default="auto",
+        help="Device for an independent Faster-Whisper retry backend.",
+    )
+    parser.add_argument(
+        "--retry-compute-type",
+        default="default",
+        help="Compute type for an independent Faster-Whisper retry backend.",
+    )
+    parser.add_argument(
+        "--retry-mlx-temperature",
+        action="append",
+        type=float,
+        help=(
+            "Independent MLX retry temperature; repeat to configure fallbacks. "
+            "Use once with 0 for deterministic fail-fast adjudication."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     language_retry_policy = {}
@@ -149,8 +236,7 @@ def main() -> None:
             source, minimum_silence_seconds=args.minimum_silence_seconds
         )
         silence_centres = tuple(
-            round((start_ms + end_ms) / 2)
-            for start_ms, end_ms in silence_intervals
+            round((start_ms + end_ms) / 2) for start_ms, end_ms in silence_intervals
         )
         document = {
             "schema_version": "dubbing.adaptive-plan-preview.v1",
@@ -174,10 +260,17 @@ def main() -> None:
         return
 
     backend = build_backend(args)
+    retry_backend = build_retry_backend(args)
+    if retry_backend is not None and retry_backend.identity == backend.identity:
+        raise SystemExit(
+            "--retry-backend resolved to the primary backend identity; targeted retry "
+            "requires an independent implementation or model configuration"
+        )
     coordinator = AdaptiveLongFormCoordinator(
         backend,
         output,
         planner=planner,
+        retry_backend=retry_backend,
         minimum_silence_seconds=args.minimum_silence_seconds,
         language_retry_policy=language_retry_policy,
     )
@@ -191,6 +284,7 @@ def main() -> None:
         "schema_version": "dubbing.long-transcription-run-receipt.v1",
         "source_sha256": result.source_sha256,
         "backend_identity": backend.identity,
+        "retry_backend_identity": (retry_backend.identity if retry_backend is not None else None),
         "runtime_seconds": runtime_seconds,
         "quality_status": quality["status"],
         "segment_count": len(result.segments),
