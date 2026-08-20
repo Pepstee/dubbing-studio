@@ -1174,6 +1174,120 @@ def test_code_switch_mismatch_redecodes_only_uncertain_turn(tmp_path):
     assert any(item.get("kind") == "turn-language-redecode" for item in receipt["attempts"])
 
 
+def test_short_language_retry_uses_context_but_admits_only_target_turn(tmp_path):
+    class _ContextBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:context-language"
+
+        def transcribe(self, audio, options=None):
+            return TranscriptionResult(
+                (
+                    TranscriptSegment(
+                        0,
+                        2900,
+                        "outside before привет мир outside after",
+                        language="ru",
+                        words=(
+                            TranscriptWord(0, 700, " outside before"),
+                            TranscriptWord(1000, 1400, " привет"),
+                            TranscriptWord(1400, 1800, " мир"),
+                            TranscriptWord(2300, 2900, " outside after"),
+                        ),
+                    ),
+                ),
+                "outside before привет мир outside after",
+                "fixture",
+                "context-language",
+                "test",
+                "ru",
+                3000,
+                False,
+            )
+
+    original = TranscriptionResult(
+        (TranscriptSegment(1000, 2000, "привет мир", language="en", uncertain=True),),
+        "привет мир",
+        "fixture",
+        "context-language",
+        "test",
+        "en",
+        4000,
+        False,
+    )
+    coordinator = AdaptiveLongFormCoordinator(_ContextBackend(), tmp_path / "job")
+    extracted = []
+
+    def extract(source, segment, destination):
+        extracted.append((segment.start_ms, segment.end_ms))
+        destination.write_bytes(b"context")
+
+    attempts = []
+    with patch.object(coordinator, "_extract_language_span", side_effect=extract):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert extracted == [(0, 3000)]
+    assert [(item.start_ms, item.end_ms, item.text) for item in resolved.segments] == [
+        (1000, 1800, "привет мир")
+    ]
+    assert resolved.segments[0].language == "ru"
+    assert resolved.segments[0].uncertain is False
+    assert attempts[0]["context_start_ms"] == 0
+    assert attempts[0]["context_end_ms"] == 3000
+
+
+def test_language_retry_rejects_context_without_target_turn(tmp_path):
+    class _NeighbourOnlyBackend(TranscriptionBackend):
+        @property
+        def identity(self):
+            return "fixture:neighbour-only"
+
+        def transcribe(self, audio, options=None):
+            return TranscriptionResult(
+                (TranscriptSegment(0, 700, "соседняя речь", language="ru"),),
+                "соседняя речь",
+                "fixture",
+                "neighbour-only",
+                "test",
+                "ru",
+                3000,
+                False,
+            )
+
+    original_segment = TranscriptSegment(1000, 2000, "неясно", language="en", uncertain=True)
+    original = TranscriptionResult(
+        (original_segment,),
+        original_segment.text,
+        "fixture",
+        "neighbour-only",
+        "test",
+        "en",
+        4000,
+        False,
+    )
+    coordinator = AdaptiveLongFormCoordinator(_NeighbourOnlyBackend(), tmp_path / "job")
+    with patch.object(
+        coordinator,
+        "_extract_language_span",
+        side_effect=lambda source, segment, destination: destination.write_bytes(b"context"),
+    ):
+        resolved = coordinator._resolve_uncertain_turns(
+            tmp_path / "audio.wav",
+            original,
+            coordinator.backend,
+            TranscriptionOptions(),
+            [],
+        )
+
+    assert resolved == original
+
+
 def test_detected_korean_chunk_uses_always_forced_retry(tmp_path):
     class _KoreanBackend(TranscriptionBackend):
         @property

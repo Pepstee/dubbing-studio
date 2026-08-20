@@ -44,7 +44,8 @@ _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
-_COORDINATOR_VERSION = "adaptive-long-form-v13"
+_LANGUAGE_RETRY_CONTEXT_MS = 1_000
+_COORDINATOR_VERSION = "adaptive-long-form-v14"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 
 
@@ -1554,6 +1555,59 @@ class AdaptiveLongFormCoordinator:
         if process.returncode:
             raise TranscriptionError(f"language retry extraction failed: {process.stderr.strip()}")
 
+    @staticmethod
+    def _crop_language_candidate(
+        candidate: TranscriptionResult,
+        target_start_ms: int,
+        target_end_ms: int,
+    ) -> TranscriptionResult:
+        """Keep only target-turn speech and normalize it to the target interval."""
+        segments = []
+        for segment in candidate.segments:
+            words = []
+            for word in segment.words:
+                midpoint = word.start_ms + (word.end_ms - word.start_ms) // 2
+                if not target_start_ms <= midpoint < target_end_ms:
+                    continue
+                word_start = max(word.start_ms, target_start_ms)
+                word_end = min(word.end_ms, target_end_ms)
+                if word_end > word_start:
+                    words.append(
+                        replace(
+                            word,
+                            start_ms=word_start - target_start_ms,
+                            end_ms=word_end - target_start_ms,
+                        )
+                    )
+            if segment.words:
+                if not words:
+                    continue
+                start_ms = min(word.start_ms for word in words) + target_start_ms
+                end_ms = max(word.end_ms for word in words) + target_start_ms
+                text = "".join(word.text for word in words).strip()
+            else:
+                if segment.start_ms < target_start_ms or segment.end_ms > target_end_ms:
+                    continue
+                start_ms = segment.start_ms
+                end_ms = segment.end_ms
+                text = segment.text
+            segments.append(
+                replace(
+                    segment,
+                    start_ms=start_ms - target_start_ms,
+                    end_ms=end_ms - target_start_ms,
+                    text=text,
+                    words=tuple(words),
+                )
+            )
+        normalized = tuple(sorted(segments, key=lambda item: (item.start_ms, item.end_ms)))
+        return replace(
+            candidate,
+            segments=normalized,
+            text=" ".join(item.text for item in normalized),
+            duration_ms=target_end_ms - target_start_ms,
+        )
+
     def _resolve_uncertain_turns(
         self,
         audio: Path,
@@ -1583,11 +1637,29 @@ class AdaptiveLongFormCoordinator:
             ] = []
             with tempfile.TemporaryDirectory(prefix="dubbing-language-retry-") as directory:
                 span = Path(directory) / "span.wav"
-                self._extract_language_span(audio, segment, span)
+                context_start_ms = max(0, segment.start_ms - _LANGUAGE_RETRY_CONTEXT_MS)
+                context_end_ms = min(
+                    result.duration_ms or segment.end_ms + _LANGUAGE_RETRY_CONTEXT_MS,
+                    segment.end_ms + _LANGUAGE_RETRY_CONTEXT_MS,
+                )
+                self._extract_language_span(
+                    audio,
+                    replace(
+                        segment,
+                        start_ms=context_start_ms,
+                        end_ms=context_end_ms,
+                    ),
+                    span,
+                )
+                target_start_ms = segment.start_ms - context_start_ms
+                target_end_ms = segment.end_ms - context_start_ms
                 for language in languages:
-                    candidate = annotate_transcript_languages(
-                        backend.transcribe(span, replace(base_options, language=language))
+                    candidate = self._crop_language_candidate(
+                        backend.transcribe(span, replace(base_options, language=language)),
+                        target_start_ms,
+                        target_end_ms,
                     )
+                    candidate = annotate_transcript_languages(candidate)
                     quality = evaluate_transcript_quality(
                         candidate,
                         expected_duration_ms=segment.end_ms - segment.start_ms,
@@ -1597,6 +1669,8 @@ class AdaptiveLongFormCoordinator:
                             "kind": "turn-language-redecode",
                             "source_start_ms": segment.start_ms,
                             "source_end_ms": segment.end_ms,
+                            "context_start_ms": context_start_ms,
+                            "context_end_ms": context_end_ms,
                             "backend": backend.identity,
                             "language": language,
                             "quality": quality.to_dict(),
