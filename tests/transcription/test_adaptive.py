@@ -418,9 +418,7 @@ def test_real_six_gap_near_silence_stops_after_empty_bounded_primary(tmp_path):
     assert policy["minimum_energy_coverage_ratio"] == 0.96
     assert policy["maximum_total_uncovered_ms"] == 2_500
     assert policy["maximum_uncovered_gap_ms"] == 1_500
-    turn_policy = manifest["silence_admission"][
-        "uncertain_turn_after_empty_language_retry"
-    ]
+    turn_policy = manifest["silence_admission"]["uncertain_turn_after_empty_language_retry"]
     assert turn_policy == {
         "policy": "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1",
         "required_energy_coverage_ratio": 1.0,
@@ -536,9 +534,7 @@ def test_near_silence_rechecks_after_confirmed_no_speech_turn_is_removed(tmp_pat
     assert classification["maximum_uncovered_gap_ms"] == 1_208
     assert receipt["selected_attempt"] == 3
     assert receipt["targeted_retry_exhausted"] is False
-    assert not any(
-        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
-    )
+    assert not any(item["kind"] == "targeted-span-redecode" for item in receipt["attempts"])
 
 
 def test_near_silence_sensitive_vad_speech_preserves_fail_closed_retry(tmp_path):
@@ -662,9 +658,7 @@ def test_valid_primary_speech_cannot_be_reclassified_as_near_silence(tmp_path):
     assert result.text == "clean ordinary phrase"
     assert backend.calls == 1
     assert detector.calls == 0
-    assert not any(
-        item["kind"] == "chunk-silence-classification" for item in receipt["attempts"]
-    )
+    assert not any(item["kind"] == "chunk-silence-classification" for item in receipt["attempts"])
 
 
 def test_near_silence_without_detector_preserves_fail_closed_retry(tmp_path):
@@ -703,9 +697,7 @@ def test_near_silence_without_detector_preserves_fail_closed_retry(tmp_path):
         )
 
     assert repair.call_count == 1
-    assert not any(
-        item["kind"] == "chunk-silence-classification" for item in receipt["attempts"]
-    )
+    assert not any(item["kind"] == "chunk-silence-classification" for item in receipt["attempts"])
 
 
 def test_semantic_vad_speech_overrides_full_energy_silence(tmp_path):
@@ -783,12 +775,14 @@ class _AudioCandidateBackend(TranscriptionBackend):
     def __init__(self, identity, texts):
         self._identity = identity
         self.texts = texts
+        self.calls = []
 
     @property
     def identity(self):
         return self._identity
 
     def transcribe(self, audio, options=None):
+        self.calls.append((Path(audio).name, options.language))
         text = self.texts[Path(audio).name]
         return TranscriptionResult(
             segments=(TranscriptSegment(0, 20_000, text),),
@@ -1034,9 +1028,9 @@ def test_near_silence_policy_change_invalidates_adaptive_checkpoint_manifest(tmp
     chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
     expected = coordinator._manifest(source, create_source_binding(source), probe, chunks)
     existing = json.loads(json.dumps(expected))
-    existing["silence_admission"]["near_silence_after_empty_asr"][
-        "maximum_uncovered_gap_ms"
-    ] = 1_501
+    existing["silence_admission"]["near_silence_after_empty_asr"]["maximum_uncovered_gap_ms"] = (
+        1_501
+    )
     manifest = tmp_path / "job" / "manifest.json"
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps(existing), encoding="utf-8")
@@ -1236,6 +1230,15 @@ def test_audio_candidate_can_rescue_raw_only_with_independent_consensus(tmp_path
     assert adjudication["status"] == "CONSENSUS_PASS"
     assert adjudication["raw_consensus_available"] is False
     assert adjudication["selected_audio_candidate"] == "channel-0"
+    assert {item[0] for item in primary.calls + independent.calls} == {
+        "raw.wav",
+        "channel-0.wav",
+        "channel-1.wav",
+    }
+    assert not any(
+        item["kind"] == "targeted-audio-escalation-short-circuit"
+        for item in attempts
+    )
 
 
 def test_divergent_channel_consensuses_fail_closed(tmp_path):
@@ -1279,9 +1282,14 @@ def test_divergent_channel_consensuses_fail_closed(tmp_path):
     adjudication = attempts[-1]
     assert adjudication["status"] == "AUDIO_CANDIDATE_DISAGREEMENT"
     assert adjudication["divergent_audio_candidates"] is True
+    assert {item[0] for item in primary.calls + independent.calls} == {
+        "raw.wav",
+        "channel-0.wav",
+        "channel-1.wav",
+    }
 
 
-def test_raw_consensus_wins_even_when_processed_candidates_disagree(tmp_path):
+def test_raw_consensus_short_circuits_processed_audio_escalation(tmp_path):
     primary_texts = {
         "raw.wav": "trustworthy raw recording transcript",
         "channel-0.wav": "first processed interpretation",
@@ -1320,6 +1328,15 @@ def test_raw_consensus_wins_even_when_processed_candidates_disagree(tmp_path):
     assert adjudication["selected_audio_candidate"] == "raw"
     assert adjudication["raw_consensus_available"] is True
     assert adjudication["divergent_audio_candidates"] is False
+    assert {item[0] for item in primary.calls + independent.calls} == {"raw.wav"}
+    short_circuit = next(
+        item for item in attempts if item["kind"] == "targeted-audio-escalation-short-circuit"
+    )
+    assert short_circuit["status"] == "RAW_CONSENSUS_FINAL"
+    assert short_circuit["skipped_audio_candidates"] == ["channel-0", "channel-1"]
+    assert short_circuit["avoided_scheduled_decode_count"] == 2 * len(
+        primary.calls + independent.calls
+    )
 
 
 def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):
@@ -1597,9 +1614,7 @@ def test_wholly_post_audio_segment_is_rejected_without_targeted_retry(tmp_path):
     assert result.segments[0].text == "real speech"
     assert receipt["targeted_retry_exhausted"] is False
     rejection = next(
-        item
-        for item in receipt["attempts"]
-        if item["kind"] == "out-of-audio-segment-rejection"
+        item for item in receipt["attempts"] if item["kind"] == "out-of-audio-segment-rejection"
     )
     assert rejection["audio_duration_ms"] == 64_202
     assert rejection["raw_quality"]["status"] == "REPROCESS_REQUIRED"
@@ -1611,9 +1626,7 @@ def test_wholly_post_audio_segment_is_rejected_without_targeted_retry(tmp_path):
             "observed_end_ms": 74_980,
         }
     ]
-    assert not any(
-        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
-    )
+    assert not any(item["kind"] == "targeted-span-redecode" for item in receipt["attempts"])
 
 
 def test_segment_overlapping_audio_end_is_clamped_by_word_midpoint(tmp_path):
@@ -1646,9 +1659,7 @@ def test_segment_overlapping_audio_end_is_clamped_by_word_midpoint(tmp_path):
     assert result.segments[0].words == (TranscriptWord(63_800, 64_100, " kept"),)
     assert receipt["targeted_retry_exhausted"] is False
     rejection = next(
-        item
-        for item in receipt["attempts"]
-        if item["kind"] == "out-of-audio-segment-rejection"
+        item for item in receipt["attempts"] if item["kind"] == "out-of-audio-segment-rejection"
     )
     assert rejection["changes"][0]["action"] == "CLAMPED_OVERLAPPING_SEGMENT"
     assert rejection["changes"][0]["dropped_word_count"] == 1
@@ -1885,12 +1896,8 @@ def test_empty_language_retry_drops_exact_full_silence_zero_vad_patterns(
     assert adjudication["source_end_ms"] == end_ms
     assert adjudication["target_energy_silence_coverage_ms"] == end_ms - start_ms
     assert adjudication["sensitive_vad_target_overlap_ms"] == 0
-    assert adjudication["context_audio_sha256"] == hashlib.sha256(
-        b"hash-bound-context"
-    ).hexdigest()
-    assert adjudication["original_text_sha256"] == hashlib.sha256(
-        text.encode("utf-8")
-    ).hexdigest()
+    assert adjudication["context_audio_sha256"] == hashlib.sha256(b"hash-bound-context").hexdigest()
+    assert adjudication["original_text_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
     assert adjudication["forced_retry_quality_sha256"]
     assert adjudication["speech_region_plan_sha256"]
     provenance = resolved.provenance["uncertain_turn_silence_adjudications"]
@@ -1966,9 +1973,7 @@ def test_uncertain_turn_silence_adjudication_requires_full_energy_and_detector(
         )
 
     assert resolved == original
-    assert not any(
-        item["kind"] == "uncertain-turn-silence-adjudication" for item in attempts
-    )
+    assert not any(item["kind"] == "uncertain-turn-silence-adjudication" for item in attempts)
     if detector is not None:
         assert detector.calls == 0
 
@@ -2260,9 +2265,7 @@ def test_processing_cap_binds_full_source_and_limits_plan_result_and_replay(tmp_
     assert manifest["source_integrity"]["policy"] == (
         "trusted-binding-plus-concurrent-full-rehash-v1"
     )
-    assert result.provenance["source_integrity"]["source_sha256"] == (
-        result.source_sha256
-    )
+    assert result.provenance["source_integrity"]["source_sha256"] == (result.source_sha256)
     progress = json.loads((tmp_path / "job/progress.json").read_text())
     assert progress["status"] == "COMPLETE"
 
@@ -2371,9 +2374,7 @@ def test_concurrent_source_verifier_overlaps_decode_and_is_awaited(tmp_path):
         )
 
     assert backend.calls == 1
-    assert result.provenance["source_integrity"][
-        "concurrent_full_source_rehash_passed"
-    ]
+    assert result.provenance["source_integrity"]["concurrent_full_source_rehash_passed"]
 
 
 def test_tail_mutation_fails_closed_but_preserves_chunks_and_prior_final(tmp_path):
@@ -2521,11 +2522,7 @@ def _fail_one_final_stage_replace(target_name):
         nonlocal failed
         source_path = Path(source)
         destination_path = Path(destination)
-        if (
-            not failed
-            and source_path.suffix == ".stage"
-            and destination_path.name == target_name
-        ):
+        if not failed and source_path.suffix == ".stage" and destination_path.name == target_name:
             failed = True
             raise OSError(f"injected {target_name} replacement failure")
         return original_replace(source, destination)
@@ -2797,9 +2794,7 @@ def test_replay_reextracts_and_rejects_forged_audio_binding(tmp_path):
     receipt_one = tmp_path / "job/receipts/000001.json"
     forged_receipt = json.loads(receipt_one.read_text())
     checkpoint_one.write_text(json.dumps(checkpoint_zero), encoding="utf-8")
-    forged_receipt["checkpoint_document_sha256"] = _canonical_document_hash(
-        checkpoint_zero
-    )
+    forged_receipt["checkpoint_document_sha256"] = _canonical_document_hash(checkpoint_zero)
     forged_receipt["extracted_audio_sha256"] = receipt_zero["extracted_audio_sha256"]
     receipt_one.write_text(json.dumps(forged_receipt), encoding="utf-8")
 

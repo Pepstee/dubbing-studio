@@ -60,9 +60,11 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 14. Adaptive extraction now preserves every source audio stream as discrete lossless channels.
     Only rejected spans receive bounded raw/downmix/channel candidates. A speech-normalized
     candidate exists for experiments but is disabled after reducing accuracy on both local
-    models. Raw two-model consensus has precedence; a processed rescue needs independent agreement on the
-    same candidate, and divergent processed consensuses fail closed. Candidate hashes and exact
-    processing policy are checkpoint-bound. Rollback restores first-stream-only extraction and
+    models. Raw two-model consensus has precedence and now terminates processed-audio escalation;
+    skipped candidates and decode counts are receipt-bound. When raw consensus is absent, a
+    processed rescue still needs independent agreement on the same candidate and divergent
+    processed consensuses fail closed. Candidate hashes and exact processing policy are
+    checkpoint-bound. Rollback restores first-stream-only extraction and
     removes processed retry candidates without modifying source recordings or old packages.
 15. The ambiguous aggregate `target_passed`/`promotion_passed` evaluator output was replaced by
     claim-scoped measurement, held-out benchmark and production-portfolio gates. The new gate

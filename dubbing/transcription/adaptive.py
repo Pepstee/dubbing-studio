@@ -59,12 +59,10 @@ _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
 _UNCERTAIN_TURN_SILENCE_POLICY = (
     "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
 )
-_COORDINATOR_VERSION = "adaptive-long-form-v21"
+_COORDINATOR_VERSION = "adaptive-long-form-v22"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
-_NEAR_SILENCE_ADMISSION_POLICY = (
-    "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
-)
+_NEAR_SILENCE_ADMISSION_POLICY = "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
 _AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
 _SOURCE_INTEGRITY_POLICY = "trusted-binding-plus-concurrent-full-rehash-v1"
 
@@ -524,10 +522,7 @@ def _stage_json(path: Path, document: dict) -> Path:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(
-                json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True)
-                + "\n"
-            )
+            handle.write(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
             handle.flush()
             os.fsync(handle.fileno())
     except BaseException:
@@ -575,9 +570,7 @@ def _publish_json_pair(
             os.replace(staged[1], second_path)
         except BaseException as publication_error:
             rollback_errors: list[BaseException] = []
-            for index, (path, was_present) in enumerate(
-                zip(targets, existed, strict=True)
-            ):
+            for index, (path, was_present) in enumerate(zip(targets, existed, strict=True)):
                 try:
                     backup = backups[index]
                     if was_present and backup is not None:
@@ -827,7 +820,7 @@ class AdaptiveLongFormCoordinator:
             "audio_candidates": {
                 "policies": list(self.audio_candidate_policies),
                 "maximum_channels": self.maximum_audio_candidate_channels,
-                "promotion_policy": "raw-consensus-first-else-independent-unanimity-v1",
+                "promotion_policy": ("raw-consensus-short-circuit-else-independent-unanimity-v2"),
             },
             "targeted_retry": {
                 "minimum_ms": _TARGET_RETRY_MIN_MS,
@@ -848,15 +841,9 @@ class AdaptiveLongFormCoordinator:
                 "semantic_vad_zero_regions_required": True,
                 "near_silence_after_empty_asr": {
                     "policy": _NEAR_SILENCE_ADMISSION_POLICY,
-                    "minimum_energy_coverage_ratio": (
-                        _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
-                    ),
-                    "maximum_total_uncovered_ms": (
-                        _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS
-                    ),
-                    "maximum_uncovered_gap_ms": (
-                        _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
-                    ),
+                    "minimum_energy_coverage_ratio": (_NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO),
+                    "maximum_total_uncovered_ms": (_NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS),
+                    "maximum_uncovered_gap_ms": (_NEAR_SILENCE_MAX_UNCOVERED_GAP_MS),
                     "primary_valid_segment_count_required": 0,
                     "semantic_vad_zero_regions_required": True,
                 },
@@ -864,9 +851,7 @@ class AdaptiveLongFormCoordinator:
                     "policy": _UNCERTAIN_TURN_SILENCE_POLICY,
                     "required_energy_coverage_ratio": 1.0,
                     "forced_candidate_valid_segment_count_required": 0,
-                    "forced_candidate_failure_codes": [
-                        "malformed_or_empty_output"
-                    ],
+                    "forced_candidate_failure_codes": ["malformed_or_empty_output"],
                     "sensitive_vad_target_overlap_ms_required": 0,
                 },
             },
@@ -1124,6 +1109,48 @@ class AdaptiveLongFormCoordinator:
                     candidates.append((backend, candidate_options))
 
         eligible: list[_SpanCandidate] = []
+
+        def raw_consensus_is_final() -> bool:
+            """Return whether processed audio cannot change the final adjudication."""
+            best_by_backend_language: dict[tuple[str, str | None], _SpanCandidate] = {}
+            for candidate in eligible:
+                if candidate.audio_candidate_id != "raw":
+                    continue
+                key = (candidate.backend_identity, candidate.language)
+                previous = best_by_backend_language.get(key)
+                if previous is None or candidate.score > previous.score:
+                    best_by_backend_language[key] = candidate
+            for (identity, language), independent_candidate in best_by_backend_language.items():
+                if identity == self.backend.identity:
+                    continue
+                primary_candidate = best_by_backend_language.get((self.backend.identity, language))
+                if primary_candidate is None:
+                    continue
+                agreement = token_agreement(primary_candidate.text, independent_candidate.text)
+                confidence_floor = (
+                    min(
+                        primary_candidate.average_acoustic_confidence,
+                        independent_candidate.average_acoustic_confidence,
+                    )
+                    if primary_candidate.average_acoustic_confidence is not None
+                    and independent_candidate.average_acoustic_confidence is not None
+                    else None
+                )
+                consensus_token_count = min(
+                    len(word_tokens(primary_candidate.text)),
+                    len(word_tokens(independent_candidate.text)),
+                )
+                if (
+                    agreement >= _INDEPENDENT_AGREEMENT_THRESHOLD
+                    and (
+                        confidence_floor is None
+                        or confidence_floor >= _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
+                    )
+                    and consensus_token_count >= _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS
+                ):
+                    return True
+            return False
+
         with tempfile.TemporaryDirectory(prefix="dubbing-targeted-retry-") as directory:
             retry_audio = Path(directory) / "span.wav"
             marker = TranscriptSegment(start_ms, end_ms, "targeted retry span")
@@ -1259,7 +1286,9 @@ class AdaptiveLongFormCoordinator:
                     **audio_candidates.to_dict(),
                 }
             )
-            for audio_candidate in audio_candidates.candidates:
+            if audio_candidates.candidates and audio_candidates.candidates[0].identifier != "raw":
+                raise TranscriptionError("raw audio candidate must be evaluated first")
+            for audio_candidate_index, audio_candidate in enumerate(audio_candidates.candidates):
                 for backend, retry_options in candidates:
                     candidate = annotate_transcript_languages(
                         backend.transcribe(audio_candidate.path, retry_options)
@@ -1335,6 +1364,22 @@ class AdaptiveLongFormCoordinator:
                             len(attempts) - 1,
                         )
                     )
+                if audio_candidate.identifier == "raw" and raw_consensus_is_final():
+                    skipped = audio_candidates.candidates[audio_candidate_index + 1 :]
+                    attempts.append(
+                        {
+                            "kind": "targeted-audio-escalation-short-circuit",
+                            "source_start_ms": start_ms,
+                            "source_end_ms": end_ms,
+                            "status": "RAW_CONSENSUS_FINAL",
+                            "policy": ("raw-consensus-short-circuit-else-independent-unanimity-v2"),
+                            "evaluated_audio_candidate": audio_candidate.identifier,
+                            "skipped_audio_candidates": [item.identifier for item in skipped],
+                            "skipped_audio_candidate_count": len(skipped),
+                            "avoided_scheduled_decode_count": len(skipped) * len(candidates),
+                        }
+                    )
+                    break
 
         best_by_backend_language: dict[tuple[str, str, str | None], _SpanCandidate] = {}
         for candidate in eligible:
@@ -1615,31 +1660,25 @@ class AdaptiveLongFormCoordinator:
         if energy_silence_coverage_ms == duration_ms and not energy_silence_intervals:
             energy_silence_intervals = ((0, duration_ms),)
         covered_interval_ms = sum(end - start for start, end in energy_silence_intervals)
-        uncovered_intervals = _uncovered_intervals_ms(
-            duration_ms, energy_silence_intervals
-        )
+        uncovered_intervals = _uncovered_intervals_ms(duration_ms, energy_silence_intervals)
         total_uncovered_ms = duration_ms - energy_silence_coverage_ms
         maximum_uncovered_gap_ms = max(
             (end - start for start, end in uncovered_intervals), default=0
         )
-        coverage_ratio = (
-            energy_silence_coverage_ms / duration_ms if duration_ms else 0.0
-        )
+        coverage_ratio = energy_silence_coverage_ms / duration_ms if duration_ms else 0.0
         energy_evidence = {
             "energy_silence_coverage_ms": energy_silence_coverage_ms,
             "energy_silence_coverage_ratio": round(coverage_ratio, 6),
             "interval_coordinate_space": "extracted-audio-relative",
             "energy_silence_intervals": [
-                {"start_ms": start, "end_ms": end}
-                for start, end in energy_silence_intervals
+                {"start_ms": start, "end_ms": end} for start, end in energy_silence_intervals
             ],
             "energy_silence_interval_coverage_ms": covered_interval_ms,
             "energy_silence_evidence_consistent": (
                 covered_interval_ms == energy_silence_coverage_ms
             ),
             "uncovered_intervals": [
-                {"start_ms": start, "end_ms": end}
-                for start, end in uncovered_intervals
+                {"start_ms": start, "end_ms": end} for start, end in uncovered_intervals
             ],
             "total_uncovered_ms": total_uncovered_ms,
             "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
@@ -1800,13 +1839,9 @@ class AdaptiveLongFormCoordinator:
             ),
             "policy": _NEAR_SILENCE_ADMISSION_POLICY,
             **energy_evidence,
-            "minimum_energy_coverage_ratio": (
-                _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO
-            ),
+            "minimum_energy_coverage_ratio": (_NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO),
             "maximum_total_uncovered_ms": _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS,
-            "maximum_allowed_uncovered_gap_ms": (
-                _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS
-            ),
+            "maximum_allowed_uncovered_gap_ms": (_NEAR_SILENCE_MAX_UNCOVERED_GAP_MS),
             "primary_valid_segment_count": 0,
             "speech_region_plan": plan.to_dict(),
         }
@@ -2217,10 +2252,7 @@ class AdaptiveLongFormCoordinator:
                     sensitive_overlap_ms = _interval_coverage_ms(
                         target_start_ms,
                         target_end_ms,
-                        tuple(
-                            (item["start_ms"], item["end_ms"])
-                            for item in sensitive_overlaps
-                        ),
+                        tuple((item["start_ms"], item["end_ms"]) for item in sensitive_overlaps),
                     )
                     retry_quality = empty_retry_evidence[0][1]
                     evidence_document = {
@@ -2239,20 +2271,14 @@ class AdaptiveLongFormCoordinator:
                             segment.text.encode("utf-8")
                         ).hexdigest(),
                         "context_audio_sha256": source_sha256(span),
-                        "target_energy_silence_coverage_ms": (
-                            target_energy_silence_ms
-                        ),
+                        "target_energy_silence_coverage_ms": (target_energy_silence_ms),
                         "target_duration_ms": target_duration_ms,
                         "required_energy_coverage_ratio": 1.0,
                         "forced_language": empty_retry_evidence[0][0],
                         "forced_retry_quality": retry_quality,
-                        "forced_retry_quality_sha256": _document_sha256(
-                            retry_quality
-                        ),
+                        "forced_retry_quality_sha256": _document_sha256(retry_quality),
                         "speech_region_plan": plan.to_dict(),
-                        "speech_region_plan_sha256": _document_sha256(
-                            plan.to_dict()
-                        ),
+                        "speech_region_plan_sha256": _document_sha256(plan.to_dict()),
                         "sensitive_vad_target_overlap_ms": sensitive_overlap_ms,
                         "sensitive_vad_target_overlaps": sensitive_overlaps,
                     }
@@ -2317,9 +2343,7 @@ class AdaptiveLongFormCoordinator:
         processing_end_ms: int | None = None,
     ) -> tuple[TranscriptionResult, dict]:
         if source_digest is not None and source_binding is not None:
-            raise TranscriptionError(
-                "source_digest and source_binding are mutually exclusive"
-            )
+            raise TranscriptionError("source_digest and source_binding are mutually exclusive")
         if source_binding is None:
             source_binding = create_source_binding(
                 media,
@@ -2383,9 +2407,7 @@ class AdaptiveLongFormCoordinator:
             if verification_executor is not None:
                 verification_executor.shutdown(wait=True)
             self._record_source_integrity_failure(source_binding, exc)
-            raise TranscriptionError(
-                "source integrity verifier could not be started"
-            ) from exc
+            raise TranscriptionError("source integrity verifier could not be started") from exc
         assert verification_executor is not None
         processing_error: BaseException | None = None
         try:
@@ -2494,9 +2516,7 @@ class AdaptiveLongFormCoordinator:
                             "manifest_sha256": manifest_sha256,
                             "chunk": chunk.to_dict(),
                             "extracted_audio_sha256": extracted_audio_sha256,
-                            "checkpoint_document_sha256": _document_sha256(
-                                checkpoint_document
-                            ),
+                            "checkpoint_document_sha256": _document_sha256(checkpoint_document),
                         }
                     )
                     _atomic_json(checkpoint, checkpoint_document)
@@ -2537,7 +2557,9 @@ class AdaptiveLongFormCoordinator:
                     "channel_preservation": "all-streams-merged-with-discrete-channels-v1",
                 },
             )
-            quality = evaluate_transcript_quality(result, expected_duration_ms=effective_duration_ms)
+            quality = evaluate_transcript_quality(
+                result, expected_duration_ms=effective_duration_ms
+            )
             if any(issue.code == "large_unexplained_gaps" for issue in quality.issues):
                 quality = evaluate_transcript_quality(
                     result,

@@ -164,6 +164,10 @@ cannot manufacture cross-channel corroboration. Broad FFT denoising and aggressi
 expansion are intentionally excluded. The conservative normalization candidate also failed its
 promotion loop: under identical beam-5 settings it reduced turbo accuracy from 57.58% to 48.48%
 and full-large-v3 accuracy from 58.59% to 47.47% on 26 human-corrected difficult lesson spans.
+Because processed candidates cannot alter a qualifying raw consensus under this promotion rule,
+the coordinator now stops audio escalation as soon as raw primary/independent consensus passes.
+The receipt records every skipped candidate and scheduled decode. If raw consensus is absent,
+all configured processed candidates still run and retain the same rescue and disagreement gates.
 
 Sparse-speech repair adds a semantic speech-region stage before re-decoding. The production
 Gigabyte provider is the local Silero VAD already bundled with Faster-Whisper, so it needs no

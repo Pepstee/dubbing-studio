@@ -70,7 +70,9 @@ Alternate downmix and per-channel WAVs exist only inside a failed-span retry wor
 experimental speech-normalized policy is implemented but disabled after a failed benchmark.
 Candidate source and output hashes plus processing graph are
 recorded. Raw cross-model consensus has precedence; processed evidence requires two-model
-agreement and conflicting processed consensuses remain uncertain.
+agreement and conflicting processed consensuses remain uncertain. A qualifying raw consensus
+short-circuits processed-audio escalation because those candidates cannot change the selected
+verdict; the receipt preserves which scheduled decodes were skipped.
 
 Review edits regenerate the canonical JSON, plain-text and SRT projections.
 Editing source text invalidates word-level text evidence for that segment and
