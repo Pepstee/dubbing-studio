@@ -394,6 +394,97 @@ def test_source_boundary_clips_crossing_segment_for_quality(tmp_path):
     assert report["quality"]["metrics"]["duration_ms"] == 500
 
 
+def test_source_boundary_preserves_hash_bound_explained_silence(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {
+            **entry["source"],
+            "duration_ms": 150_000,
+            "evaluation_end_ms": 140_000,
+            "processing_end_ms": 140_000,
+        },
+    }
+    result = TranscriptionResult(
+        segments=(
+            TranscriptSegment(0, 10_000, "hello привет", language="mixed"),
+            TranscriptSegment(130_000, 140_000, "goodbye пока", language="mixed"),
+        ),
+        text="hello привет goodbye пока",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="mixed",
+        duration_ms=140_000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+    full_quality = {
+        "status": "PASS",
+        "metrics": {
+            "explained_silence_gaps": [
+                    {"start_ms": 10_000, "end_ms": 130_000, "silence_ratio": 1.0}
+            ]
+        },
+    }
+
+    report = evaluate_canary_result(
+        entry,
+        result.to_dict(),
+        full_quality,
+        runtime_seconds=1.0,
+        policy={"maximum_realtime_factor": 0.25},
+        execution_fingerprint="frozen",
+    )
+
+    assert report["operational_gate"]["status"] == "PASS"
+    assert report["quality"]["status"] == "PASS"
+    assert report["quality"]["metrics"]["explained_silence_gap_count"] == 1
+    assert report["evaluation_scope"]["known_silence_interval_count"] == 1
+    assert (
+        report["evaluation_scope"]["known_silence_source"]
+        == "FULL_QUALITY_EXPLAINED_SILENCE_GAPS"
+    )
+
+
+def test_source_boundary_rejects_malformed_explained_silence(tmp_path):
+    manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
+    entry = validate_canary_bindings(manifest_path, manifest)[0]
+    entry = {
+        **entry,
+        "source": {**entry["source"], "evaluation_end_ms": 500},
+    }
+    result = TranscriptionResult(
+        segments=(TranscriptSegment(0, 500, "hello", language="en"),),
+        text="hello",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=1000,
+        confidence_available=False,
+        source_sha256=entry["source"]["sha256"],
+    )
+
+    with pytest.raises(ValueError, match="invalid timestamps"):
+        evaluate_canary_result(
+            entry,
+            result.to_dict(),
+            {
+                "status": "PASS",
+                "metrics": {
+                    "explained_silence_gaps": [
+                        {"start_ms": True, "end_ms": 400, "silence_ratio": 1.0}
+                    ]
+                },
+            },
+            runtime_seconds=0.1,
+            policy={},
+            execution_fingerprint="frozen",
+        )
+
+
 def test_processing_cap_binds_result_scope_and_realtime_factor(tmp_path):
     manifest_path, manifest = load_canary_manifest(_manifest(tmp_path))
     entry = validate_canary_bindings(manifest_path, manifest)[0]

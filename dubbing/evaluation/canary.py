@@ -926,6 +926,39 @@ def _result_scoped_to_end(result, evaluation_end_ms: int):
     return scoped, observation
 
 
+def _scoped_known_silence_intervals(
+    quality: dict,
+    evaluation_end_ms: int,
+) -> tuple[tuple[int, int], ...]:
+    metrics = quality.get("metrics", {})
+    if not isinstance(metrics, dict):
+        raise ValueError("full quality metrics must be an object")
+    raw_intervals = metrics.get("explained_silence_gaps", [])
+    if not isinstance(raw_intervals, list):
+        raise ValueError("full quality explained_silence_gaps must be a list")
+    intervals: list[tuple[int, int]] = []
+    for index, item in enumerate(raw_intervals):
+        if not isinstance(item, dict):
+            raise ValueError(f"full quality explained_silence_gaps[{index}] must be an object")
+        start_ms = item.get("start_ms")
+        end_ms = item.get("end_ms")
+        if (
+            isinstance(start_ms, bool)
+            or not isinstance(start_ms, int)
+            or isinstance(end_ms, bool)
+            or not isinstance(end_ms, int)
+            or start_ms < 0
+            or end_ms <= start_ms
+        ):
+            raise ValueError(
+                f"full quality explained_silence_gaps[{index}] has invalid timestamps"
+            )
+        if start_ms >= evaluation_end_ms:
+            continue
+        intervals.append((start_ms, min(end_ms, evaluation_end_ms)))
+    return tuple(intervals)
+
+
 def evaluate_canary_result(
     entry: dict,
     result_document: dict,
@@ -946,11 +979,15 @@ def evaluate_canary_result(
     evaluation_end_ms = entry["source"].get("evaluation_end_ms")
     if evaluation_end_ms is not None:
         result, out_of_scope_observation = _result_scoped_to_end(full_result, evaluation_end_ms)
+        scoped_known_silence = _scoped_known_silence_intervals(quality, evaluation_end_ms)
         operational_quality = evaluate_transcript_quality(
-            result, expected_duration_ms=evaluation_end_ms
+            result,
+            expected_duration_ms=evaluation_end_ms,
+            known_silence_intervals=scoped_known_silence,
         ).to_dict()
     else:
         result = full_result
+        scoped_known_silence = ()
         operational_quality = quality
         out_of_scope_observation = {
             "used_for_operational_gate": False,
@@ -1047,6 +1084,12 @@ def evaluate_canary_result(
             "evaluation_end_ms": evaluation_end_ms,
             "source_duration_ms": entry["source"]["duration_ms"],
             "operational_quality_recomputed": evaluation_end_ms is not None,
+            "known_silence_interval_count": len(scoped_known_silence),
+            "known_silence_source": (
+                "FULL_QUALITY_EXPLAINED_SILENCE_GAPS"
+                if evaluation_end_ms is not None
+                else "NOT_APPLICABLE"
+            ),
             "full_result_preserved": True,
             "full_quality_report_preserved": True,
         },
