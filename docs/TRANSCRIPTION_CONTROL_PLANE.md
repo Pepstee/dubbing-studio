@@ -124,16 +124,21 @@ production evidence insufficient, even when its scoped benchmark passes.
 
 Observed repetitions such as `Loops` ×109, `tree` ×23, `second` ×16, `Mm-hmm` ×20 and
 `됐다` ×33 are adversarial regression tests. Scattered legitimate duplicate replies do not
-count as a loop. Quality policy v3 maps normalized tokens back to source segments, searches
+count as a loop. Quality policy v6 maps normalized tokens back to source segments, searches
 primitive repeated phrases up to 20 tokens, and emits exact failure timestamps for targeted
 retry. Length-sensitive thresholds allow six short conversational acknowledgements while
 still rejecting eight identical tokens, six short phrases, or four longer phrases covering
 at least 24 repeated tokens. The observed seven-token `I don't know what to do` decoder loop
 is a permanent regression fixture.
-Quality policy v3 also rejects known multilingual Whisper outro/subtitle boilerplate when the
+Quality policy v6 also rejects known multilingual Whisper outro/subtitle boilerplate when the
 decoder simultaneously reports a no-speech probability of at least 0.6. This catches shared
 training-data hallucinations that can appear identically in two Whisper-family models without
 rejecting the same ordinary phrase when speech evidence is strong.
+The same policy treats any turn dominated by an alphabetic script outside English, Russian,
+Romanian or Korean as a critical script/language mismatch, even if a decoder labels it English.
+This specifically prevents Japanese subtitle-style hallucinations such as
+`ご視聴ありがとうございました` from remaining clean text in an English/Russian recording. The turn
+is marked uncertain before repair, retains exact timestamps, and cannot reach approval or GIGA.
 
 Production targeted repair uses two pinned, local models. `large-v3-turbo` remains the fast
 primary decoder; full `large-v3` is loaded lazily only for rejected 20–60 second spans. The

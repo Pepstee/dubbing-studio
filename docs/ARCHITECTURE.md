@@ -44,6 +44,7 @@ hidden .partial transfer
 → SHA-256 claim in SQLite
 → free-space and duration gates
 → automatic media probe and silence-aware adaptive ASR chunks
+→ per-turn supported-script/language admission
 → all-stream/discrete-channel preservation
 → bounded overlap reconciliation and failed-span-only retries
 → raw-first, independently corroborated channel/enhancement candidates for rejected spans

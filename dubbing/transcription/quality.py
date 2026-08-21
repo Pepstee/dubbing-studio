@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
+from dubbing.transcription.language import has_dominant_unsupported_script
 from dubbing.transcription.models import TranscriptSegment, TranscriptionResult
 
 
-QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v5"
+QUALITY_POLICY_VERSION = "dubbing.transcript-quality-policy.v6"
 
 
 class TranscriptQualityStatus(str, Enum):
@@ -632,6 +633,25 @@ def evaluate_transcript_quality(
 
     uncertain_count = sum(segment.uncertain for segment in segments)
     script_counts = _script_counts(transcript.text)
+    unsupported_script_segment_count = 0
+    for index, segment in enumerate(segments):
+        if not has_dominant_unsupported_script(segment.text):
+            continue
+        unsupported_script_segment_count += 1
+        issues.append(
+            QualityIssue(
+                "unsupported_script_language_mismatch",
+                "critical",
+                "A turn is dominated by a script outside the supported language set.",
+                start_ms=segment.start_ms,
+                end_ms=segment.end_ms,
+                evidence={
+                    "segment_index": index,
+                    "declared_language": segment.language,
+                    "script_counts": _script_counts(segment.text),
+                },
+            )
+        )
     expected_language = transcript.language
     if expected_language in {"ru"} and script_counts["latin"] > 4 * max(1, script_counts["cyrillic"]):
         issues.append(
@@ -718,5 +738,6 @@ def evaluate_transcript_quality(
             ],
             "uncertain_segment_count": uncertain_count,
             "script_counts": script_counts,
+            "unsupported_script_segment_count": unsupported_script_segment_count,
         },
     )

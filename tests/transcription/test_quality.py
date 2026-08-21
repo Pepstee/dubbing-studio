@@ -116,6 +116,44 @@ def test_uncertain_span_is_not_approval_ready():
     assert TranscriptQualityReport.from_dict(report.to_dict()) == report
 
 
+@pytest.mark.parametrize(
+    "text",
+    (
+        "おやすみなさい。",
+        "ご視聴ありがとうございました",
+    ),
+)
+def test_unsupported_script_turn_fails_closed_even_when_declared_english(text):
+    segment = TranscriptSegment(0, 2_000, text, language="en")
+
+    report = evaluate_transcript_quality(_result(text, (segment,)))
+
+    issue = next(
+        item
+        for item in report.issues
+        if item.code == "unsupported_script_language_mismatch"
+    )
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert report.approval_allowed is False
+    assert issue.start_ms == 0
+    assert issue.end_ms == 2_000
+    assert issue.evidence["declared_language"] == "en"
+    assert issue.evidence["script_counts"]["other"] >= 2
+    assert report.metrics["unsupported_script_segment_count"] == 1
+
+
+def test_supported_text_with_one_foreign_name_character_is_not_rejected():
+    text = "The name is 李"
+    segment = TranscriptSegment(0, 2_000, text, language="en")
+
+    report = evaluate_transcript_quality(_result(text, (segment,)))
+
+    assert "unsupported_script_language_mismatch" not in {
+        item.code for item in report.issues
+    }
+    assert report.metrics["unsupported_script_segment_count"] == 0
+
+
 def test_empty_output_is_failed():
     report = evaluate_transcript_quality(_result("", ()))
     assert report.status is TranscriptQualityStatus.FAILED

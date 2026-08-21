@@ -1693,6 +1693,41 @@ def test_failed_text_language_only_prioritizes_and_never_limits_retry_languages(
     )
 
 
+def test_unsupported_japanese_script_is_never_clean_in_english_result():
+    from dubbing.transcription.language import annotate_transcript_languages
+    from dubbing.transcription.quality import (
+        TranscriptQualityStatus,
+        evaluate_transcript_quality,
+    )
+
+    result = TranscriptionResult(
+        segments=(
+            TranscriptSegment(
+                0,
+                10_000,
+                "ご視聴ありがとうございました",
+                language="en",
+            ),
+        ),
+        text="ご視聴ありがとうございました",
+        backend="fixture",
+        model="fixture",
+        device="test",
+        language="en",
+        duration_ms=10_000,
+        confidence_available=False,
+    )
+
+    annotated = annotate_transcript_languages(result)
+    report = evaluate_transcript_quality(annotated, expected_duration_ms=10_000)
+
+    assert annotated.segments[0].uncertain is True
+    assert report.status is TranscriptQualityStatus.REPROCESS_REQUIRED
+    assert "unsupported_script_language_mismatch" in {
+        item.code for item in report.issues
+    }
+
+
 def test_targeted_retry_microdecodes_regions_and_marks_long_uncovered_intervals(tmp_path):
     class _Detector:
         identity = "fixture:speech-regions"

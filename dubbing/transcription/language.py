@@ -26,6 +26,20 @@ def script_evidence(text: str) -> dict[str, int]:
     return counts
 
 
+def has_dominant_unsupported_script(text: str) -> bool:
+    """Return whether unsupported alphabetic script dominates a turn.
+
+    ``other`` deliberately excludes punctuation and emoji because ``script_evidence``
+    counts alphabetic characters only. Requiring at least two unsupported letters
+    avoids turning isolated names or symbols inside otherwise supported speech into a
+    whole-turn failure.
+    """
+
+    evidence = script_evidence(text)
+    supported = evidence["latin"] + evidence["cyrillic"] + evidence["hangul"]
+    return evidence["other"] >= 2 and evidence["other"] > supported
+
+
 def annotate_turn_language(
     segment: TranscriptSegment,
     *,
@@ -58,7 +72,12 @@ def annotate_turn_language(
         and scripted_language != language
         and scripted_language in {"ru", "ro", "ko"}
     )
-    uncertain = segment.uncertain or mismatch or language not in SUPPORTED_LANGUAGES
+    uncertain = (
+        segment.uncertain
+        or mismatch
+        or language not in SUPPORTED_LANGUAGES
+        or has_dominant_unsupported_script(segment.text)
+    )
     if confidence is not None and confidence < 0.6:
         uncertain = True
     return replace(

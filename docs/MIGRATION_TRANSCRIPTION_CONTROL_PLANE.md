@@ -23,7 +23,9 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 3. The official WhisperKit local-server backend and adaptive resumable coordinator were
    added. The server process persists across chunks.
 4. Turn-level script/language consistency checks and targeted forced-language retries were
-   added. Unresolved Latin-script ambiguity remains uncertain rather than being guessed.
+   added. Unresolved Latin-script ambiguity remains uncertain rather than being guessed, and a
+   turn dominated by an unsupported alphabetic script now fails closed even when the decoder
+   incorrectly labels it English.
 5. pyannote Community-1, optional Precision-2, consented voiceprint identity and DER/JER/
    speaker-attributed-WER boundaries were added without downloading gated models.
 6. Optional cloud ASR adapters were added behind explicit per-recording authorization and
