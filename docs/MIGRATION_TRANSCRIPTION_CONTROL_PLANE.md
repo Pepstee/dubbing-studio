@@ -25,7 +25,8 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
 4. Turn-level script/language consistency checks and targeted forced-language retries were
    added. Unresolved Latin-script ambiguity remains uncertain rather than being guessed, and a
    turn dominated by an unsupported alphabetic script now fails closed even when the decoder
-   incorrectly labels it English.
+   incorrectly labels it English. Unsupported-script turns are quarantined with source-time and
+   original-text hash evidence without launching the expensive local retry matrix.
 5. pyannote Community-1, optional Precision-2, consented voiceprint identity and DER/JER/
    speaker-attributed-WER boundaries were added without downloading gated models.
 6. Optional cloud ASR adapters were added behind explicit per-recording authorization and

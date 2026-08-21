@@ -25,7 +25,11 @@ from dubbing.transcription.job import (
     validate_source_binding,
     verify_source_binding,
 )
-from dubbing.transcription.language import annotate_transcript_languages, script_evidence
+from dubbing.transcription.language import (
+    annotate_transcript_languages,
+    has_dominant_unsupported_script,
+    script_evidence,
+)
 from dubbing.transcription.models import (
     TranscriptSegment,
     TranscriptionError,
@@ -45,6 +49,7 @@ from dubbing.transcription.speech_regions import SpeechRegionDetector
 _FAILED_SPAN_TEXT = "[UNCERTAIN: LOCAL TRANSCRIPTION FAILED]"
 _DISAGREEMENT_SPAN_TEXT = "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
 _UNISOLATED_SPAN_TEXT = "[UNCERTAIN: SPEECH REGION NOT ISOLATED]"
+_UNSUPPORTED_SCRIPT_TEXT = "[UNCERTAIN: UNSUPPORTED SCRIPT]"
 _TARGET_RETRY_MIN_MS = 20_000
 _TARGET_RETRY_TARGET_MS = 45_000
 _TARGET_RETRY_MAX_MS = 60_000
@@ -60,11 +65,12 @@ _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
 _UNCERTAIN_TURN_SILENCE_POLICY = (
     "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
 )
-_COORDINATOR_VERSION = "adaptive-long-form-v23"
+_COORDINATOR_VERSION = "adaptive-long-form-v24"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _NEAR_SILENCE_ADMISSION_POLICY = "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
 _AUDIO_BOUNDS_POLICY = "drop-wholly-outside-clamp-overlap-v1"
+_UNSUPPORTED_SCRIPT_POLICY = "quarantine-without-local-brute-force-v1"
 _SOURCE_INTEGRITY_POLICY = "trusted-binding-plus-concurrent-full-rehash-v1"
 
 
@@ -828,6 +834,10 @@ class AdaptiveLongFormCoordinator:
                 else None
             ),
             "candidate_languages": list(self.candidate_languages),
+            "unsupported_script_admission": {
+                "policy": _UNSUPPORTED_SCRIPT_POLICY,
+                "replacement_text": _UNSUPPORTED_SCRIPT_TEXT,
+            },
             "audio_candidates": {
                 "policies": list(self.audio_candidate_policies),
                 "maximum_channels": self.maximum_audio_candidate_channels,
@@ -1801,6 +1811,7 @@ class AdaptiveLongFormCoordinator:
                     "targeted_retry_exhausted": False,
                 }
         result = annotate_transcript_languages(self.backend.transcribe(audio, options))
+        result = self._quarantine_unsupported_script_turns(result, attempts)
         raw_quality = evaluate_transcript_quality(result, expected_duration_ms=duration_ms)
         result = self._enforce_audio_bounds(result, duration_ms, raw_quality, attempts)
         confirmed_silence = self._confirm_near_silence_after_empty_asr(
@@ -1945,6 +1956,61 @@ class AdaptiveLongFormCoordinator:
                 "total_uncovered_ms": total_uncovered_ms,
                 "maximum_uncovered_gap_ms": maximum_uncovered_gap_ms,
                 "silence_verification_detector": plan.detector_identity,
+            },
+        )
+
+    @staticmethod
+    def _quarantine_unsupported_script_turns(
+        result: TranscriptionResult,
+        attempts: list[dict],
+    ) -> TranscriptionResult:
+        """Keep unsupported-script evidence without spending another ASR matrix."""
+
+        segments: list[TranscriptSegment] = []
+        quarantine_count = 0
+        for segment_index, segment in enumerate(result.segments):
+            if not has_dominant_unsupported_script(segment.text):
+                segments.append(segment)
+                continue
+            quarantine_count += 1
+            attempts.append(
+                {
+                    "kind": "unsupported-script-quarantine",
+                    "status": "QUARANTINED_UNSUPPORTED_SCRIPT",
+                    "policy": _UNSUPPORTED_SCRIPT_POLICY,
+                    "segment_index": segment_index,
+                    "source_start_ms": segment.start_ms,
+                    "source_end_ms": segment.end_ms,
+                    "declared_language": segment.language,
+                    "script_evidence": script_evidence(segment.text),
+                    "original_text": segment.text,
+                    "original_text_sha256": hashlib.sha256(
+                        segment.text.encode("utf-8")
+                    ).hexdigest(),
+                    "replacement_text": _UNSUPPORTED_SCRIPT_TEXT,
+                    "selected": False,
+                }
+            )
+            segments.append(
+                replace(
+                    segment,
+                    text=_UNSUPPORTED_SCRIPT_TEXT,
+                    language=None,
+                    language_confidence=None,
+                    uncertain=True,
+                    words=(),
+                )
+            )
+        if not quarantine_count:
+            return result
+        return replace(
+            result,
+            segments=tuple(segments),
+            text=" ".join(segment.text for segment in segments),
+            provenance={
+                **(result.provenance or {}),
+                "unsupported_script_admission_policy": _UNSUPPORTED_SCRIPT_POLICY,
+                "unsupported_script_quarantine_count": quarantine_count,
             },
         )
 

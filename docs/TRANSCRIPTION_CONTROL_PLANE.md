@@ -138,7 +138,10 @@ The same policy treats any turn dominated by an alphabetic script outside Englis
 Romanian or Korean as a critical script/language mismatch, even if a decoder labels it English.
 This specifically prevents Japanese subtitle-style hallucinations such as
 `ご視聴ありがとうございました` from remaining clean text in an English/Russian recording. The turn
-is marked uncertain before repair, retains exact timestamps, and cannot reach approval or GIGA.
+is replaced by an explicit unsupported-script uncertainty marker, retains exact timestamps and
+the original text plus hash in the local receipt, and cannot reach approval or GIGA. This class
+of evidence bypasses the local language/channel brute-force matrix: the next useful tier is cloud
+or human adjudication, not asking the same local Whisper-family models dozens more times.
 
 Production targeted repair uses two pinned, local models. `large-v3-turbo` remains the fast
 primary decoder; full `large-v3` is loaded lazily only for rejected 20–60 second spans. The

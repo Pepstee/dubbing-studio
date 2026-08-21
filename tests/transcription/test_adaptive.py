@@ -1728,6 +1728,70 @@ def test_unsupported_japanese_script_is_never_clean_in_english_result():
     }
 
 
+def test_adaptive_quarantines_unsupported_script_without_local_brute_force(tmp_path):
+    class _JapaneseHallucinationBackend(TranscriptionBackend):
+        calls = 0
+
+        @property
+        def identity(self):
+            return "fixture:japanese-hallucination"
+
+        def transcribe(self, audio, options=None):
+            self.calls += 1
+            return TranscriptionResult(
+                segments=(
+                    TranscriptSegment(
+                        10_000,
+                        20_000,
+                        "ご視聴ありがとうございました",
+                        language="en",
+                    ),
+                ),
+                text="ご視聴ありがとうございました",
+                backend="fixture",
+                model="fixture",
+                device="test",
+                language="en",
+                duration_ms=60_000,
+                confidence_available=False,
+            )
+
+    backend = _JapaneseHallucinationBackend()
+    retry = _IndependentBackend()
+    coordinator = AdaptiveLongFormCoordinator(
+        backend,
+        tmp_path / "job",
+        retry_backend=retry,
+    )
+    audio = tmp_path / "chunk.wav"
+    audio.write_bytes(b"music tail")
+
+    result, receipt = coordinator._decode_chunk(
+        audio,
+        AdaptiveChunk(0, 0, 60_000, 0, 60_000, "fixture"),
+        TranscriptionOptions(),
+    )
+
+    assert backend.calls == 1
+    assert retry.calls == 0
+    assert [(item.text, item.language, item.uncertain, item.words) for item in result.segments] == [
+        ("[UNCERTAIN: UNSUPPORTED SCRIPT]", None, True, ())
+    ]
+    assert result.provenance["unsupported_script_quarantine_count"] == 1
+    quarantine = next(
+        item for item in receipt["attempts"] if item["kind"] == "unsupported-script-quarantine"
+    )
+    assert quarantine["status"] == "QUARANTINED_UNSUPPORTED_SCRIPT"
+    assert quarantine["original_text"] == "ご視聴ありがとうございました"
+    assert quarantine["original_text_sha256"] == hashlib.sha256(
+        quarantine["original_text"].encode("utf-8")
+    ).hexdigest()
+    assert not any(
+        item["kind"] == "targeted-span-redecode" for item in receipt["attempts"]
+    )
+    assert receipt["targeted_retry_exhausted"] is False
+
+
 def test_targeted_retry_microdecodes_regions_and_marks_long_uncovered_intervals(tmp_path):
     class _Detector:
         identity = "fixture:speech-regions"
