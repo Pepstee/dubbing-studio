@@ -146,6 +146,34 @@ def test_manifest_binds_every_source_and_reference(tmp_path):
         validate_canary_bindings(manifest_path, manifest)
 
 
+def test_reference_free_entry_reports_operational_evidence_without_invented_accuracy(
+    tmp_path, monkeypatch
+):
+    manifest = _manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["entries"][1]["reference"] = None
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    summary = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+    report = json.loads((output / "lesson-1" / "canary-report.json").read_text())
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+
+    assert summary["completed_entries"] == ["lesson-0", "lesson-1"]
+    assert report["operational_gate"]["status"] == "PASS"
+    assert report["reference_sha256"] is None
+    assert report["reference_kind"] is None
+    assert report["provisional_reference_metrics"] is None
+    assert report["provisional_reference_comparison_scope"]["reference_scope"] == "NOT_AVAILABLE"
+    assert report["agreement_observation"]["status"] == "NOT_MEASURED"
+    assert report["agreement_observation"]["accuracy_certified"] is False
+    frozen_entry = next(item for item in frozen["corpus"]["entries"] if item["id"] == "lesson-1")
+    assert frozen_entry["reference_sha256"] is None
+    assert frozen_entry["reference_kind"] is None
+
+
 def test_run_passes_exact_validated_source_binding_to_coordinator(tmp_path, monkeypatch):
     manifest = _manifest(tmp_path)
     output = tmp_path / "output"
@@ -572,7 +600,7 @@ def test_processing_cap_rejects_result_that_contains_source_tail(tmp_path):
     assert "RESULT_PROCESSING_SCOPE_MISMATCH" in report["operational_gate"]["failure_reasons"]
 
 
-def test_holdout_requires_valid_development_pass_receipt(tmp_path, monkeypatch):
+def test_holdout_requires_valid_development_measurement_receipt(tmp_path, monkeypatch):
     manifest = _manifest(tmp_path)
     output = tmp_path / "output"
     _install_fake_coordinator(monkeypatch)
@@ -585,6 +613,20 @@ def test_holdout_requires_valid_development_pass_receipt(tmp_path, monkeypatch):
     holdout = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
     assert holdout["completed_entries"] == ["lesson-0", "lesson-1"]
     assert holdout["missing_entries"] == ["lesson-2"]
+
+
+def test_uncertain_but_structurally_safe_development_unlocks_holdout(tmp_path, monkeypatch):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch, quality_status="PASS_WITH_UNCERTAIN_SPANS")
+
+    development = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    assert development["status"] == "FAIL"
+    holdout = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+
+    assert holdout["completed_entries"] == ["lesson-0", "lesson-1"]
+    assert holdout["operational_failures"] == ["lesson-0", "lesson-1"]
+    assert holdout["giga_admission_allowed"] is False
 
 
 def test_full_selection_runs_development_before_later_roles(tmp_path, monkeypatch):
@@ -606,7 +648,7 @@ def test_failed_development_blocks_later_roles(tmp_path, monkeypatch):
     summary = run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
     assert summary["status"] == "FAIL"
 
-    with pytest.raises(ValueError, match="did not PASS"):
+    with pytest.raises(ValueError, match="not measurement-safe"):
         run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
 
 

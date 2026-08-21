@@ -295,14 +295,25 @@ def _validate_entry_contract(entry: dict) -> None:
     entry_id = entry.get("id", "<unknown>")
     if entry.get("role") not in _ROLES:
         raise ValueError(f"{entry_id} has an unsupported role")
-    for key in ("source", "reference"):
-        item = entry.get(key)
-        if not isinstance(item, dict) or not item.get("path") or not item.get("sha256"):
-            raise ValueError(f"{entry_id} {key} binding is incomplete")
-        if not isinstance(item["path"], str):
-            raise ValueError(f"{entry_id} {key} path must be a string")
-        if not isinstance(item["sha256"], str) or not _SHA256.fullmatch(item["sha256"]):
-            raise ValueError(f"{entry_id} {key} SHA-256 is malformed")
+    source = entry.get("source")
+    if not isinstance(source, dict) or not source.get("path") or not source.get("sha256"):
+        raise ValueError(f"{entry_id} source binding is incomplete")
+    if not isinstance(source["path"], str):
+        raise ValueError(f"{entry_id} source path must be a string")
+    if not isinstance(source["sha256"], str) or not _SHA256.fullmatch(source["sha256"]):
+        raise ValueError(f"{entry_id} source SHA-256 is malformed")
+    reference = entry.get("reference")
+    if reference is not None:
+        if not isinstance(reference, dict) or not reference.get("path") or not reference.get(
+            "sha256"
+        ):
+            raise ValueError(f"{entry_id} reference binding is incomplete")
+        if not isinstance(reference["path"], str):
+            raise ValueError(f"{entry_id} reference path must be a string")
+        if not isinstance(reference["sha256"], str) or not _SHA256.fullmatch(
+            reference["sha256"]
+        ):
+            raise ValueError(f"{entry_id} reference SHA-256 is malformed")
     duration_ms = entry["source"].get("duration_ms")
     if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or duration_ms <= 0:
         raise ValueError(f"{entry_id} source duration_ms must be a positive integer")
@@ -332,12 +343,13 @@ def _validate_entry_contract(entry: dict) -> None:
         and evaluation_end_ms > processing_end_ms
     ):
         raise ValueError(f"{entry_id} source evaluation_end_ms must not exceed processing_end_ms")
-    reference_kind = entry["reference"].get("kind")
-    if not isinstance(reference_kind, str) or not reference_kind.strip():
-        raise ValueError(f"{entry_id} reference kind is required")
-    human_ground_truth = entry["reference"].get("human_ground_truth", False)
-    if not isinstance(human_ground_truth, bool):
-        raise ValueError(f"{entry_id} reference human_ground_truth must be boolean")
+    if reference is not None:
+        reference_kind = reference.get("kind")
+        if not isinstance(reference_kind, str) or not reference_kind.strip():
+            raise ValueError(f"{entry_id} reference kind is required")
+        human_ground_truth = reference.get("human_ground_truth", False)
+        if not isinstance(human_ground_truth, bool):
+            raise ValueError(f"{entry_id} reference human_ground_truth must be boolean")
 
 
 def load_canary_manifest(path: str | Path) -> tuple[Path, dict]:
@@ -387,6 +399,9 @@ def validate_canary_bindings(
         resolved = dict(entry)
         for key in ("source", "reference"):
             item = entry.get(key)
+            if item is None:
+                resolved[key] = None
+                continue
             path = _resolve(root, item["path"])
             if not path.is_file():
                 raise ValueError(f"{entry['id']} {key} is missing: {path}")
@@ -419,8 +434,12 @@ def _corpus_binding(manifest: dict) -> tuple[dict, str]:
                 "source_duration_ms": entry["source"]["duration_ms"],
                 "source_evaluation_end_ms": entry["source"].get("evaluation_end_ms"),
                 "source_processing_end_ms": entry["source"].get("processing_end_ms"),
-                "reference_sha256": entry["reference"]["sha256"],
-                "reference_kind": entry["reference"]["kind"],
+                "reference_sha256": (
+                    entry["reference"]["sha256"] if entry.get("reference") else None
+                ),
+                "reference_kind": (
+                    entry["reference"]["kind"] if entry.get("reference") else None
+                ),
             }
             for entry in manifest["entries"]
         ],
@@ -827,12 +846,13 @@ def _validate_receipt(
 
 def _validate_report(path: Path, entry: dict, fingerprint: str) -> dict:
     report = _load_json_object(path, "canary report")
+    reference = entry.get("reference")
     expected = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "entry_id": entry["id"],
         "role": entry["role"],
         "source_sha256": entry["source"]["sha256"],
-        "reference_sha256": entry["reference"]["sha256"],
+        "reference_sha256": reference["sha256"] if reference else None,
         "execution_fingerprint_sha256": fingerprint,
         "giga_admission_allowed": False,
     }
@@ -857,7 +877,19 @@ def _validate_report(path: Path, entry: dict, fingerprint: str) -> dict:
     return report
 
 
-def _require_development_pass(output: Path, entries: tuple[dict, ...], fingerprint: str) -> None:
+_MEASUREMENT_ONLY_FAILURE_REASONS = frozenset(
+    {
+        "QUALITY_PASS_WITH_UNCERTAIN_SPANS",
+        "RUNTIME_FACTOR_EXCEEDED",
+    }
+)
+
+
+def _require_development_safe_for_measurement(
+    output: Path,
+    entries: tuple[dict, ...],
+    fingerprint: str,
+) -> None:
     development = [entry for entry in entries if entry["role"] == "development"]
     if not development:
         raise ValueError("frozen corpus has no development entry")
@@ -865,10 +897,21 @@ def _require_development_pass(output: Path, entries: tuple[dict, ...], fingerpri
         entry_output = output / entry["id"]
         receipt = _validate_receipt(entry_output / "canary-run-receipt.json", entry, fingerprint)
         report = _validate_report(entry_output / "canary-report.json", entry, fingerprint)
-        if not report["operational_gate"]["passed"]:
-            raise ValueError(f"development canary {entry['id']} did not PASS")
         if receipt.get("origin") != "LOCAL_TRANSCRIPTION":
             raise ValueError(f"development canary {entry['id']} lacks a transcription receipt")
+        if receipt.get("cloud_allowed") is not False or receipt.get("giga_admission_allowed") is not False:
+            raise ValueError(f"development canary {entry['id']} is not measurement-safe")
+        gate = report["operational_gate"]
+        failure_reasons = gate.get("failure_reasons", [])
+        if not isinstance(failure_reasons, list) or not all(
+            isinstance(reason, str) for reason in failure_reasons
+        ):
+            raise ValueError(f"development canary {entry['id']} has malformed gate reasons")
+        unexpected_reasons = set(failure_reasons) - _MEASUREMENT_ONLY_FAILURE_REASONS
+        quality = report.get("quality")
+        quality_status = quality.get("status") if isinstance(quality, dict) else None
+        if unexpected_reasons or quality_status not in {"PASS", "PASS_WITH_UNCERTAIN_SPANS"}:
+            raise ValueError(f"development canary {entry['id']} is not measurement-safe")
 
 
 def _result_scoped_to_end(result, evaluation_end_ms: int):
@@ -995,8 +1038,6 @@ def evaluate_canary_result(
             "reason": "No source evaluation boundary is configured.",
             "segment_count": 0,
         }
-    reference_path = Path(entry["reference"]["path"])
-    reference_text = reference_path.read_text(encoding="utf-8")
     candidate_segments = tuple(
         TimedText(
             item.start_ms,
@@ -1007,13 +1048,19 @@ def evaluate_canary_result(
         )
         for item in result.segments
     )
-    metrics = evaluate_documents(
-        reference_text,
-        result.text,
-        candidate_segments=candidate_segments,
-        duration_ms=result.duration_ms,
-        window_ms=int(policy.get("window_ms", 60_000)),
-    )
+    reference = entry.get("reference")
+    if reference is not None:
+        reference_path = Path(reference["path"])
+        reference_text = reference_path.read_text(encoding="utf-8")
+        metrics = evaluate_documents(
+            reference_text,
+            result.text,
+            candidate_segments=candidate_segments,
+            duration_ms=result.duration_ms,
+            window_ms=int(policy.get("window_ms", 60_000)),
+        )
+    else:
+        metrics = None
     expected_source = entry["source"]["sha256"]
     reasons = []
     if result.source_sha256 != expected_source:
@@ -1047,19 +1094,20 @@ def evaluate_canary_result(
     full_source_realtime_factor_observation = runtime_seconds / full_source_duration_seconds
     if realtime_factor > float(policy.get("maximum_realtime_factor", 0.25)):
         reasons.append("RUNTIME_FACTOR_EXCEEDED")
-    provisional_wer = float(metrics["wer"]["rate"])
     agreement_warnings = []
-    if provisional_wer > float(policy.get("maximum_provisional_reference_wer", 0.60)):
-        agreement_warnings.append("PROVISIONAL_REFERENCE_DISAGREEMENT_HIGH")
-    if not metrics["time_window_evaluation_available"]:
-        agreement_warnings.append("TIMESTAMPED_REFERENCE_UNAVAILABLE")
+    if metrics is not None:
+        provisional_wer = float(metrics["wer"]["rate"])
+        if provisional_wer > float(policy.get("maximum_provisional_reference_wer", 0.60)):
+            agreement_warnings.append("PROVISIONAL_REFERENCE_DISAGREEMENT_HIGH")
+        if not metrics["time_window_evaluation_available"]:
+            agreement_warnings.append("TIMESTAMPED_REFERENCE_UNAVAILABLE")
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
         "entry_id": entry["id"],
         "role": entry["role"],
         "source_sha256": expected_source,
-        "reference_sha256": entry["reference"]["sha256"],
-        "reference_kind": entry["reference"]["kind"],
+        "reference_sha256": reference["sha256"] if reference else None,
+        "reference_kind": reference["kind"] if reference else None,
         "reference_is_human_ground_truth": False,
         "execution_fingerprint_sha256": execution_fingerprint,
         "evaluation_provenance": evaluation_provenance
@@ -1106,7 +1154,7 @@ def evaluate_canary_result(
         "out_of_scope_observation": out_of_scope_observation,
         "provisional_reference_metrics": metrics,
         "provisional_reference_comparison_scope": {
-            "reference_scope": "WHOLE_UNTIMED_REFERENCE",
+            "reference_scope": "WHOLE_UNTIMED_REFERENCE" if reference else "NOT_AVAILABLE",
             "candidate_scope": (
                 "SOURCE_TIME_BOUNDARY" if evaluation_end_ms is not None else "FULL_SOURCE"
             ),
@@ -1119,13 +1167,22 @@ def evaluate_canary_result(
             "failure_reasons": reasons,
         },
         "agreement_observation": {
-            "status": "WARNING" if agreement_warnings else "WITHIN_CANARY_BOUND",
+            "status": (
+                "NOT_MEASURED"
+                if reference is None
+                else ("WARNING" if agreement_warnings else "WITHIN_CANARY_BOUND")
+            ),
             "warnings": agreement_warnings,
             "accuracy_certified": False,
             "limitation": (
-                "MacWhisper text is provisional, untimed and has no speaker labels; "
-                "it cannot be safely trimmed to a source-time boundary. Whole-reference "
-                "WER is observation-only drift evidence, not ground-truth accuracy."
+                "No reference transcript is available; operational quality and runtime are "
+                "measured without inventing accuracy metrics."
+                if reference is None
+                else (
+                    "MacWhisper text is provisional, untimed and has no speaker labels; "
+                    "it cannot be safely trimmed to a source-time boundary. Whole-reference "
+                    "WER is observation-only drift evidence, not ground-truth accuracy."
+                )
             ),
         },
         "diarization_claim": {
@@ -1275,7 +1332,7 @@ def run_canary(
     )
     for entry in entries:
         if entry["role"] != "development":
-            _require_development_pass(output, all_entries, fingerprint)
+            _require_development_safe_for_measurement(output, all_entries, fingerprint)
         entry_output = output / entry["id"]
         result_path = entry_output / "result.json"
         quality_path = entry_output / "quality-report.json"

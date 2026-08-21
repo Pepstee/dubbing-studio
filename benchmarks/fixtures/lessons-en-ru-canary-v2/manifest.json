@@ -1,0 +1,243 @@
+{
+  "schema_version": "dubbing.historical-canary.v1",
+  "canary_id": "lessons-en-ru-canary-v2",
+  "description": "Expanded hash-bound English/Russian real-world lesson corpus from the original Movies files. This is a distinct cohort because v1 is frozen into existing evidence. The known 2026-07-19 misfiled sales call is excluded. References are present only where the source/date mapping is already established; reference-free entries measure operational quality and runtime without inventing accuracy.",
+  "required_languages": [
+    "en",
+    "ru"
+  ],
+  "giga_admission_allowed": false,
+  "execution": {
+    "candidate_languages": [
+      "en",
+      "ru"
+    ],
+    "target_seconds": 240,
+    "minimum_seconds": 60,
+    "maximum_seconds": 480,
+    "overlap_seconds": 2.0,
+    "minimum_silence_seconds": 0.7,
+    "language_retry_policy": {}
+  },
+  "policy": {
+    "allowed_quality_statuses": [
+      "PASS"
+    ],
+    "maximum_realtime_factor": 0.25,
+    "maximum_provisional_reference_wer": 0.60,
+    "window_ms": 60000,
+    "accuracy_claim": false,
+    "diarization_claim": false
+  },
+  "entries": [
+    {
+      "id": "lesson-06",
+      "role": "development",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+        "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+        "duration_ms": 4987833,
+        "evaluation_end_ms": 3400000,
+        "processing_end_ms": 3400000,
+        "size_bytes": 3845699125
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-06.txt",
+        "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "recording-2026-07-06",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-07-06 11-52-51.mov",
+        "sha256": "118d091fa787d17e1eda17d9383bff23e33335acf6a4dee8df4eff7c6b09d8d7",
+        "duration_ms": 3299700,
+        "size_bytes": 2544096916
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-07-07",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-07-07 15-38-27.mov",
+        "sha256": "7aff3203588105b19639ccafe3430d756d6fd7e494f8c32dc7b173d1d47996ba",
+        "duration_ms": 4000900,
+        "size_bytes": 3084743605
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-07-16",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-07-16 11-11-44.mov",
+        "sha256": "a18670193edbb700dbbbed697a7bda6cdf989a6aa0ead33b78e96bac8f45487e",
+        "duration_ms": 5325267,
+        "size_bytes": 4105870445
+      },
+      "reference": null
+    },
+    {
+      "id": "lesson-07",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-03 00-16-59.mov",
+        "sha256": "5657a0783a213b9bff781fd2ce8f3c1d7c1fe987c4968c11f17a7558d3f22c3f",
+        "duration_ms": 3753933,
+        "size_bytes": 2894325130
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-07.txt",
+        "sha256": "244afbe9da519a8b9c5d77c194e423828f25ad7f5959bc16cb470c70cc23af81",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "recording-2026-08-07",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-07 19-07-35.mov",
+        "sha256": "8ab86e9c2de75ff0e500f3f5b4d48531f881ec4be4d0ae821511aa0d6165a5ab",
+        "duration_ms": 4721000,
+        "size_bytes": 3639962599
+      },
+      "reference": null
+    },
+    {
+      "id": "lesson-09",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-10 21-02-00.mov",
+        "sha256": "cd84f5ad37bc96919b10baaea8251f635783dcc05df51f2c75e3dbfb8ab7a1d2",
+        "duration_ms": 3540100,
+        "size_bytes": 2729452975
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-09.txt",
+        "sha256": "3c7e6a1bc835bd4f3087c2ead4605e84d0425031602b844c7ea2c42f88aec625",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "recording-2026-08-11",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-11 21-28-36.mov",
+        "sha256": "cd965648b5b8bed03c426b9d4308de93b6e7285e31cee64f636d4901b2f9fa59",
+        "duration_ms": 3481000,
+        "size_bytes": 2683885391
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-12",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-12 20-13-39.mov",
+        "sha256": "6b9d110785059209603342bbf4e76fe4ca95255e0a0db1ca733147e6f1cb48e2",
+        "duration_ms": 3632433,
+        "size_bytes": 2800644470
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-13",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-13 20-45-24.mov",
+        "sha256": "7172685f09d3237ba558fdce4e58c38dca3f3fc3a36620d27d3a447131a2f6e5",
+        "duration_ms": 4319000,
+        "size_bytes": 3330008740
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-15",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-15 21-33-31.mov",
+        "sha256": "deff8cc472d4df34cbaefd0c273f9158e3ecfb62c4d86b7a3660ca49a40ab2e9",
+        "duration_ms": 3715233,
+        "size_bytes": 2864486100
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-16",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-16 20-12-21.mov",
+        "sha256": "ba6e6ae1fcb1eac64cb8641f53dfa773d4b488dd503d919a6ce5b9f0a243ae46",
+        "duration_ms": 3809533,
+        "size_bytes": 2937194358
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-19-short",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-19 18-35-55.mov",
+        "sha256": "0d2de68fa2edf82aff31763b8ceab5ffa67b6255b1a09763ff59119266a680cc",
+        "duration_ms": 1046167,
+        "size_bytes": 806554902
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-19",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-19 20-01-16.mov",
+        "sha256": "4095eb4bd80f0f8e3c0cc7f44731c133e07057f50b2451137d46dbf41a0d76fd",
+        "duration_ms": 4182733,
+        "size_bytes": 3224942869
+      },
+      "reference": null
+    },
+    {
+      "id": "recording-2026-08-20",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-20 20-06-19.mov",
+        "sha256": "964c65e82d9657d99258be27a868938e87331a753051cd2862417e72fd42a42e",
+        "duration_ms": 4296700,
+        "size_bytes": 3312814477
+      },
+      "reference": null
+    },
+    {
+      "id": "lesson-08",
+      "role": "stress",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-09 22-42-57.mov",
+        "sha256": "01532bf158a83f6e51621ebf1d3067e42eb550fa70a9df2202568ceef508100a",
+        "duration_ms": 14293700,
+        "size_bytes": 11020816961
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-08.txt",
+        "sha256": "e2e14ed76fc64ef8501e99198ec4b8a5cef590f9f56ea3b4c054f067aedea14f",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "recording-2026-08-17",
+      "role": "stress",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-17 23-04-11.mov",
+        "sha256": "714c1c0c44dbe130be0f7bc6227fb3e5fcff05caa9ccb02434f94873adcad71d",
+        "duration_ms": 7834133,
+        "size_bytes": 6040289885
+      },
+      "reference": null
+    }
+  ]
+}

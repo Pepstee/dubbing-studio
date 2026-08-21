@@ -53,6 +53,16 @@ original videos and their provisional MacWhisper transcripts by SHA-256. Lesson 
 development recording, lessons 7 and 9 are untouched holdouts, and lesson 8 is the long-duration
 stress recording. The execution configuration is frozen before a holdout can run.
 
+The expanded v2 corpus at
+`benchmarks/fixtures/lessons-en-ru-canary-v2/manifest.json` preserves that frozen v1 evidence and
+adds every defensibly in-scope lesson recording currently present in `Movies`: 17 source videos
+and 22.289 hours after excluding the July 19 file already documented as a misfiled sales call.
+Thirteen entries deliberately have no reference transcript. They still measure source integrity,
+runtime, structural quality, explicit uncertainty and replay, while reporting accuracy as
+`NOT_MEASURED` instead of manufacturing a comparison. A structurally safe development result with
+explicit uncertain spans may unlock measurement of later frozen entries; it does not become
+approval-eligible, and GIGA admission remains false.
+
 Run the development recording first from the original video:
 
 ```bash
