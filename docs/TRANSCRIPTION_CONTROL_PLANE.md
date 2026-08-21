@@ -168,6 +168,14 @@ Because processed candidates cannot alter a qualifying raw consensus under this 
 the coordinator now stops audio escalation as soon as raw primary/independent consensus passes.
 The receipt records every skipped candidate and scheduled decode. If raw consensus is absent,
 all configured processed candidates still run and retain the same rescue and disagreement gates.
+Targeted local repair is also bounded to 64 model decodes per source chunk. The counter spans
+all rejected intervals and is checkpoint-policy-bound, so one music/noise tail cannot start an
+unbounded language/channel matrix for every interval. The engine never stops halfway through an
+audio-candidate matrix. Once the next complete matrix would exceed the budget, it records
+`LOCAL_RETRY_BUDGET_EXHAUSTED` and preserves the unresolved interval as explicit uncertainty.
+Raw consensus reached within the budget remains admissible; partial processed-audio evidence can
+never be promoted after exhaustion. The next adjudication tier is cloud or human review, not more
+automatic local retries.
 
 Sparse-speech repair adds a semantic speech-region stage before re-decoding. The production
 Gigabyte provider is the local Silero VAD already bundled with Faster-Whisper, so it needs no

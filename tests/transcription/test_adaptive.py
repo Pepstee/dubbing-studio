@@ -1042,6 +1042,47 @@ def test_near_silence_policy_change_invalidates_adaptive_checkpoint_manifest(tmp
         coordinator._admit_manifest(expected)
 
 
+def test_targeted_retry_budget_is_checkpoint_bound(tmp_path):
+    source = tmp_path / "source.mov"
+    source.write_bytes(b"source")
+    probe = MediaProbe(60_000, 6, (AudioStream(0, "pcm", 2, 48_000),))
+    chunks = (AdaptiveChunk(0, 0, 60_000, 0, 60_000, "end-of-media"),)
+    coordinator = AdaptiveLongFormCoordinator(
+        _RetryingBackend(),
+        tmp_path / "job",
+        maximum_targeted_decode_attempts_per_chunk=8,
+    )
+    binding = create_source_binding(source)
+    expected = coordinator._manifest(source, binding, probe, chunks)
+
+    assert expected["targeted_retry"]["maximum_decode_attempts_per_chunk"] == 8
+    coordinator._admit_manifest(expected)
+
+    changed = AdaptiveLongFormCoordinator(
+        _RetryingBackend(),
+        tmp_path / "job",
+        maximum_targeted_decode_attempts_per_chunk=10,
+    )
+    with pytest.raises(
+        TranscriptionError,
+        match="adaptive checkpoint does not match source or configuration",
+    ):
+        changed._admit_manifest(changed._manifest(source, binding, probe, chunks))
+
+
+@pytest.mark.parametrize("limit", (1, 1_025))
+def test_targeted_retry_budget_rejects_unsafe_limits(tmp_path, limit):
+    with pytest.raises(
+        ValueError,
+        match="maximum targeted decode attempts per chunk must be between 2 and 1024",
+    ):
+        AdaptiveLongFormCoordinator(
+            _RetryingBackend(),
+            tmp_path / "job",
+            maximum_targeted_decode_attempts_per_chunk=limit,
+        )
+
+
 def test_overlap_reconciliation_drops_duplicate_boundary_segment():
     chunks = [
         AdaptiveChunk(0, 0, 10_000, 0, 12_000, "silence"),
@@ -1337,6 +1378,181 @@ def test_raw_consensus_short_circuits_processed_audio_escalation(tmp_path):
     assert short_circuit["avoided_scheduled_decode_count"] == 2 * len(
         primary.calls + independent.calls
     )
+
+
+def test_local_retry_budget_stops_before_partial_audio_candidate_and_fails_closed(tmp_path):
+    primary = _AudioCandidateBackend(
+        "fixture:primary",
+        {
+            "raw.wav": "raw primary transcript",
+            "channel-0.wav": "processed candidate consensus",
+            "channel-1.wav": "processed candidate consensus",
+        },
+    )
+    independent = _AudioCandidateBackend(
+        "fixture:independent",
+        {
+            "raw.wav": "unrelated independent testimony",
+            "channel-0.wav": "processed candidate consensus",
+            "channel-1.wav": "processed candidate consensus",
+        },
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+        candidate_languages=("en", "ru"),
+        maximum_targeted_decode_attempts_per_chunk=8,
+    )
+    attempts = []
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    targeted = [item for item in attempts if item["kind"] == "targeted-span-redecode"]
+    assert len(targeted) == 8
+    assert {item["audio_candidate"] for item in targeted} == {"raw"}
+    assert len(primary.calls) + len(independent.calls) == 8
+    assert replacement is not None
+    assert [(item.text, item.uncertain) for item in replacement] == [
+        ("[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]", True)
+    ]
+    budget = next(
+        item
+        for item in attempts
+        if item["kind"] == "targeted-local-retry-budget-exhausted"
+    )
+    assert budget["completed_decode_attempts"] == 8
+    assert budget["required_next_audio_candidate_decode_count"] == 8
+    assert budget["next_audio_candidate"] == "channel-0"
+    assert attempts[-1]["status"] == "LOCAL_RETRY_BUDGET_EXHAUSTED"
+    assert attempts[-1]["processed_consensus_count"] == 0
+    assert attempts[-1]["selected"] is False
+
+
+def test_raw_consensus_can_finish_at_local_retry_budget(tmp_path):
+    texts = {
+        "raw.wav": "trustworthy raw recording transcript",
+        "channel-0.wav": "unused processed interpretation",
+        "channel-1.wav": "unused processed alternative",
+    }
+    primary = _AudioCandidateBackend("fixture:primary", texts)
+    independent = _AudioCandidateBackend("fixture:independent", texts)
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+        candidate_languages=("en", "ru"),
+        maximum_targeted_decode_attempts_per_chunk=8,
+    )
+    attempts = []
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
+    ):
+        replacement = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert " ".join(item.text for item in replacement) == texts["raw.wav"]
+    assert len(primary.calls) + len(independent.calls) == 8
+    assert attempts[-1]["status"] == "CONSENSUS_PASS"
+    assert attempts[-1]["raw_consensus_available"] is True
+    assert not any(
+        item["kind"] == "targeted-local-retry-budget-exhausted" for item in attempts
+    )
+
+
+def test_local_retry_budget_is_shared_across_spans_in_one_chunk(tmp_path):
+    primary = _AudioCandidateBackend(
+        "fixture:primary",
+        {
+            "raw.wav": "raw primary transcript",
+            "channel-0.wav": "processed candidate consensus",
+            "channel-1.wav": "processed candidate consensus",
+        },
+    )
+    independent = _AudioCandidateBackend(
+        "fixture:independent",
+        {
+            "raw.wav": "unrelated independent testimony",
+            "channel-0.wav": "processed candidate consensus",
+            "channel-1.wav": "processed candidate consensus",
+        },
+    )
+    coordinator = AdaptiveLongFormCoordinator(
+        primary,
+        tmp_path / "job",
+        retry_backend=independent,
+        candidate_languages=("en", "ru"),
+        maximum_targeted_decode_attempts_per_chunk=8,
+    )
+    attempts = []
+    with (
+        patch.object(
+            coordinator,
+            "_extract_language_span",
+            side_effect=lambda source, segment, destination: destination.write_bytes(b"span"),
+        ),
+        patch(
+            "dubbing.transcription.adaptive.build_audio_candidates",
+            return_value=_audio_candidate_set(tmp_path),
+        ),
+    ):
+        first = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (0, 20_000),
+            "failed original words",
+            TranscriptionOptions(),
+            attempts,
+        )
+        calls_after_first = len(primary.calls) + len(independent.calls)
+        second = coordinator._decode_target_span(
+            tmp_path / "source.wav",
+            (20_000, 40_000),
+            "another failed original",
+            TranscriptionOptions(),
+            attempts,
+        )
+
+    assert first is not None and first[0].uncertain is True
+    assert second is None
+    assert calls_after_first == 8
+    assert len(primary.calls) + len(independent.calls) == calls_after_first
+    budget_events = [
+        item
+        for item in attempts
+        if item["kind"] == "targeted-local-retry-budget-exhausted"
+    ]
+    assert len(budget_events) == 2
+    assert budget_events[-1]["source_start_ms"] == 20_000
+    assert budget_events[-1]["completed_decode_attempts"] == 8
 
 
 def test_independent_disagreement_is_preserved_as_uncertain(tmp_path):

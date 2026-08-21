@@ -72,7 +72,10 @@ Candidate source and output hashes plus processing graph are
 recorded. Raw cross-model consensus has precedence; processed evidence requires two-model
 agreement and conflicting processed consensuses remain uncertain. A qualifying raw consensus
 short-circuits processed-audio escalation because those candidates cannot change the selected
-verdict; the receipt preserves which scheduled decodes were skipped.
+verdict; the receipt preserves which scheduled decodes were skipped. A manifest-bound,
+chunk-wide local-repair budget stops further complete language/channel matrices after 64 model
+decodes. Exhaustion can only produce explicit uncertainty for cloud or human adjudication;
+partial processed-audio evidence cannot become trusted text.
 
 Review edits regenerate the canonical JSON, plain-text and SRT projections.
 Editing source text invalidates word-level text evidence for that segment and

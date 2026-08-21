@@ -52,6 +52,7 @@ _TARGET_RETRY_PADDING_MS = 2_000
 _INDEPENDENT_AGREEMENT_THRESHOLD = 0.75
 _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE = 0.35
 _INDEPENDENT_MINIMUM_CONSENSUS_TOKENS = 2
+_MAXIMUM_TARGETED_DECODE_ATTEMPTS_PER_CHUNK = 64
 _LANGUAGE_RETRY_CONTEXT_MS = 1_000
 _NEAR_SILENCE_MIN_ENERGY_COVERAGE_RATIO = 0.96
 _NEAR_SILENCE_MAX_TOTAL_UNCOVERED_MS = 2_500
@@ -59,7 +60,7 @@ _NEAR_SILENCE_MAX_UNCOVERED_GAP_MS = 1_500
 _UNCERTAIN_TURN_SILENCE_POLICY = (
     "full-energy-plus-empty-forced-language-plus-empty-sensitive-vad-v1"
 )
-_COORDINATOR_VERSION = "adaptive-long-form-v22"
+_COORDINATOR_VERSION = "adaptive-long-form-v23"
 _CHUNK_RECEIPT_SCHEMA = "dubbing.adaptive-chunk-receipt.v1"
 _SILENCE_ADMISSION_POLICY = "full-energy-coverage-plus-empty-semantic-vad-v1"
 _NEAR_SILENCE_ADMISSION_POLICY = "near-full-energy-plus-empty-primary-plus-empty-semantic-vad-v1"
@@ -676,6 +677,9 @@ class AdaptiveLongFormCoordinator:
             "channels",
         ),
         maximum_audio_candidate_channels: int = 4,
+        maximum_targeted_decode_attempts_per_chunk: int = (
+            _MAXIMUM_TARGETED_DECODE_ATTEMPTS_PER_CHUNK
+        ),
     ) -> None:
         if minimum_silence_seconds <= 0:
             raise ValueError("minimum_silence_seconds must be positive")
@@ -710,8 +714,15 @@ class AdaptiveLongFormCoordinator:
             raise ValueError("audio candidate policies must start with unique raw")
         if not 1 <= maximum_audio_candidate_channels <= 8:
             raise ValueError("maximum_audio_candidate_channels must be between 1 and 8")
+        if not 2 <= maximum_targeted_decode_attempts_per_chunk <= 1_024:
+            raise ValueError(
+                "maximum targeted decode attempts per chunk must be between 2 and 1024"
+            )
         self.audio_candidate_policies = audio_candidate_policies
         self.maximum_audio_candidate_channels = maximum_audio_candidate_channels
+        self.maximum_targeted_decode_attempts_per_chunk = (
+            maximum_targeted_decode_attempts_per_chunk
+        )
 
     @staticmethod
     def _extract(
@@ -834,6 +845,12 @@ class AdaptiveLongFormCoordinator:
                     _INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE
                 ),
                 "independent_minimum_consensus_tokens": (_INDEPENDENT_MINIMUM_CONSENSUS_TOKENS),
+                "maximum_decode_attempts_per_chunk": (
+                    self.maximum_targeted_decode_attempts_per_chunk
+                ),
+                "budget_exhaustion_policy": (
+                    "partial-raw-or-processed-evidence-cannot-promote-v1"
+                ),
             },
             "silence_admission": {
                 "policy": _SILENCE_ADMISSION_POLICY,
@@ -1109,6 +1126,7 @@ class AdaptiveLongFormCoordinator:
                     candidates.append((backend, candidate_options))
 
         eligible: list[_SpanCandidate] = []
+        retry_budget_exhausted = False
 
         def raw_consensus_is_final() -> bool:
             """Return whether processed audio cannot change the final adjudication."""
@@ -1289,6 +1307,31 @@ class AdaptiveLongFormCoordinator:
             if audio_candidates.candidates and audio_candidates.candidates[0].identifier != "raw":
                 raise TranscriptionError("raw audio candidate must be evaluated first")
             for audio_candidate_index, audio_candidate in enumerate(audio_candidates.candidates):
+                targeted_decode_attempt_count = sum(
+                    item.get("kind") == "targeted-span-redecode" for item in attempts
+                )
+                if targeted_decode_attempt_count + len(candidates) > (
+                    self.maximum_targeted_decode_attempts_per_chunk
+                ):
+                    retry_budget_exhausted = True
+                    attempts.append(
+                        {
+                            "kind": "targeted-local-retry-budget-exhausted",
+                            "source_start_ms": start_ms,
+                            "source_end_ms": end_ms,
+                            "status": "LOCAL_RETRY_BUDGET_EXHAUSTED",
+                            "policy": (
+                                "partial-raw-or-processed-evidence-cannot-promote-v1"
+                            ),
+                            "maximum_decode_attempts_per_chunk": (
+                                self.maximum_targeted_decode_attempts_per_chunk
+                            ),
+                            "completed_decode_attempts": targeted_decode_attempt_count,
+                            "required_next_audio_candidate_decode_count": len(candidates),
+                            "next_audio_candidate": audio_candidate.identifier,
+                        }
+                    )
+                    break
                 for backend, retry_options in candidates:
                     candidate = annotate_transcript_languages(
                         backend.transcribe(audio_candidate.path, retry_options)
@@ -1402,7 +1445,16 @@ class AdaptiveLongFormCoordinator:
                     "kind": "targeted-span-adjudication",
                     "source_start_ms": start_ms,
                     "source_end_ms": end_ms,
-                    "status": "NO_HEALTHY_INDEPENDENT_CANDIDATE",
+                    "status": (
+                        "LOCAL_RETRY_BUDGET_EXHAUSTED"
+                        if retry_budget_exhausted
+                        else "NO_HEALTHY_INDEPENDENT_CANDIDATE"
+                    ),
+                    "policy": (
+                        "partial-raw-or-processed-evidence-cannot-promote-v1"
+                        if retry_budget_exhausted
+                        else None
+                    ),
                     "independent_backend_count": 0,
                     "agreement_threshold": _INDEPENDENT_AGREEMENT_THRESHOLD,
                     "minimum_acoustic_confidence": (_INDEPENDENT_MINIMUM_ACOUSTIC_CONFIDENCE),
@@ -1488,6 +1540,33 @@ class AdaptiveLongFormCoordinator:
             for audio_candidate_id, item in best_corroborated_by_audio.items()
             if audio_candidate_id != "raw"
         ]
+        if retry_budget_exhausted and not raw_corroborated:
+            attempts.append(
+                {
+                    "kind": "targeted-span-adjudication",
+                    "source_start_ms": start_ms,
+                    "source_end_ms": end_ms,
+                    "status": "LOCAL_RETRY_BUDGET_EXHAUSTED",
+                    "policy": "partial-raw-or-processed-evidence-cannot-promote-v1",
+                    "maximum_decode_attempts_per_chunk": (
+                        self.maximum_targeted_decode_attempts_per_chunk
+                    ),
+                    "completed_decode_attempts": sum(
+                        item.get("kind") == "targeted-span-redecode" for item in attempts
+                    ),
+                    "raw_consensus_available": False,
+                    "processed_consensus_count": len(processed_corroborated),
+                    "selected": False,
+                }
+            )
+            return (
+                TranscriptSegment(
+                    start_ms,
+                    end_ms,
+                    _DISAGREEMENT_SPAN_TEXT,
+                    uncertain=True,
+                ),
+            )
         divergent_audio_candidates = False
         if raw_corroborated:
             ranked = raw_corroborated
@@ -1795,7 +1874,11 @@ class AdaptiveLongFormCoordinator:
         return result, {
             "attempts": attempts,
             "selected_attempt": selected_attempt,
-            "targeted_retry_exhausted": selected_attempt is None,
+            "targeted_retry_exhausted": selected_attempt is None
+            or any(
+                item.get("kind") == "targeted-local-retry-budget-exhausted"
+                for item in attempts
+            ),
         }
 
     def _confirm_near_silence_after_empty_asr(

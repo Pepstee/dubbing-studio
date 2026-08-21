@@ -64,7 +64,10 @@ immutable outbox bundles and GIGA event schema remain the deployment substrate.
     skipped candidates and decode counts are receipt-bound. When raw consensus is absent, a
     processed rescue still needs independent agreement on the same candidate and divergent
     processed consensuses fail closed. Candidate hashes and exact processing policy are
-    checkpoint-bound. Rollback restores first-stream-only extraction and
+    checkpoint-bound. A deterministic 64-decode chunk-wide repair budget prevents long
+    music/noise tails from multiplying every language/channel combination indefinitely. Budget
+    exhaustion is receipt-bound and emits explicit uncertainty; partial processed evidence is
+    never promoted. Rollback restores first-stream-only extraction and
     removes processed retry candidates without modifying source recordings or old packages.
 15. The ambiguous aggregate `target_passed`/`promotion_passed` evaluator output was replaced by
     claim-scoped measurement, held-out benchmark and production-portfolio gates. The new gate
