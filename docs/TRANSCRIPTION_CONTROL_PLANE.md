@@ -63,6 +63,15 @@ runtime, structural quality, explicit uncertainty and replay, while reporting ac
 explicit uncertain spans may unlock measurement of later frozen entries; it does not become
 approval-eligible, and GIGA admission remains false.
 
+The current v24 selected-pair outcome is preserved in
+`benchmarks/fixtures/lessons-en-ru-canary-v2/historical-canary-v18-selected-pair-receipt.json`.
+Lesson 6 reproduced the established 492-segment result exactly at the semantic-document level.
+On the July 16 holdout, unsupported-script quarantine removed every clean Japanese hallucination,
+cut targeted span decodes from 240 to 104 and cut runtime from 2,522.989 to 1,166.967 seconds.
+Both entries replayed byte-identically without starting the WhisperKit server. They remain
+review-blocked, and this bounded pair is evidence for fail-closed operation and work reduction—not
+an accuracy certificate or a substitute for the still-incomplete 17-entry corpus.
+
 Run the development recording first from the original video:
 
 ```bash
