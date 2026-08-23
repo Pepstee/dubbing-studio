@@ -772,6 +772,9 @@ def test_uncertain_but_structurally_safe_development_unlocks_holdout(tmp_path, m
 
 def test_full_selection_runs_development_before_later_roles(tmp_path, monkeypatch):
     manifest = _manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["policy"] = {"maximum_realtime_factor": 60.0}
+    manifest.write_text(json.dumps(document), encoding="utf-8")
     output = tmp_path / "output"
     coordinator = _install_fake_coordinator(monkeypatch)
 
