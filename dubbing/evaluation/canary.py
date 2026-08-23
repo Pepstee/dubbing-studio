@@ -425,6 +425,40 @@ def _verified_reference_association(entry: dict, *, schema_version: str) -> dict
     return reference["association"]
 
 
+def _report_reference_association(
+    entry: dict,
+    *,
+    schema_version: str,
+) -> tuple[dict, bool]:
+    """Deterministic ``reference_association`` block for an entry under a schema.
+
+    Shared by report generation and cached-report validation so the two paths
+    can never disagree about what v1/v2 evidence must contain. The boolean
+    records whether provisional metrics may exist for this entry.
+    """
+    reference = entry.get("reference")
+    if reference is None:
+        return {"status": "NOT_APPLICABLE", "accuracy_certified": False}, False
+    association = _verified_reference_association(entry, schema_version=schema_version)
+    if association is None:
+        return (
+            {
+                "status": "UNVERIFIED",
+                "reason": "NO_VERIFIABLE_SOURCE_ASSOCIATION",
+                "accuracy_certified": False,
+            },
+            False,
+        )
+    return (
+        {
+            "status": "VERIFIED_OBSERVATION_ONLY",
+            **association,
+            "accuracy_certified": False,
+        },
+        True,
+    )
+
+
 def load_canary_manifest(path: str | Path) -> tuple[Path, dict]:
     manifest_path = Path(path).resolve()
     try:
@@ -926,21 +960,67 @@ def _validate_receipt(
     return receipt
 
 
-def _validate_report(path: Path, entry: dict, fingerprint: str) -> dict:
+def _validate_report(
+    path: Path,
+    entry: dict,
+    fingerprint: str,
+    *,
+    manifest_schema_version: str,
+) -> dict:
     report = _load_json_object(path, "canary report")
     reference = entry.get("reference")
     expected = {
         "schema_version": REPORT_SCHEMA_VERSION,
+        "manifest_schema_version": manifest_schema_version,
         "entry_id": entry["id"],
         "role": entry["role"],
         "source_sha256": entry["source"]["sha256"],
         "reference_sha256": reference["sha256"] if reference else None,
+        "reference_kind": reference["kind"] if reference else None,
+        "reference_is_human_ground_truth": False,
         "execution_fingerprint_sha256": fingerprint,
         "giga_admission_allowed": False,
     }
     for key, value in expected.items():
         if report.get(key) != value:
             raise ValueError(f"{entry['id']} report {key} binding mismatch")
+    expected_association, metrics_required = _report_reference_association(
+        entry,
+        schema_version=manifest_schema_version,
+    )
+    if report.get("reference_association") != expected_association:
+        raise ValueError(
+            f"{entry['id']} report reference association disagrees with the frozen "
+            f"{manifest_schema_version} manifest"
+        )
+    if metrics_required != (report.get("provisional_reference_metrics") is not None):
+        raise ValueError(
+            f"{entry['id']} report provisional reference metrics disagree with the "
+            f"frozen {manifest_schema_version} manifest"
+        )
+    agreement = report.get("agreement_observation")
+    if not isinstance(agreement, dict) or agreement.get("accuracy_certified") is not False:
+        raise ValueError(f"{entry['id']} report agreement observation is malformed")
+    warnings = agreement.get("warnings")
+    if not isinstance(warnings, list) or any(not isinstance(item, str) for item in warnings):
+        raise ValueError(f"{entry['id']} report agreement warnings are malformed")
+    if metrics_required:
+        if agreement.get("status") not in {"WITHIN_CANARY_BOUND", "WARNING"}:
+            raise ValueError(
+                f"{entry['id']} report agreement status contradicts verified evidence"
+            )
+    elif reference is None:
+        if agreement.get("status") != "NOT_MEASURED":
+            raise ValueError(
+                f"{entry['id']} report agreement status contradicts missing reference"
+            )
+    elif (
+        agreement.get("status") != "BLOCKED_UNVERIFIED_ASSOCIATION"
+        or "REFERENCE_ASSOCIATION_UNVERIFIED" not in warnings
+    ):
+        raise ValueError(
+            f"{entry['id']} report agreement status contradicts unverified association"
+        )
     scope = report.get("evaluation_scope")
     if not isinstance(scope, dict) or scope.get("evaluation_end_ms") != entry["source"].get(
         "evaluation_end_ms"
@@ -971,6 +1051,8 @@ def _require_development_safe_for_measurement(
     output: Path,
     entries: tuple[dict, ...],
     fingerprint: str,
+    *,
+    manifest_schema_version: str,
 ) -> None:
     development = [entry for entry in entries if entry["role"] == "development"]
     if not development:
@@ -978,7 +1060,12 @@ def _require_development_safe_for_measurement(
     for entry in development:
         entry_output = output / entry["id"]
         receipt = _validate_receipt(entry_output / "canary-run-receipt.json", entry, fingerprint)
-        report = _validate_report(entry_output / "canary-report.json", entry, fingerprint)
+        report = _validate_report(
+            entry_output / "canary-report.json",
+            entry,
+            fingerprint,
+            manifest_schema_version=manifest_schema_version,
+        )
         if receipt.get("origin") != "LOCAL_TRANSCRIPTION":
             raise ValueError(f"development canary {entry['id']} lacks a transcription receipt")
         if receipt.get("cloud_allowed") is not False or receipt.get("giga_admission_allowed") is not False:
@@ -1136,6 +1223,10 @@ def evaluate_canary_result(
         entry,
         schema_version=manifest_schema_version,
     )
+    reference_association_block, _ = _report_reference_association(
+        entry,
+        schema_version=manifest_schema_version,
+    )
     metrics = None
     if reference is not None and association is not None:
         reference_path = Path(reference["path"])
@@ -1216,26 +1307,7 @@ def evaluate_canary_result(
         "reference_sha256": reference["sha256"] if reference else None,
         "reference_kind": reference["kind"] if reference else None,
         "reference_is_human_ground_truth": False,
-        "reference_association": (
-            {
-                "status": "VERIFIED_OBSERVATION_ONLY",
-                **association,
-                "accuracy_certified": False,
-            }
-            if association is not None
-            else (
-                {
-                    "status": "UNVERIFIED",
-                    "reason": "NO_VERIFIABLE_SOURCE_ASSOCIATION",
-                    "accuracy_certified": False,
-                }
-                if reference is not None
-                else {
-                    "status": "NOT_APPLICABLE",
-                    "accuracy_certified": False,
-                }
-            )
-        ),
+        "reference_association": reference_association_block,
         "execution_fingerprint_sha256": execution_fingerprint,
         "evaluation_provenance": evaluation_provenance
         or {
@@ -1358,7 +1430,14 @@ def _aggregate_summary(
             continue
         try:
             _validate_receipt(receipt_path, entry, fingerprint)
-            reports.append(_validate_report(report_path, entry, fingerprint))
+            reports.append(
+                _validate_report(
+                    report_path,
+                    entry,
+                    fingerprint,
+                    manifest_schema_version=manifest["schema_version"],
+                )
+            )
         except ValueError as exc:
             invalid_evidence[entry["id"]] = str(exc)
     summary = _summary(
@@ -1450,7 +1529,12 @@ def run_canary(
     )
     for entry in entries:
         if entry["role"] != "development":
-            _require_development_safe_for_measurement(output, all_entries, fingerprint)
+            _require_development_safe_for_measurement(
+                output,
+                all_entries,
+                fingerprint,
+                manifest_schema_version=manifest["schema_version"],
+            )
         entry_output = output / entry["id"]
         result_path = entry_output / "result.json"
         quality_path = entry_output / "quality-report.json"

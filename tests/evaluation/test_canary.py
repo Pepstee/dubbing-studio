@@ -280,6 +280,209 @@ def test_v2_association_change_invalidates_frozen_execution_before_attempt(tmp_p
     ]
 
 
+def _rebind_cached_report_hash(entry_output: Path) -> None:
+    """Keep every checked hash valid so only report semantics are wrong."""
+    receipt_path = entry_output / "canary-run-receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["canary_report_sha256"] = _sha256(entry_output / "canary-report.json")
+    receipt_path.write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def test_cached_v1_report_claiming_verified_v2_semantics_is_invalid_evidence(
+    tmp_path, monkeypatch
+):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    calls_before = coordinator.calls
+    _, loaded = load_canary_manifest(manifest)
+    fingerprint = json.loads((output / "frozen-execution.json").read_text())[
+        "fingerprint_sha256"
+    ]
+    entries = tuple(dict(item) for item in loaded["entries"])
+    assert canary_module._aggregate_summary(output, loaded, entries, fingerprint)[
+        "invalid_evidence"
+    ] == {}
+
+    report_path = output / "lesson-0" / "canary-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["provisional_reference_metrics"] is None
+    report["manifest_schema_version"] = "dubbing.historical-canary.v2"
+    report["reference_association"] = {
+        "status": "VERIFIED_OBSERVATION_ONLY",
+        "source_sha256": report["source_sha256"],
+        "recording_started_at": "2026-08-01T19:39:08+09:00",
+        "reference_created_at": "2026-08-01T19:39:10+09:00",
+        "basis": "Forged after the fact.",
+        "accuracy_certified": False,
+    }
+    report["provisional_reference_metrics"] = {
+        "wer": {"rate": 0.0},
+        "cer": {"rate": 0.0},
+        "time_window_evaluation_available": True,
+    }
+    report["agreement_observation"]["status"] = "WITHIN_CANARY_BOUND"
+    report["agreement_observation"]["warnings"] = []
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    _rebind_cached_report_hash(output / "lesson-0")
+
+    entry = next(item for item in loaded["entries"] if item["id"] == "lesson-0")
+    with pytest.raises(ValueError, match="manifest_schema_version binding mismatch"):
+        canary_module._validate_report(
+            report_path,
+            entry,
+            fingerprint,
+            manifest_schema_version="dubbing.historical-canary.v1",
+        )
+    summary = canary_module._aggregate_summary(output, loaded, entries, fingerprint)
+    assert coordinator.calls == calls_before
+    assert summary["status"] == "FAIL"
+    assert summary["completed_entries"] == []
+    assert summary["invalid_evidence"]["lesson-0"] == (
+        "lesson-0 report manifest_schema_version binding mismatch"
+    )
+
+
+def test_forged_development_report_blocks_holdout_unlock_before_any_attempt(
+    tmp_path, monkeypatch
+):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    calls_before = coordinator.calls
+    report_path = output / "lesson-0" / "canary-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["reference_association"] = {
+        "status": "UNVERIFIED",
+        "reason": "NO_VERIFIABLE_SOURCE_ASSOCIATION",
+        "accuracy_certified": False,
+    }
+    report["agreement_observation"]["status"] = "NOT_MEASURED"
+    report["agreement_observation"]["warnings"] = []
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    _rebind_cached_report_hash(output / "lesson-0")
+
+    with pytest.raises(ValueError, match="agreement status contradicts unverified"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-1"})
+
+    assert coordinator.calls == calls_before
+    assert not (output / "lesson-1").exists()
+
+
+@pytest.mark.parametrize(
+    "warnings",
+    [
+        "REFERENCE_ASSOCIATION_UNVERIFIED",
+        7,
+        [None],
+        ["REFERENCE_ASSOCIATION_UNVERIFIED", 3],
+        [{"nested": True}],
+        None,
+    ],
+)
+def test_malformed_agreement_warnings_fail_closed_as_invalid_evidence(
+    tmp_path, monkeypatch, warnings
+):
+    manifest = _manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    calls_before = coordinator.calls
+    _, loaded = load_canary_manifest(manifest)
+    fingerprint = json.loads((output / "frozen-execution.json").read_text())[
+        "fingerprint_sha256"
+    ]
+    entries = tuple(dict(item) for item in loaded["entries"])
+
+    report_path = output / "lesson-0" / "canary-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["agreement_observation"]["warnings"] = warnings
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    _rebind_cached_report_hash(output / "lesson-0")
+
+    entry = next(item for item in loaded["entries"] if item["id"] == "lesson-0")
+    with pytest.raises(ValueError, match="agreement warnings are malformed"):
+        canary_module._validate_report(
+            report_path,
+            entry,
+            fingerprint,
+            manifest_schema_version="dubbing.historical-canary.v1",
+        )
+    summary = canary_module._aggregate_summary(output, loaded, entries, fingerprint)
+    assert coordinator.calls == calls_before
+    assert summary["status"] == "FAIL"
+    assert summary["completed_entries"] == []
+    assert "agreement warnings are malformed" in summary["invalid_evidence"]["lesson-0"]
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda report: report.update(provisional_reference_metrics=None),
+            "report provisional reference metrics disagree",
+        ),
+        (
+            lambda report: report["reference_association"].update(
+                basis="Rewritten basis that was never frozen."
+            ),
+            "report reference association disagrees",
+        ),
+        (
+            lambda report: (
+                report.update(provisional_reference_metrics=None),
+                report.update(
+                    reference_association={
+                        "status": "UNVERIFIED",
+                        "reason": "NO_VERIFIABLE_SOURCE_ASSOCIATION",
+                        "accuracy_certified": False,
+                    }
+                ),
+            ),
+            "report reference association disagrees",
+        ),
+        (
+            lambda report: report["agreement_observation"].update(
+                status="BLOCKED_UNVERIFIED_ASSOCIATION"
+            ),
+            "report agreement status contradicts verified evidence",
+        ),
+    ],
+)
+def test_cached_v2_reports_contradicting_the_frozen_manifest_are_invalid_evidence(
+    tmp_path, monkeypatch, mutate, message
+):
+    manifest = _v2_manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    calls_before = coordinator.calls
+    _, loaded = load_canary_manifest(manifest)
+    fingerprint = json.loads((output / "frozen-execution.json").read_text())[
+        "fingerprint_sha256"
+    ]
+    entries = tuple(dict(item) for item in loaded["entries"])
+    assert canary_module._aggregate_summary(output, loaded, entries, fingerprint)[
+        "invalid_evidence"
+    ] == {}
+
+    report_path = output / "lesson-0" / "canary-report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    mutate(report)
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    _rebind_cached_report_hash(output / "lesson-0")
+
+    summary = canary_module._aggregate_summary(output, loaded, entries, fingerprint)
+    assert coordinator.calls == calls_before
+    assert summary["status"] == "FAIL"
+    assert summary["completed_entries"] == []
+    assert message in summary["invalid_evidence"]["lesson-0"]
+
+
 def test_reference_free_entry_reports_operational_evidence_without_invented_accuracy(
     tmp_path, monkeypatch
 ):

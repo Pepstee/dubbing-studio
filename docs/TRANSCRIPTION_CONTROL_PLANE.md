@@ -71,6 +71,7 @@ approval-eligible, and GIGA admission remains false.
 | --- | --- | --- |
 | 2026-08-24 | `dubbing.historical-canary.v2` | A reference must bind the exact source SHA-256, carry timezone-aware recording-start and reference-created timestamps, show creation at or after recording completion, and state a nonblank association basis. Invalid evidence fails before backend execution or attempt creation. |
 | 2026-08-24 | Legacy `dubbing.historical-canary.v1` | Frozen artifacts remain usable as explicitly unverified operational evidence. Fresh WER/CER are suppressed rather than presenting an unproved pairing as accuracy evidence. |
+| 2026-08-24 | Cached-report validation (`canary-report.json`) | Receipt/summary acceptance now binds `manifest_schema_version`, the complete `reference_association` record, `reference_kind`, provisional-metrics presence, and agreement status/warning shape to the frozen manifest. Cached evidence that disagrees is invalid evidence even when every hash and ID binds, so forged verified-v2 metrics cannot ride on a v1 run and holdout unlock cannot read a semantically contradictory development report. |
 
 Verified v2 reference comparisons remain observation-only because the provisional transcript is
 not human ground truth. The manifest schema and complete association record are part of the frozen
