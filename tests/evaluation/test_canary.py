@@ -66,6 +66,21 @@ def _manifest(tmp_path: Path) -> Path:
     return path
 
 
+def _v2_manifest(tmp_path: Path) -> Path:
+    path = _manifest(tmp_path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["schema_version"] = "dubbing.historical-canary.v2"
+    for entry in document["entries"]:
+        entry["reference"]["association"] = {
+            "source_sha256": entry["source"]["sha256"],
+            "recording_started_at": "2026-08-01T19:39:08+09:00",
+            "reference_created_at": "2026-08-01T19:39:10+09:00",
+            "basis": "Export created after this hash-bound recording completed.",
+        }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
 class _LocalBackend:
     identity = "mlx-whisper:synthetic-test"
 
@@ -144,6 +159,125 @@ def test_manifest_binds_every_source_and_reference(tmp_path):
     Path(bound[1]["reference"]["path"]).write_text("changed", encoding="utf-8")
     with pytest.raises(ValueError, match="reference SHA-256 mismatch"):
         validate_canary_bindings(manifest_path, manifest)
+
+
+def test_v2_verified_association_enables_observation_only_metrics(tmp_path, monkeypatch):
+    manifest = _v2_manifest(tmp_path)
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    report = json.loads((output / "lesson-0" / "canary-report.json").read_text())
+    frozen = json.loads((output / "frozen-execution.json").read_text())
+    association = json.loads(manifest.read_text())["entries"][0]["reference"]["association"]
+    assert report["schema_version"] == "dubbing.historical-canary-report.v2"
+    assert report["manifest_schema_version"] == "dubbing.historical-canary.v2"
+    assert report["reference_association"] == {
+        "status": "VERIFIED_OBSERVATION_ONLY",
+        **association,
+        "accuracy_certified": False,
+    }
+    assert report["provisional_reference_metrics"]["wer"]["rate"] == 0.0
+    assert report["provisional_reference_comparison_scope"]["reference_scope"] == (
+        "WHOLE_UNTIMED_REFERENCE"
+    )
+    assert report["agreement_observation"]["accuracy_certified"] is False
+    assert report["giga_admission_allowed"] is False
+    assert frozen["corpus"]["manifest_schema_version"] == "dubbing.historical-canary.v2"
+    assert frozen["corpus"]["entries"][0]["reference_association"] == association
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda association: association.update(source_sha256="f" * 64),
+            "does not bind the entry source SHA-256",
+        ),
+        (
+            lambda association: association.update(recording_started_at="not-a-timestamp"),
+            "recording_started_at is not a parseable",
+        ),
+        (
+            lambda association: association.update(reference_created_at="2026-08-01T19:39:10"),
+            "reference_created_at must be timezone-aware",
+        ),
+        (
+            lambda association: association.update(
+                reference_created_at="2026-08-01T19:39:07+09:00"
+            ),
+            "reference_created_at precedes recording_started_at",
+        ),
+        (
+            lambda association: association.update(
+                reference_created_at="2026-08-01T19:39:08.500+09:00"
+            ),
+            "reference_created_at precedes recording completion",
+        ),
+        (
+            lambda association: association.pop("basis"),
+            "reference association basis must be a nonblank string",
+        ),
+        (
+            lambda association: association.update(basis="   "),
+            "reference association basis must be a nonblank string",
+        ),
+    ],
+)
+def test_v2_invalid_association_fails_before_backend_or_attempt_evidence(
+    tmp_path, monkeypatch, mutation, message
+):
+    manifest = _v2_manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    mutation(document["entries"][0]["reference"]["association"])
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+
+    with pytest.raises(ValueError, match=message):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert coordinator.calls == 0
+    assert not output.exists()
+
+
+def test_v2_reference_free_entry_remains_operationally_measurable(tmp_path, monkeypatch):
+    manifest = _v2_manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["entries"][0]["reference"] = None
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    output = tmp_path / "output"
+    _install_fake_coordinator(monkeypatch)
+
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    report = json.loads((output / "lesson-0" / "canary-report.json").read_text())
+    assert report["reference_association"]["status"] == "NOT_APPLICABLE"
+    assert report["provisional_reference_metrics"] is None
+    assert report["operational_gate"]["status"] == "PASS"
+    assert report["manifest_schema_version"] == "dubbing.historical-canary.v2"
+
+
+def test_v2_association_change_invalidates_frozen_execution_before_attempt(tmp_path, monkeypatch):
+    manifest = _v2_manifest(tmp_path)
+    output = tmp_path / "output"
+    coordinator = _install_fake_coordinator(monkeypatch)
+    run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+    document = json.loads(manifest.read_text())
+    document["entries"][0]["reference"]["association"]["basis"] = (
+        "Different evidence basis for the same files."
+    )
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="execution changed after it was frozen"):
+        run_canary(manifest, output, _LocalBackend(), selected_ids={"lesson-0"})
+
+    assert coordinator.calls == 1
+    assert sorted(path.name for path in (output / "lesson-0/attempts").glob("*.json")) == [
+        "000001-completed.json",
+        "000001-started.json",
+    ]
 
 
 def test_reference_free_entry_reports_operational_evidence_without_invented_accuracy(
@@ -275,6 +409,13 @@ def test_operational_pass_does_not_claim_provisional_reference_is_ground_truth(t
         execution_fingerprint="frozen",
     )
     assert report["operational_gate"]["status"] == "PASS"
+    assert report["manifest_schema_version"] == "dubbing.historical-canary.v1"
+    assert report["reference_association"]["status"] == "UNVERIFIED"
+    assert report["provisional_reference_metrics"] is None
+    assert report["agreement_observation"]["status"] == "BLOCKED_UNVERIFIED_ASSOCIATION"
+    assert report["agreement_observation"]["warnings"] == [
+        "REFERENCE_ASSOCIATION_UNVERIFIED"
+    ]
     assert report["agreement_observation"]["accuracy_certified"] is False
     assert report["diarization_claim"]["status"] == "NOT_MEASURED"
     assert report["giga_admission_allowed"] is False
@@ -384,7 +525,7 @@ def test_source_boundary_recomputes_gate_quality_and_observes_tail(tmp_path):
     assert report["out_of_scope_observation"]["segment_count"] == 1
     assert report["out_of_scope_observation"]["used_for_operational_gate"] is False
     assert report["provisional_reference_comparison_scope"] == {
-        "reference_scope": "WHOLE_UNTIMED_REFERENCE",
+        "reference_scope": "UNVERIFIED_ASSOCIATION",
         "candidate_scope": "SOURCE_TIME_BOUNDARY",
         "observation_only": True,
         "reference_text_was_trimmed": False,

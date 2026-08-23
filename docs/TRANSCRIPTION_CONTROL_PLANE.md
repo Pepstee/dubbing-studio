@@ -48,10 +48,12 @@ dubbing-evaluate-transcript \
 
 ## Historical English/Russian canary
 
-The real lesson canary is separate from the synthetic multilingual benchmark. It binds four
-original videos and their provisional MacWhisper transcripts by SHA-256. Lesson 6 is the only
-development recording, lessons 7 and 9 are untouched holdouts, and lesson 8 is the long-duration
-stress recording. The execution configuration is frozen before a holdout can run.
+The real lesson canary is separate from the synthetic multilingual benchmark. The legacy v1
+manifest hashes each source and provisional MacWhisper transcript, but those two independent
+hashes do not prove that a transcript came from the named recording. Fresh v1 runs therefore
+preserve operational quality, runtime and replay evidence while reporting reference association
+as `UNVERIFIED` and suppressing WER/CER. The execution configuration is frozen before a holdout
+can run.
 
 The expanded v2 corpus at
 `benchmarks/fixtures/lessons-en-ru-canary-v2/manifest.json` preserves that frozen v1 evidence and
@@ -62,6 +64,17 @@ runtime, structural quality, explicit uncertainty and replay, while reporting ac
 `NOT_MEASURED` instead of manufacturing a comparison. A structurally safe development result with
 explicit uncertain spans may unlock measurement of later frozen entries; it does not become
 approval-eligible, and GIGA admission remains false.
+
+### Reference-association slice ledger
+
+| Date | Contract | Evidence effect |
+| --- | --- | --- |
+| 2026-08-24 | `dubbing.historical-canary.v2` | A reference must bind the exact source SHA-256, carry timezone-aware recording-start and reference-created timestamps, show creation at or after recording completion, and state a nonblank association basis. Invalid evidence fails before backend execution or attempt creation. |
+| 2026-08-24 | Legacy `dubbing.historical-canary.v1` | Frozen artifacts remain usable as explicitly unverified operational evidence. Fresh WER/CER are suppressed rather than presenting an unproved pairing as accuracy evidence. |
+
+Verified v2 reference comparisons remain observation-only because the provisional transcript is
+not human ground truth. The manifest schema and complete association record are part of the frozen
+corpus fingerprint, so changing either invalidates replay admission.
 
 The current v24 selected-pair outcome is preserved in
 `benchmarks/fixtures/lessons-en-ru-canary-v2/historical-canary-v18-selected-pair-receipt.json`.

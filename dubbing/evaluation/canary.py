@@ -10,6 +10,7 @@ import re
 import sys
 import time
 from dataclasses import replace
+from datetime import datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version as distribution_version
 from pathlib import Path
 
@@ -31,7 +32,8 @@ from dubbing.transcription.whisperkit import WhisperKitTranscriptionBackend
 
 
 SCHEMA_VERSION = "dubbing.historical-canary.v1"
-REPORT_SCHEMA_VERSION = "dubbing.historical-canary-report.v1"
+SCHEMA_VERSION_V2 = "dubbing.historical-canary.v2"
+REPORT_SCHEMA_VERSION = "dubbing.historical-canary-report.v2"
 SUMMARY_SCHEMA_VERSION = "dubbing.historical-canary-summary.v1"
 RECEIPT_SCHEMA_VERSION = "dubbing.historical-canary-run-receipt.v2"
 ATTEMPT_SCHEMA_VERSION = "dubbing.historical-canary-attempt.v1"
@@ -67,6 +69,12 @@ _EXECUTION_KEYS = {
     "overlap_seconds",
     "minimum_silence_seconds",
     "language_retry_policy",
+}
+_REFERENCE_ASSOCIATION_KEYS = {
+    "source_sha256",
+    "recording_started_at",
+    "reference_created_at",
+    "basis",
 }
 
 
@@ -352,14 +360,82 @@ def _validate_entry_contract(entry: dict) -> None:
             raise ValueError(f"{entry_id} reference human_ground_truth must be boolean")
 
 
+def _parse_timezone_aware_timestamp(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} is not a parseable ISO-8601 timestamp")
+    candidate = value[:-1] + "+00:00" if value[-1] in {"Z", "z"} else value
+    try:
+        moment = datetime.fromisoformat(candidate)
+    except ValueError as exc:
+        raise ValueError(f"{label} is not a parseable ISO-8601 timestamp") from exc
+    if moment.tzinfo is None or moment.tzinfo.utcoffset(moment) is None:
+        raise ValueError(f"{label} must be timezone-aware")
+    return moment
+
+
+def _validate_entry_reference_association(entry: dict) -> None:
+    """Fail closed unless the reference proves it belongs to this exact source."""
+    entry_id = entry.get("id", "<unknown>")
+    association = entry["reference"].get("association")
+    if not isinstance(association, dict):
+        raise ValueError(
+            f"{entry_id} reference association evidence is required in "
+            f"{SCHEMA_VERSION_V2} manifests"
+        )
+    unknown = sorted(set(association) - _REFERENCE_ASSOCIATION_KEYS)
+    if unknown:
+        raise ValueError(
+            f"{entry_id} reference association contains unsupported fields: {unknown}"
+        )
+    source_sha256 = association.get("source_sha256")
+    if not isinstance(source_sha256, str) or not _SHA256.fullmatch(source_sha256):
+        raise ValueError(f"{entry_id} reference association source SHA-256 is malformed")
+    if source_sha256 != entry["source"]["sha256"]:
+        raise ValueError(
+            f"{entry_id} reference association does not bind the entry source SHA-256"
+        )
+    started_at = _parse_timezone_aware_timestamp(
+        association.get("recording_started_at"),
+        f"{entry_id} recording_started_at",
+    )
+    created_at = _parse_timezone_aware_timestamp(
+        association.get("reference_created_at"),
+        f"{entry_id} reference_created_at",
+    )
+    if created_at < started_at:
+        raise ValueError(f"{entry_id} reference_created_at precedes recording_started_at")
+    completion_at = started_at + timedelta(milliseconds=entry["source"]["duration_ms"])
+    if created_at < completion_at:
+        raise ValueError(f"{entry_id} reference_created_at precedes recording completion")
+    basis = association.get("basis")
+    if not isinstance(basis, str) or not basis.strip():
+        raise ValueError(f"{entry_id} reference association basis must be a nonblank string")
+
+
+def _verified_reference_association(entry: dict, *, schema_version: str) -> dict | None:
+    """Return association evidence only for fully validated versioned manifests.
+
+    Legacy ``v1`` manifests can never verify an association, so fresh agreement
+    metrics stay suppressed instead of implying a source-reference pairing.
+    """
+    reference = entry.get("reference")
+    if reference is None or schema_version != SCHEMA_VERSION_V2:
+        return None
+    _validate_entry_reference_association(entry)
+    return reference["association"]
+
+
 def load_canary_manifest(path: str | Path) -> tuple[Path, dict]:
     manifest_path = Path(path).resolve()
     try:
         document = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not load canary manifest: {manifest_path}") from exc
-    if not isinstance(document, dict) or document.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(f"canary manifest must use schema {SCHEMA_VERSION}")
+    schema_version = document.get("schema_version") if isinstance(document, dict) else None
+    if schema_version not in {SCHEMA_VERSION, SCHEMA_VERSION_V2}:
+        raise ValueError(
+            f"canary manifest must use schema {SCHEMA_VERSION} or {SCHEMA_VERSION_V2}"
+        )
     _validate_manifest_contract(document)
     entries = document.get("entries")
     if not isinstance(entries, list) or not entries:
@@ -371,6 +447,8 @@ def load_canary_manifest(path: str | Path) -> tuple[Path, dict]:
         raise ValueError("canary entry IDs must be lowercase kebab-case slugs")
     for entry in entries:
         _validate_entry_contract(entry)
+        if schema_version == SCHEMA_VERSION_V2 and entry.get("reference") is not None:
+            _validate_entry_reference_association(entry)
     roles = {str(item.get("role", "")) for item in entries}
     if not roles.issubset(_ROLES):
         raise ValueError("canary entries contain an unsupported role")
@@ -425,6 +503,7 @@ def validate_canary_bindings(
 
 def _corpus_binding(manifest: dict) -> tuple[dict, str]:
     document = {
+        "manifest_schema_version": manifest["schema_version"],
         "canary_id": manifest["canary_id"],
         "entries": [
             {
@@ -439,6 +518,9 @@ def _corpus_binding(manifest: dict) -> tuple[dict, str]:
                 ),
                 "reference_kind": (
                     entry["reference"]["kind"] if entry.get("reference") else None
+                ),
+                "reference_association": (
+                    entry["reference"].get("association") if entry.get("reference") else None
                 ),
             }
             for entry in manifest["entries"]
@@ -1013,6 +1095,7 @@ def evaluate_canary_result(
     replay_result_byte_identical: bool | None = None,
     runtime_accounting_complete: bool = True,
     evaluation_provenance: dict | None = None,
+    manifest_schema_version: str = SCHEMA_VERSION,
 ) -> dict:
     runtime_seconds = _finite_number(runtime_seconds, "runtime_seconds")
     full_result = transcription_result_from_dict(result_document)
@@ -1049,7 +1132,12 @@ def evaluate_canary_result(
         for item in result.segments
     )
     reference = entry.get("reference")
-    if reference is not None:
+    association = _verified_reference_association(
+        entry,
+        schema_version=manifest_schema_version,
+    )
+    metrics = None
+    if reference is not None and association is not None:
         reference_path = Path(reference["path"])
         reference_text = reference_path.read_text(encoding="utf-8")
         metrics = evaluate_documents(
@@ -1059,8 +1147,6 @@ def evaluate_canary_result(
             duration_ms=result.duration_ms,
             window_ms=int(policy.get("window_ms", 60_000)),
         )
-    else:
-        metrics = None
     expected_source = entry["source"]["sha256"]
     reasons = []
     if result.source_sha256 != expected_source:
@@ -1101,14 +1187,55 @@ def evaluate_canary_result(
             agreement_warnings.append("PROVISIONAL_REFERENCE_DISAGREEMENT_HIGH")
         if not metrics["time_window_evaluation_available"]:
             agreement_warnings.append("TIMESTAMPED_REFERENCE_UNAVAILABLE")
+    if reference is None:
+        agreement_status = "NOT_MEASURED"
+        agreement_limitation = (
+            "No reference transcript is available; operational quality and runtime are "
+            "measured without inventing accuracy metrics."
+        )
+    elif association is None:
+        agreement_status = "BLOCKED_UNVERIFIED_ASSOCIATION"
+        agreement_warnings.append("REFERENCE_ASSOCIATION_UNVERIFIED")
+        agreement_limitation = (
+            "The manifest provides no verifiable source-reference association, so fresh "
+            "WER/CER stay suppressed instead of implying an established pairing."
+        )
+    else:
+        agreement_status = "WARNING" if agreement_warnings else "WITHIN_CANARY_BOUND"
+        agreement_limitation = (
+            "MacWhisper text is provisional, untimed and has no speaker labels; "
+            "it cannot be safely trimmed to a source-time boundary. Whole-reference "
+            "WER is observation-only drift evidence, not ground-truth accuracy."
+        )
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
+        "manifest_schema_version": manifest_schema_version,
         "entry_id": entry["id"],
         "role": entry["role"],
         "source_sha256": expected_source,
         "reference_sha256": reference["sha256"] if reference else None,
         "reference_kind": reference["kind"] if reference else None,
         "reference_is_human_ground_truth": False,
+        "reference_association": (
+            {
+                "status": "VERIFIED_OBSERVATION_ONLY",
+                **association,
+                "accuracy_certified": False,
+            }
+            if association is not None
+            else (
+                {
+                    "status": "UNVERIFIED",
+                    "reason": "NO_VERIFIABLE_SOURCE_ASSOCIATION",
+                    "accuracy_certified": False,
+                }
+                if reference is not None
+                else {
+                    "status": "NOT_APPLICABLE",
+                    "accuracy_certified": False,
+                }
+            )
+        ),
         "execution_fingerprint_sha256": execution_fingerprint,
         "evaluation_provenance": evaluation_provenance
         or {
@@ -1154,7 +1281,11 @@ def evaluate_canary_result(
         "out_of_scope_observation": out_of_scope_observation,
         "provisional_reference_metrics": metrics,
         "provisional_reference_comparison_scope": {
-            "reference_scope": "WHOLE_UNTIMED_REFERENCE" if reference else "NOT_AVAILABLE",
+            "reference_scope": (
+                "WHOLE_UNTIMED_REFERENCE"
+                if association is not None
+                else ("UNVERIFIED_ASSOCIATION" if reference is not None else "NOT_AVAILABLE")
+            ),
             "candidate_scope": (
                 "SOURCE_TIME_BOUNDARY" if evaluation_end_ms is not None else "FULL_SOURCE"
             ),
@@ -1167,23 +1298,10 @@ def evaluate_canary_result(
             "failure_reasons": reasons,
         },
         "agreement_observation": {
-            "status": (
-                "NOT_MEASURED"
-                if reference is None
-                else ("WARNING" if agreement_warnings else "WITHIN_CANARY_BOUND")
-            ),
+            "status": agreement_status,
             "warnings": agreement_warnings,
             "accuracy_certified": False,
-            "limitation": (
-                "No reference transcript is available; operational quality and runtime are "
-                "measured without inventing accuracy metrics."
-                if reference is None
-                else (
-                    "MacWhisper text is provisional, untimed and has no speaker labels; "
-                    "it cannot be safely trimmed to a source-time boundary. Whole-reference "
-                    "WER is observation-only drift evidence, not ground-truth accuracy."
-                )
-            ),
+            "limitation": agreement_limitation,
         },
         "diarization_claim": {
             "status": "NOT_MEASURED",
@@ -1441,6 +1559,7 @@ def run_canary(
                 ),
                 runtime_accounting_complete=accounting["runtime_accounting_complete"],
                 evaluation_provenance=provenance,
+                manifest_schema_version=manifest["schema_version"],
             )
             report_path = entry_output / "canary-report.json"
             _atomic_json(report_path, report)
