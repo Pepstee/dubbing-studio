@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf }}">
+    <title>{{ title }} · Dubbing Studio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='review.css') }}">
+    <script src="{{ url_for('static', filename='review.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__identity">
+        <strong>Dubbing Studio</strong>
+        <span>Private evidence review</span>
+      </div>
+      <div class="topbar__progress" aria-live="polite">
+        <span id="progress-label">{{ progress.reviewed }} of {{ progress.total }} reviewed</span>
+        <progress id="progress" value="{{ progress.reviewed }}" max="{{ progress.total }}">
+          {{ progress.reviewed }} of {{ progress.total }}
+        </progress>
+      </div>
+    </header>
+
+    <main class="review-shell">
+      <aside class="review-queue" aria-label="Uncertain spans">
+        <div class="queue-heading">
+          <div>
+            <h1>Uncertain spans</h1>
+            <p>{{ '%.1f'|format(manifest.uncertain_audio_duration_ms / 1000) }} seconds of speech</p>
+          </div>
+          <span class="privacy-mark">Local only</span>
+        </div>
+        <ol id="review-list" class="review-list">
+          {% for item in manifest["items"] %}
+            {% set decision = decisions["items"][item.id] %}
+            <li>
+              <button type="button" data-review-index="{{ loop.index0 }}">
+                <span>{{ '%02d'|format(loop.index) }}</span>
+                <span>{{ '%.1f'|format(item.start_ms / 1000) }}s · {{ item.proposed_language }}</span>
+                <span>{{ decision.status }}</span>
+              </button>
+            </li>
+          {% endfor %}
+        </ol>
+      </aside>
+
+      <section class="review-stage" aria-labelledby="item-heading">
+        <div class="stage-heading">
+          <div>
+            <p id="item-position" class="position">Span 1 of {{ manifest.item_count }}</p>
+            <h2 id="item-heading">Listen, then decide</h2>
+          </div>
+          <div class="stage-status">
+            <span id="item-time">—</span>
+            <span id="item-status" class="status-badge">Pending</span>
+          </div>
+        </div>
+
+        <div id="loading-state" class="loading-state" role="status">Loading review evidence…</div>
+        <div id="review-editor" hidden>
+          <div class="audio-block">
+            <audio id="clip-player" controls preload="metadata"></audio>
+            <p>Context is included before and after the uncertain speech.</p>
+          </div>
+
+          <div class="field-row">
+            <label class="text-field" for="transcript-text">
+              Transcript
+              <textarea id="transcript-text" rows="4" spellcheck="false"></textarea>
+            </label>
+            <label class="language-field" for="transcript-language">
+              Language
+              <select id="transcript-language">
+                <option value="en">English</option>
+                <option value="ru">Russian</option>
+                <option value="ro">Romanian</option>
+                <option value="ko">Korean</option>
+                <option value="mixed">Mixed / code-switched</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="notes-field" for="review-notes">
+            Optional note
+            <input id="review-notes" type="text" maxlength="4000"
+                   placeholder="Why this remains uncertain, pronunciation context, or correction note">
+          </label>
+
+          <div class="decision-bar" aria-label="Review decision">
+            <button id="approve-button" class="primary" type="button" aria-keyshortcuts="A">
+              Approve unchanged <kbd>A</kbd>
+            </button>
+            <button id="correct-button" type="button" aria-keyshortcuts="Control+Enter">
+              Save correction <kbd>⌘↵</kbd>
+            </button>
+            <button id="unclear-button" class="quiet" type="button" aria-keyshortcuts="U">
+              Still unclear <kbd>U</kbd>
+            </button>
+            <button id="no-speech-button" class="quiet" type="button" aria-keyshortcuts="N">
+              No speech <kbd>N</kbd>
+            </button>
+          </div>
+
+          <div class="navigation-bar">
+            <button id="previous-button" class="text-button" type="button">← Previous</button>
+            <p><kbd>Space</kbd> play · <kbd>←</kbd><kbd>→</kbd> navigate</p>
+            <button id="next-button" class="text-button" type="button">Next →</button>
+          </div>
+        </div>
+
+        <section id="completion" class="completion" hidden aria-labelledby="completion-heading">
+          <p class="completion__mark">Review complete</p>
+          <h2 id="completion-heading">All spans have a decision.</h2>
+          <p id="completion-copy"></p>
+          <button id="export-button" class="primary" type="button">Export reviewed transcript</button>
+          <p id="export-status" class="export-status" role="status" aria-live="polite"></p>
+          <p class="safety-copy">Export creates local evidence with correction lineage. It does not emit a GIGA event.</p>
+        </section>
+
+        <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+      </section>
+    </main>
+  </body>
+</html>

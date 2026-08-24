@@ -1,0 +1,210 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from dubbing.apps.personal_capture.config import load_config, validate_config
+
+
+def deployment_config(tmp_path: Path) -> dict:
+    workspace = tmp_path / "life-logging" / "audio-processing"
+    return {
+        "schema_version": "dubbing.personal-capture-deployment.v1",
+        "machine": "test",
+        "landing_inbox": {
+            "wsl_path": str(workspace / "recordings" / "inbox"),
+            "minimum_file_age_seconds": 60,
+        },
+        "workspace": {"wsl_path": str(workspace)},
+        "paths": {
+            "packages": "outputs/packages",
+            "processing": "processing",
+            "state": "state",
+        },
+        "defaults": {
+            "asr_backend": "faster-whisper",
+            "asr_retry_backend": "faster-whisper",
+            "resumable": True,
+            "transcription_strategy": "adaptive",
+            "transcription_chunk_seconds": 240,
+            "transcription_minimum_chunk_seconds": 60,
+            "transcription_maximum_chunk_seconds": 480,
+            "transcription_overlap_seconds": 2,
+            "transcription_minimum_silence_seconds": 0.7,
+            "audio_candidate_policies": [
+                "raw",
+                "downmix",
+                "channels",
+                "speech-band-normalized",
+            ],
+            "maximum_audio_candidate_channels": 4,
+            "vad_backend": "faster-whisper-silero",
+            "vad_silence_verification_enabled": True,
+            "vad_targeted_retry_region_detection_enabled": True,
+            "vad_strict_threshold": 0.2,
+            "vad_sensitive_threshold": 0.1,
+            "vad_minimum_speech_ms": 40,
+            "vad_minimum_silence_ms": 180,
+            "vad_speech_pad_ms": 150,
+            "vad_maximum_region_seconds": 8.0,
+            "diarization_backend": "sherpa-onnx",
+            "diarization_cluster_threshold": 0.85,
+            "diarization_chunk_seconds": 7200,
+            "diarization_global_speaker_threshold": 0.8,
+            "diarization_global_speaker_margin": 0.05,
+            "maximum_audio_seconds": 86400,
+            "minimum_free_bytes": 0,
+            "asr_model": str(tmp_path / "asr-model"),
+            "asr_device": "cuda",
+            "asr_compute_type": "float16",
+            "asr_retry_model": str(tmp_path / "asr-retry-model"),
+            "asr_retry_device": "cuda",
+            "asr_retry_compute_type": "int8_float16",
+            "translation_target": "en",
+            "translation_backend": "nllb",
+            "translation_model": str(tmp_path / "translation-model"),
+            "translation_device": "cuda",
+            "diarization_device": "cpu",
+            "segmentation_model": str(tmp_path / "segmentation.onnx"),
+            "embedding_model": str(tmp_path / "embedding.onnx"),
+            "model_manifest": str(tmp_path / "model-manifest.json"),
+            "offline_models_required": True,
+            "review_required": True,
+        },
+        "service": {"poll_seconds": 15, "restart_policy": "on-failure"},
+        "network": {
+            "bind_host": "127.0.0.1",
+            "port": 7433,
+            "max_upload_bytes": 17_179_869_184,
+            "upload_timeout_seconds": 3600,
+            "token_file": str(tmp_path / "capture.token"),
+            "secure_cookie": False,
+            "exposure": "tailscale-serve-only",
+        },
+        "giga_outbox": {
+            "path": str(workspace / "outbox" / "giga"),
+            "automatic_interpreted_memory_promotion": False,
+        },
+        "boundaries": {
+            "watcher_enabled": True,
+            "automatic_giga_promotion": False,
+            "network_upload_by_dubbing_studio": True,
+            "source_deletion_by_dubbing_studio": False,
+        },
+    }
+
+
+def test_canonical_config_is_valid(tmp_path):
+    config = deployment_config(tmp_path)
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config), encoding="utf-8")
+
+    assert load_config(path) == config
+
+
+def test_mac_provider_pair_can_disable_nonessential_translation(tmp_path):
+    config = deployment_config(tmp_path)
+    config["defaults"].update(
+        {
+            "asr_backend": "whisperkit",
+            "asr_model_name": "large-v3",
+            "asr_executable": "/opt/homebrew/bin/whisperkit-cli",
+            "asr_server_port": 50060,
+            "asr_retry_backend": "mlx",
+            "asr_retry_temperatures": [0.0],
+            "translation_backend": "none",
+        }
+    )
+    config["defaults"].pop("translation_model")
+    config["defaults"].pop("translation_device")
+
+    assert validate_config(config) == config
+
+
+def test_checked_in_mac_deployment_is_schema_valid():
+    repository = Path(__file__).resolve().parents[2]
+
+    config = load_config(
+        repository / "deploy" / "personal_capture" / "mac" / "personal-capture.json"
+    )
+
+    assert config["machine"] == "Artioms-MacBook-Air"
+    assert config["defaults"]["asr_backend"] == "whisperkit"
+    assert config["defaults"]["asr_retry_backend"] == "mlx"
+    assert config["defaults"]["vad_silence_verification_enabled"] is True
+    assert config["defaults"]["vad_targeted_retry_region_detection_enabled"] is False
+
+
+def test_checked_in_gigabyte_deployment_keeps_both_vad_roles_explicit():
+    repository = Path(__file__).resolve().parents[2]
+
+    config = load_config(
+        repository / "deploy" / "personal_capture" / "gigabyte" / "personal-capture.json"
+    )
+
+    assert config["defaults"]["vad_silence_verification_enabled"] is True
+    assert config["defaults"]["vad_targeted_retry_region_detection_enabled"] is True
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda config: config["defaults"].update(resumable=False), "resumable"),
+        (
+            lambda config: config["defaults"].update(transcription_strategy="fixed"),
+            "transcription_strategy",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                vad_sensitive_threshold=0.3,
+                vad_strict_threshold=0.2,
+            ),
+            "VAD thresholds",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                vad_targeted_retry_region_detection_enabled="no",
+            ),
+            "vad_targeted_retry_region_detection_enabled",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                diarization_cluster_threshold=0,
+            ),
+            "diarization_cluster_threshold",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                audio_candidate_policies=["channels", "raw"],
+            ),
+            "audio_candidate_policies",
+        ),
+        (
+            lambda config: config["defaults"].update(
+                diarization_backend="pyannote-community-1",
+                pyannote_model="relative/model",
+            ),
+            "absolute local pyannote_model",
+        ),
+        (
+            lambda config: config["paths"].update(processing="../outside"),
+            "escapes",
+        ),
+        (
+            lambda config: config["boundaries"].update(
+                automatic_giga_promotion=True
+            ),
+            "promotion",
+        ),
+        (
+            lambda config: config["network"].update(bind_host="0.0.0.0"),
+            "loopback",
+        ),
+    ],
+)
+def test_unsafe_production_config_is_rejected(tmp_path, mutation, message):
+    config = deployment_config(tmp_path)
+    mutation(config)
+
+    with pytest.raises(ValueError, match=message):
+        validate_config(config)

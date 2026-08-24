@@ -6,6 +6,13 @@ from pathlib import Path
 
 from dubbing.aligner import TimedSegment, TimelineAligner
 from dubbing.backends.base import TTSBackend
+from dubbing.diarization.attribution import attribute_timed_segments
+from dubbing.diarization.base import DiarizationBackend
+from dubbing.diarization.models import (
+    DiarizationResult,
+    SegmentAttribution,
+    SpeakerConstraints,
+)
 from dubbing.models import Segment, SRTEntry, TTSResult
 from dubbing.prosody import parse_prosody
 from dubbing.srt_parser import parse_srt, parse_srt_string
@@ -61,7 +68,12 @@ class DubbingPipeline:
                 for i, seg in enumerate(segments)
             }
             for fut in concurrent.futures.as_completed(future_to_idx):
-                exc = fut.exception()
+                if fut.cancelled():
+                    continue
+                try:
+                    exc = fut.exception()
+                except concurrent.futures.CancelledError:
+                    continue
                 if exc is not None:
                     if first_error is None:
                         first_error = exc
@@ -79,3 +91,23 @@ class DubbingPipeline:
     def run(self, input: str | Path, language: str = "") -> list[TimedSegment]:
         timed, _ = self.run_full(input, language=language)
         return timed
+
+    def run_full_with_diarization(
+        self,
+        input: str | Path,
+        source_audio: str | Path,
+        diarizer: DiarizationBackend,
+        *,
+        language: str = "",
+        constraints: SpeakerConstraints | None = None,
+    ) -> tuple[
+        list[TimedSegment],
+        list[TTSResult],
+        DiarizationResult,
+        list[SegmentAttribution],
+    ]:
+        """Run the existing dubbing core and attribute it from source audio."""
+        timed, results = self.run_full(input, language=language)
+        diarization = diarizer.diarize(source_audio, constraints=constraints)
+        attributions = attribute_timed_segments(timed, diarization.turns)
+        return timed, results, diarization, attributions

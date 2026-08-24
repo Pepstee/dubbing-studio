@@ -1,0 +1,1 @@
+"""Personal Capture application tests."""

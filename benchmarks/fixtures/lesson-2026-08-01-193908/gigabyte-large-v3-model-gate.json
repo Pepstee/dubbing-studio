@@ -1,0 +1,114 @@
+{
+  "schema_version": "dubbing.gigabyte-model-download-gate.v1",
+  "candidate": {
+    "repository": "Systran/faster-whisper-large-v3",
+    "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+    "repository_url": "https://huggingface.co/Systran/faster-whisper-large-v3",
+    "total_download_bytes": 3090839273,
+    "total_download_gib": 2.878568389,
+    "model_bin_bytes": 3087284237,
+    "format": "CTranslate2",
+    "stored_weight_type": "float16",
+    "proposed_compute_type": "int8_float16",
+    "files": [
+      {"path": ".gitattributes", "bytes": 1519, "git_blob_sha1": "a6344aac8c09253b3b630fb776ae94478aa0275b"},
+      {"path": "README.md", "bytes": 2052, "git_blob_sha1": "a84bfa7f20cac02ea5a99efa5eaf687ad58c1caf"},
+      {"path": "config.json", "bytes": 2394, "git_blob_sha1": "75336feae814999bae6ccccdecf177639ffc6f9d"},
+      {"path": "model.bin", "bytes": 3087284237, "sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1"},
+      {"path": "preprocessor_config.json", "bytes": 340, "git_blob_sha1": "931c77a740890c46365c7ae0c9d350ba3cca908f"},
+      {"path": "tokenizer.json", "bytes": 2480617, "git_blob_sha1": "3a5e2ba63acdcac9a19ba56cf9bd27f185bfff61"},
+      {"path": "vocabulary.json", "bytes": 1068114, "git_blob_sha1": "0adcd01e7c237205d593b707e66dd5d7bc785d2d"}
+    ]
+  },
+  "hardware_observation": {
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "total_vram_mib": 8188,
+    "observed_idle_used_vram_mib": 4637,
+    "observed_idle_free_vram_mib": 3320,
+    "published_faster_whisper_large_int8_vram_mib": 2926,
+    "estimated_free_headroom_mib": 394,
+    "fit_verdict": "PLAUSIBLE_BUT_TIGHT_REQUIRES_RUNTIME_PREFLIGHT",
+    "latest_preflight": {
+      "observed_date": "2026-08-06",
+      "idle_used_vram_mib": 2417,
+      "idle_free_vram_mib": 5540,
+      "estimated_free_headroom_mib": 2614,
+      "system_disk_free_bytes": 747365429248,
+      "fit_verdict": "PLAUSIBLE_WITH_HEADROOM_REQUIRES_RUNTIME_MEASUREMENT",
+      "note": "VRAM is shared with WSL/Ollama and must be rechecked immediately before loading the model."
+    }
+  },
+  "rationale": {
+    "installed_alternative_models_found": 0,
+    "installed_turbo_adjustments_exhausted": [
+      "beam size",
+      "forced language",
+      "FP16 compute",
+      "short and long context",
+      "generic multilingual prompting",
+      "independent preceding transcript context",
+      "FFT denoising",
+      "speech expansion",
+      "left/right channel selection"
+    ],
+    "expected_result": "A capacity comparison, not a guaranteed improvement",
+    "promotion_rule": "Keep only if a reference-independent policy improves accuracy and the quality contract passes"
+  },
+  "authorization": {
+    "download_authorized": true,
+    "download_completed": true,
+    "operator_gate": "Satisfied by the operator's 2026-08-19 broad accuracy authorization"
+  },
+  "download_receipt": {
+    "host": "Gigabyte WSL x86_64",
+    "completed_on": "2026-08-19",
+    "installed_path": "/home/gutua/software-factory/.control/dubbing-models/faster-whisper-large-v3-edaa852",
+    "verified_total_bytes": 3090839273,
+    "verified_model_bin_sha256": "69f74147e3334731bc3a76048724833325d2ec74642fb52620eda87352e3d4f1",
+    "all_pinned_file_hashes_passed": true,
+    "int8_float16_runtime_preflight": {
+      "model_loaded": true,
+      "observed_gpu_memory_used_mib": 2127,
+      "observed_gpu_memory_free_mib": 5830,
+      "fit_verdict": "PASS_WITH_HEADROOM"
+    }
+  },
+  "validation_evidence": {
+    "fixture": "fleurs-validation-25x4-70bb2e84b976",
+    "human_ground_truth": true,
+    "runtime_seconds": 1446.417873,
+    "sweep_sha256": "0860a79154970fe146f0d1a570a18db34fe502d3143fb8585ce31f383fe820f4",
+    "report_sha256": "c366865f7d243f65fa01d1a5354d13b6783680be8cde584dd9afcaf8746a47c1",
+    "automatic_word_accuracy": 0.9228395061728395,
+    "automatic_per_language_word_accuracy": {
+      "en": 0.9680638722554891,
+      "ru": 0.9472527472527472,
+      "ro": 0.9032815198618307,
+      "ko": 0.8679706601466992
+    },
+    "automatic_all_language_targets_passed": false,
+    "oracle_all_language_targets_passed": false
+  },
+  "long_form_evidence": {
+    "fixture": "lesson-2026-08-01-193908-gigabyte-large-v3-no-vad-beam5-v1",
+    "reference_kind": "macwhisper-provisional-untimed-text",
+    "reference_is_human_ground_truth": false,
+    "runtime_seconds": 296.844,
+    "decode_seconds": 277.079,
+    "realtime_factor": 0.055551,
+    "candidate_sha256": "66d39ef6f0bf563eaa1dc1043d798814df3461f4c7337b3a1bf4bbb84884f683",
+    "report_sha256": "1b53f3fd25a095b60010458cbbbfd7705224f0e922961111182ae4fc4e1079c9",
+    "word_accuracy": 0.4925249169435216,
+    "character_accuracy": 0.5768277156067815,
+    "quality_status": "REPROCESS_REQUIRED",
+    "pathological_max_token": "nya",
+    "pathological_max_token_run": 222
+  },
+  "promotion_verdict": {
+    "state": "REJECTED_AS_PRODUCTION_DEFAULT",
+    "reason": "No reference-independent validation policy met every language floor, and the noisy long-form candidate was less accurate than turbo with a critical repetition loop.",
+    "retained_scope": "Evaluation-only optional local adjudicator; never automatic GIGA admission"
+  },
+  "cloud_allowed": false,
+  "giga_admission_emitted": false
+}

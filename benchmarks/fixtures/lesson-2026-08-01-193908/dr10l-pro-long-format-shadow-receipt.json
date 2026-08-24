@@ -1,0 +1,138 @@
+{
+  "artifact_responsibility": "Machine-readable evidence for the long DR-10L Pro container-format production canary; this is distinct from the four-minute compatibility receipt, historical accuracy fixtures and a future physical-recorder acoustic canary.",
+  "capture_id": "442730404e32831a87e1dc4eb32178762e749fd5315c38f710af6cf5b8a14c70",
+  "certification_scope": {
+    "acoustic_capture_from_physical_dr10l_pro": false,
+    "container_and_codec_compatibility": true,
+    "english_russian_asr_pipeline": true,
+    "long_form_adaptive_processing": true,
+    "production_personal_capture_path": true,
+    "speaker_identity_accuracy": false
+  },
+  "derived_source": {
+    "canonical_parent_full_source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+    "decoded_pcm_sha256": "0b3c819f3996e3d16a096037b785b572155404d9ffd25d40102b0e04a27ef06f",
+    "duration_ms": 3400000,
+    "sha256": "442730404e32831a87e1dc4eb32178762e749fd5315c38f710af6cf5b8a14c70",
+    "size_bytes": 652800814,
+    "source_interval_ms": [
+      0,
+      3400000
+    ],
+    "transformation": {
+      "bits_per_sample": "32-bit float",
+      "channels": 1,
+      "codec": "pcm_f32le",
+      "container": "BWF/WAV",
+      "sample_rate_hz": 48000,
+      "time_reference": 0
+    }
+  },
+  "evidence": {
+    "adaptive": {
+      "attempt_entry_count": 178,
+      "chunk_count": 50,
+      "coordinator_version": "adaptive-long-form-v21",
+      "null_selected_attempt_count": 0,
+      "targeted_retry_exhausted_count": 0,
+      "targeted_span_redecode_count": 20
+    },
+    "diarization_quality_report": {
+      "ambiguous_pair_count": 4,
+      "attributed_speech_duration_ratio": 1.0,
+      "attributed_word_ratio": 0.948039,
+      "missing_embedding_count": 13,
+      "sha256": "9ec80208460ef71531849326fe6cf84bb47fb873d3f97573eed0da76e4ef77ef",
+      "status": "HUMAN_REVIEW_REQUIRED",
+      "unresolved_speech_segment_count": 0,
+      "valid_overlap_segment_count": 14
+    },
+    "diarization_result_sha256": "e49b43408a957d99572f907662e0f3672b9a7771eebcc7d78537ad53a83f1986",
+    "giga_outbox_file_count_after_run_and_replay": 0,
+    "package_aggregate_sha256_before_and_after_replay": "42828ee0276a80f8d3eadacc216ef7c6843c1c3e57a8aaee7eb27d6d2de23845",
+    "package_manifest_sha256": "b44ef1cadbd31992b1b1c75849e50eadc0a4fc50af805bbd4a22c814ee1237a0",
+    "preflight": {
+      "failed_check_count": 0,
+      "model_load_certified": true,
+      "ready": true,
+      "sha256": "87a8c83d98990064e4b779cb76fea1b650de50ca59103c940123216e0d3e08cb",
+      "warning_count": 0
+    },
+    "replay": {
+      "capture_database_rows_after": 5,
+      "capture_database_rows_before": 5,
+      "package_count_after": 5,
+      "package_count_before": 5,
+      "runtime_seconds": 2.27
+    },
+    "source_integrity": {
+      "concurrent_full_source_rehash_passed": true,
+      "final_stat_recheck_passed": true,
+      "progress_status": "COMPLETE",
+      "source_rehash_sha256": "442730404e32831a87e1dc4eb32178762e749fd5315c38f710af6cf5b8a14c70"
+    },
+    "transcript": {
+      "segment_count": 478,
+      "sha256": "48e7628f741a0f59a03c2375c64c1f2de907afecc3a2ef61c3589ed9215b8177",
+      "uncertain_segment_count": 9
+    },
+    "transcript_quality_report": {
+      "approval_allowed": false,
+      "repetition_finding_count": 0,
+      "sha256": "c8f7206b3aab7fea24d35004322be5f7ee3714c18bf820f5def2f4f76d124332",
+      "status": "PASS_WITH_UNCERTAIN_SPANS",
+      "timestamp_out_of_bounds_count": 0,
+      "token_count": 2484
+    },
+    "watcher_runtime_seconds": 582.58
+  },
+  "giga_admission_allowed": false,
+  "limitations": [
+    "The file contains real English/Russian lesson audio but was transcoded into the recorder format; it did not pass through the physical Tascam microphone, lavalier or analog front end.",
+    "The provisional MacWhisper reference is untimed and not human ground truth, so this receipt does not certify transcript accuracy.",
+    "Anonymous speaker coverage does not certify speaker identity or diarization correctness without human reference labels.",
+    "Nine spans remain explicitly uncertain and the package is not approval-eligible; no GIGA event was emitted."
+  ],
+  "near_silence_regression": {
+    "added_uncertain_spans": [],
+    "outside_target_segment_count": 478,
+    "outside_target_segments_byte_identical": true,
+    "outside_target_segments_sha256": "e95b015d02185621df1b33c9521b080650d8b8a00177d65b24a6f478cc8dbd9d",
+    "removed_uncertain_span": {
+      "end_ms": 991097,
+      "start_ms": 962400,
+      "text": "[UNCERTAIN: INDEPENDENT TRANSCRIPTIONS DISAGREE]"
+    },
+    "target_chunk_v20": {
+      "attempt_entry_count": 29,
+      "targeted_span_redecode_count": 20
+    },
+    "target_chunk_v21": {
+      "attempt_entry_count": 4,
+      "classification": "CONFIRMED_SILENCE_AFTER_EMPTY_ASR",
+      "energy_silence_coverage_ms": 63308,
+      "energy_silence_coverage_ratio": 0.967909,
+      "maximum_uncovered_gap_ms": 1208,
+      "targeted_span_redecode_count": 0,
+      "total_uncovered_ms": 2099
+    },
+    "v20_comparator": {
+      "attempt_entry_count": 203,
+      "capture_id": "026b23f0a47f801ecc89d600e1c0308b0679ce633ebb6e142246df2961be13c9",
+      "decoded_pcm_sha256": "0b3c819f3996e3d16a096037b785b572155404d9ffd25d40102b0e04a27ef06f",
+      "targeted_span_redecode_count": 40,
+      "uncertain_segment_count": 10,
+      "watcher_runtime_seconds": 668.78
+    }
+  },
+  "recorded_at": "2026-08-21T03:51:57+09:00",
+  "repository_head": "ce6acbc8591c53a2914396f9786f20e3c6a19880",
+  "runtime": {
+    "artifact_root": "/Users/admin/Library/Application Support/DubbingStudio/canaries/personal-capture-v20-lesson06",
+    "model_manifest_sha256": "8fcf1135a3144f024427f90b488de7ce2cbf514252440e5c9700ec42d01b464e",
+    "personal_capture_config_sha256": "af6ffaeefd715b2e3dd0b9494e20959b47ebe25ae0af784a07b232ddc0f8ac07"
+  },
+  "schema_version": "dubbing.dr10l-pro-long-format-shadow-receipt.v1",
+  "specification_source": "https://tascam.com/amer-es/product/dr-10l_pro",
+  "verdict": "LONG_FORMAT_PATH_PASS_REAL_DEVICE_ACOUSTICS_PENDING"
+}

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf }}">
+    <title>{{ title }} · Dubbing Studio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='calibration.css') }}">
+    <script src="{{ url_for('static', filename='calibration.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="identity">
+        <strong>Dubbing Studio</strong>
+        <span>Human ground-truth calibration</span>
+      </div>
+      <div class="progress-block" aria-live="polite">
+        <span id="progress-label">{{ progress.reviewed }} of {{ progress.total }} clips complete</span>
+        <progress id="progress" value="{{ progress.reviewed }}" max="{{ progress.total }}">
+          {{ progress.reviewed }} of {{ progress.total }}
+        </progress>
+      </div>
+    </header>
+
+    <main class="shell">
+      <aside class="queue" aria-label="Calibration clips">
+        <div class="queue-heading">
+          <div>
+            <h1>Calibration set</h1>
+            <p>{{ '%.1f'|format(manifest.total_audio_duration_ms / 60000) }} minutes · {{ manifest.item_count }} clips</p>
+          </div>
+          <span class="privacy-mark">Local only</span>
+        </div>
+        {% if manifest.coverage_gaps %}
+          <p class="coverage-note">Not present in this recording: {{ manifest.coverage_gaps|join(', ') }}</p>
+        {% endif %}
+        <ol id="clip-list" class="clip-list">
+          {% for item in manifest["items"] %}
+            {% set decision = decisions["items"][item.id] %}
+            <li>
+              <button type="button" data-clip-index="{{ loop.index0 }}">
+                <span>{{ '%02d'|format(loop.index) }}</span>
+                <span>{{ item.target }} · {{ '%.1f'|format(item.start_ms / 60000) }}m</span>
+                <span>{{ decision.status }}</span>
+              </button>
+            </li>
+          {% endfor %}
+        </ol>
+      </aside>
+
+      <section class="stage" aria-labelledby="clip-heading">
+        <div class="stage-heading">
+          <div>
+            <p id="clip-position" class="position">Clip 1 of {{ manifest.item_count }}</p>
+            <h2 id="clip-heading">Correct every turn</h2>
+          </div>
+          <div class="stage-status">
+            <span id="clip-time">—</span>
+            <span id="clip-status" class="status-badge">Pending</span>
+          </div>
+        </div>
+
+        <div id="loading-state" class="loading-state" role="status">Loading calibration evidence…</div>
+        <div id="editor" hidden>
+          <div class="instruction">
+            <strong>Listen to the full clip.</strong>
+            <span>Correct the exact words, language, anonymous speaker and approximate turn boundaries. Replace every Unknown speaker unless the text is <code>[unclear]</code>.</span>
+          </div>
+          <audio id="clip-player" controls preload="metadata"></audio>
+
+          <div class="turns-heading">
+            <div>
+              <h3>Timestamped turns</h3>
+              <p>Times are seconds within this 50-second clip.</p>
+            </div>
+            <button id="add-turn-button" type="button">Add turn</button>
+          </div>
+          <div id="turn-list" class="turn-list"></div>
+
+          <label class="notes-field" for="clip-notes">
+            Optional clip note
+            <input id="clip-notes" type="text" maxlength="4000"
+                   placeholder="Noise, overlapping speech, pronunciation, or annotation caveat">
+          </label>
+
+          <div class="decision-bar">
+            <button id="save-button" class="primary" type="button" aria-keyshortcuts="Control+Enter">
+              Save clip and continue <kbd>⌘↵</kbd>
+            </button>
+            <button id="no-speech-button" class="quiet" type="button">No speech in clip</button>
+          </div>
+          <p id="save-status" class="save-status" role="status" aria-live="polite"></p>
+
+          <div class="navigation-bar">
+            <button id="previous-button" class="text-button" type="button">← Previous</button>
+            <button id="next-button" class="text-button" type="button">Next →</button>
+          </div>
+        </div>
+
+        <section id="completion" class="completion" hidden aria-labelledby="completion-heading">
+          <p class="completion-mark">Calibration complete</p>
+          <h2 id="completion-heading">All selected clips are reviewed.</h2>
+          <p>The export becomes timestamped human ground truth for evaluation only. It does not admit evidence to GIGA.</p>
+          <button id="export-button" class="primary" type="button">Export ground truth</button>
+          <p id="export-status" class="export-status" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+    </main>
+
+    <template id="turn-template">
+      <article class="turn-row">
+        <div class="turn-meta">
+          <label>Start
+            <input data-field="start" type="number" min="0" max="90" step="0.01">
+          </label>
+          <label>End
+            <input data-field="end" type="number" min="0" max="90" step="0.01">
+          </label>
+          <button data-action="start-now" type="button">Start at playhead</button>
+          <button data-action="end-now" type="button">End at playhead</button>
+        </div>
+        <div class="turn-content">
+          <label>Speaker
+            <select data-field="speaker">
+              <option value="UNKNOWN">Unknown</option>
+              <option value="Speaker A">Speaker A</option>
+              <option value="Speaker B">Speaker B</option>
+              <option value="Speaker C">Speaker C</option>
+              <option value="Speaker D">Speaker D</option>
+              <option value="OVERLAP">Overlapping speakers</option>
+            </select>
+          </label>
+          <label>Language
+            <select data-field="language">
+              <option value="en">English</option>
+              <option value="ru">Russian</option>
+              <option value="ro">Romanian</option>
+              <option value="ko">Korean</option>
+              <option value="mixed">Mixed / code-switched</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+          <label class="turn-text">Exact words
+            <textarea data-field="text" rows="2" spellcheck="false"></textarea>
+          </label>
+          <button data-action="remove" class="remove-button" type="button" aria-label="Remove turn">Remove</button>
+        </div>
+      </article>
+    </template>
+  </body>
+</html>

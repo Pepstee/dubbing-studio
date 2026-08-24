@@ -1,0 +1,45 @@
+{
+  "schema_version": "dubbing.noisy-codeswitch-development-verdict.v1",
+  "verdict": "FAIL_CLOSED",
+  "scope": "DEVELOPMENT_ONLY",
+  "fixture": {
+    "manifest_sha256": "083daacf38d6f176c43374b314da5f89b7e97c102e10b5985d7a38bb0ddc3971",
+    "derivation_builder_sha256": "93f14205120503354dae02774370b10635d7d2068481836390db29a308329858",
+    "source_sha256": "4966a86bc2d78c32cd1504e870b359234a81c8cf71d5be0e689f3f5472487dd3",
+    "duration_ms": 1151940,
+    "snr_db": 20,
+    "languages": ["en", "ru", "ro", "ko"],
+    "utterances_per_language": 25,
+    "human_ground_truth_text": true,
+    "exact_derived_timestamps": true,
+    "natural_conversation": false
+  },
+  "candidate": {
+    "report_path": "benchmarks/fixtures/fleurs-noisy-codeswitch-rms20-snr20-25x4/tailfixed-report.json",
+    "report_sha256": "55994b309d9910b64fc525d2e6b31103edf0156412efa4b2e18711d143c03e65",
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "compute_type": "int8_float16"
+  },
+  "metrics": {
+    "aggregate_word_accuracy": 0.904320987654321,
+    "aggregate_wer": 0.09567901234567901,
+    "aggregate_cer": 0.04262154636967231,
+    "per_language_word_accuracy": {
+      "en": 0.9481037924151696,
+      "ru": 0.9318681318681319,
+      "ro": 0.853195164075993,
+      "ko": 0.8924205378973105
+    }
+  },
+  "gates": {
+    "quality_contract_passed": true,
+    "aggregate_accuracy_at_least_90_percent": true,
+    "every_language_accuracy_at_least_90_percent": false,
+    "accuracy_certification_eligible": false,
+    "production_scope_certified": false,
+    "giga_admission_emitted": false
+  },
+  "failure_reason": "Romanian reached 85.32% and Korean 89.24%; aggregate accuracy cannot override either per-language failure.",
+  "limitation": "The fixture is a deterministic concatenation of read-speech utterances with synthetic uniform noise. It does not certify natural conversation, overlap, diarization, or production audio."
+}

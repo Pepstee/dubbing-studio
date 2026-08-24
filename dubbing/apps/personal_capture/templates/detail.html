@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+  <a href="{{ url_for('index') }}">← Queue</a>
+  <h1>{{ record.source_name }}</h1>
+  <p>
+    <strong>{{ record.state }}</strong> · {{ record.source_size }} bytes ·
+    attempt {{ record.attempt_count }}
+  </p>
+  {% if record.error %}<p>{{ record.error }}</p>{% endif %}
+  <audio controls preload="metadata"
+         src="{{ url_for('audio', capture_id=record.capture_id) }}"></audio>
+  {% if transcript %}
+    <form method="post" action="{{ url_for('save', capture_id=record.capture_id) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="segments">
+        {% for seg in transcript.segments %}
+          <div class="segment">
+            <div class="meta">
+              {{ '%.1f'|format(seg.start_ms/1000) }}–{{ '%.1f'|format(seg.end_ms/1000) }}s<br>
+              {{ seg.speaker or 'Unassigned' }}<br>
+              speaker status {{ seg.speaker_status }}<br>
+              confidence {{ seg.confidence if seg.confidence is not none else 'n/a' }}
+            </div>
+            <label>
+              Source
+              <textarea name="source_{{ loop.index0 }}">{{ seg.text }}</textarea>
+            </label>
+            <label>
+              English translation
+              <textarea name="target_{{ loop.index0 }}">{% if translation and loop.index0 < translation.segments|length %}{{ translation.segments[loop.index0].target_text or '' }}{% endif %}</textarea>
+              {% if translation and loop.index0 < translation.segments|length %}
+                <span class="meta">
+                  {{ translation.segments[loop.index0].source_language or 'uncertain' }}
+                  · {{ translation.segments[loop.index0].language_confidence or 'n/a' }}
+                  · {{ translation.segments[loop.index0].status }}
+                </span>
+              {% endif %}
+            </label>
+          </div>
+        {% endfor %}
+      </div>
+      <h2>Review</h2>
+      {% if manifest and manifest.diarization_quality %}
+        <p>
+          Speaker attribution quality:
+          <strong>{{ manifest.diarization_quality.status }}</strong>
+        </p>
+      {% endif %}
+      <label>
+        Speaker aliases (one <code>speaker-label=Name</code> per line)
+        <textarea name="aliases">{% if manifest %}{% for key,value in manifest.review.speaker_aliases.items() %}{{ key }}={{ value }}
+{% endfor %}{% endif %}</textarea>
+      </label>
+      <label>
+        Notes
+        <textarea name="notes">{{ manifest.review.notes if manifest else '' }}</textarea>
+      </label>
+      {% if manifest and manifest.diarization_quality and manifest.diarization_quality.status == 'HUMAN_REVIEW_REQUIRED' %}
+        <label>
+          <input type="checkbox" name="diarization_review_acknowledged" value="yes">
+          I reviewed or corrected the uncertain speaker attribution shown above.
+        </label>
+      {% endif %}
+      <div class="toolbar">
+        <button name="action" value="save">Save edits</button>
+        <button name="action" value="approve">Approve for GIGA outbox</button>
+        <button class="danger" name="action" value="reject">Reject</button>
+      </div>
+    </form>
+  {% elif record.state in ('failed','rejected') %}
+    <form method="post" action="{{ url_for('retry', capture_id=record.capture_id) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button>Retry processing</button>
+    </form>
+  {% endif %}
+{% endblock %}

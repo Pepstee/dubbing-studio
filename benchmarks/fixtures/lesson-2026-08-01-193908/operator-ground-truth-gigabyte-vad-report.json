@@ -1,0 +1,631 @@
+{
+  "accuracy_certification_eligible": false,
+  "accuracy_certification_scope": "operator-reviewed uncertain clips only",
+  "alignment_policy": "bounded minimum-edit token subsequence within review clip",
+  "candidate": {
+    "backend": "faster-whisper",
+    "model": "faster-whisper-large-v3-turbo-ct2"
+  },
+  "candidate_sha256": "22fd495bb19ad37cb0a97175b54bbe61e72b5b37f93dc746f345b34bfb55ff42",
+  "coverage_gaps": [
+    "ro"
+  ],
+  "fixture_sha256": "6cd6156505123fa01b143847c8f4c9c04f6d8118a87cb69978b541cabfd6ae6f",
+  "full_recording_accuracy_certified": false,
+  "giga_admission_emitted": false,
+  "metrics": {
+    "cer": {
+      "candidate_units": 195,
+      "edits": 283,
+      "rate": 0.6505747126436782,
+      "reference_units": 435
+    },
+    "character_accuracy": 0.34942528735632183,
+    "target_passed": false,
+    "target_word_accuracy": 0.9,
+    "wer": {
+      "candidate_units": 45,
+      "edits": 70,
+      "rate": 0.7070707070707071,
+      "reference_units": 99
+    },
+    "word_accuracy": 0.29292929292929293
+  },
+  "per_language": {
+    "en": {
+      "cer": {
+        "candidate_units": 32,
+        "edits": 26,
+        "rate": 0.45614035087719296,
+        "reference_units": 57
+      },
+      "wer": {
+        "candidate_units": 9,
+        "edits": 8,
+        "rate": 0.5,
+        "reference_units": 16
+      }
+    },
+    "ko": {
+      "cer": {
+        "candidate_units": 0,
+        "edits": 9,
+        "rate": 1.0,
+        "reference_units": 9
+      },
+      "wer": {
+        "candidate_units": 0,
+        "edits": 6,
+        "rate": 1.0,
+        "reference_units": 6
+      }
+    },
+    "mixed": {
+      "cer": {
+        "candidate_units": 52,
+        "edits": 149,
+        "rate": 0.8514285714285714,
+        "reference_units": 175
+      },
+      "wer": {
+        "candidate_units": 14,
+        "edits": 32,
+        "rate": 0.8421052631578947,
+        "reference_units": 38
+      }
+    },
+    "ru": {
+      "cer": {
+        "candidate_units": 111,
+        "edits": 103,
+        "rate": 0.5309278350515464,
+        "reference_units": 194
+      },
+      "wer": {
+        "candidate_units": 22,
+        "edits": 24,
+        "rate": 0.6153846153846154,
+        "reference_units": 39
+      }
+    },
+    "unknown": {
+      "cer": {
+        "candidate_units": 0,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 0
+      },
+      "wer": {
+        "candidate_units": 0,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 0
+      }
+    }
+  },
+  "schema_version": "dubbing.operator-ground-truth-evaluation.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "span_count": 26,
+  "spans": [
+    {
+      "candidate": "say",
+      "cer": {
+        "candidate_units": 3,
+        "edits": 32,
+        "rate": 0.9142857142857143,
+        "reference_units": 35
+      },
+      "end_ms": 765858,
+      "id": "u-000095-3968ff76cd",
+      "language": "mixed",
+      "reference": "you say \"На этом дереве, да?\" – on this tree",
+      "start_ms": 761968,
+      "wer": {
+        "candidate_units": 1,
+        "edits": 8,
+        "rate": 0.8888888888888888,
+        "reference_units": 9
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 8,
+        "rate": 1.0,
+        "reference_units": 8
+      },
+      "end_ms": 1985601,
+      "id": "u-000246-75f969871d",
+      "language": "ru",
+      "reference": "Не цели, а",
+      "start_ms": 1981881,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 3,
+        "rate": 1.0,
+        "reference_units": 3
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 39,
+        "rate": 1.0,
+        "reference_units": 39
+      },
+      "end_ms": 1990261,
+      "id": "u-000249-747d5ce7b5",
+      "language": "ru",
+      "reference": "... не возможности, a свойства, вот, свойства",
+      "start_ms": 1986441,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 6,
+        "rate": 1.0,
+        "reference_units": 6
+      }
+    },
+    {
+      "candidate": "inhibiting the leaves",
+      "cer": {
+        "candidate_units": 19,
+        "edits": 42,
+        "rate": 0.9545454545454546,
+        "reference_units": 44
+      },
+      "end_ms": 2124481,
+      "id": "u-000279-bdad7609bc",
+      "language": "mixed",
+      "reference": "plants like травы. Травы это не обязательно листья.",
+      "start_ms": 2119301,
+      "wer": {
+        "candidate_units": 3,
+        "edits": 8,
+        "rate": 1.0,
+        "reference_units": 8
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 7,
+        "rate": 1.0,
+        "reference_units": 7
+      },
+      "end_ms": 2140161,
+      "id": "u-000282-956177d0d6",
+      "language": "ru",
+      "reference": "ромашка",
+      "start_ms": 2136341,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "последняя слова последняя",
+      "cer": {
+        "candidate_units": 23,
+        "edits": 18,
+        "rate": 0.8571428571428571,
+        "reference_units": 21
+      },
+      "end_ms": 2295636,
+      "id": "u-000305-94a16b9c57",
+      "language": "ru",
+      "reference": "99% и вот последнее слово",
+      "start_ms": 2291696,
+      "wer": {
+        "candidate_units": 3,
+        "edits": 5,
+        "rate": 1.0,
+        "reference_units": 5
+      }
+    },
+    {
+      "candidate": "изобидно",
+      "cer": {
+        "candidate_units": 8,
+        "edits": 3,
+        "rate": 0.375,
+        "reference_units": 8
+      },
+      "end_ms": 2303516,
+      "id": "u-000307-31b7da4c73",
+      "language": "ru",
+      "reference": "изобилие",
+      "start_ms": 2299676,
+      "wer": {
+        "candidate_units": 1,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "yes yes no",
+      "cer": {
+        "candidate_units": 8,
+        "edits": 32,
+        "rate": 0.8888888888888888,
+        "reference_units": 36
+      },
+      "end_ms": 2489620,
+      "id": "u-000331-46659de20b",
+      "language": "mixed",
+      "reference": "двор, дворик, много смыслов – court yes yes",
+      "start_ms": 2480800,
+      "wer": {
+        "candidate_units": 3,
+        "edits": 6,
+        "rate": 0.8571428571428571,
+        "reference_units": 7
+      }
+    },
+    {
+      "candidate": "дворы чего",
+      "cer": {
+        "candidate_units": 9,
+        "edits": 1,
+        "rate": 0.1,
+        "reference_units": 10
+      },
+      "end_ms": 2596760,
+      "id": "u-000347-0f057aec54",
+      "language": "ru",
+      "reference": "Дворы чего?",
+      "start_ms": 2592820,
+      "wer": {
+        "candidate_units": 2,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 2
+      }
+    },
+    {
+      "candidate": "водорцы",
+      "cer": {
+        "candidate_units": 7,
+        "edits": 4,
+        "rate": 0.5,
+        "reference_units": 8
+      },
+      "end_ms": 2600260,
+      "id": "u-000348-899c8f38b7",
+      "language": "ru",
+      "reference": "Колодцы?",
+      "start_ms": 2596520,
+      "wer": {
+        "candidate_units": 1,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "возможно может быть но",
+      "cer": {
+        "candidate_units": 19,
+        "edits": 7,
+        "rate": 0.2692307692307692,
+        "reference_units": 26
+      },
+      "end_ms": 2625340,
+      "id": "u-000354-6a51dbefb8",
+      "language": "ru",
+      "reference": "Хотя, возможно, Может быть, но",
+      "start_ms": 2621480,
+      "wer": {
+        "candidate_units": 4,
+        "edits": 1,
+        "rate": 0.2,
+        "reference_units": 5
+      }
+    },
+    {
+      "candidate": "выйдем во двор",
+      "cer": {
+        "candidate_units": 12,
+        "edits": 1,
+        "rate": 0.07692307692307693,
+        "reference_units": 13
+      },
+      "end_ms": 2630280,
+      "id": "u-000357-23bc7b7b63",
+      "language": "ru",
+      "reference": "Выйдем во двор.",
+      "start_ms": 2626320,
+      "wer": {
+        "candidate_units": 3,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 3
+      }
+    },
+    {
+      "candidate": "курданьер это как раз таки есть код",
+      "cer": {
+        "candidate_units": 29,
+        "edits": 3,
+        "rate": 0.0967741935483871,
+        "reference_units": 31
+      },
+      "end_ms": 2697475,
+      "id": "u-000369-78acd6c0a8",
+      "language": "ru",
+      "reference": "курданьер это как раз таки и есть корт",
+      "start_ms": 2693705,
+      "wer": {
+        "candidate_units": 7,
+        "edits": 2,
+        "rate": 0.25,
+        "reference_units": 8
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 24,
+        "rate": 1.0,
+        "reference_units": 24
+      },
+      "end_ms": 2894896,
+      "id": "u-000415-7c48a2f5a5",
+      "language": "mixed",
+      "reference": "we came from. Как будет лоза?",
+      "start_ms": 2891216,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 6,
+        "rate": 1.0,
+        "reference_units": 6
+      }
+    },
+    {
+      "candidate": "because you drop the e",
+      "cer": {
+        "candidate_units": 18,
+        "edits": 1,
+        "rate": 0.05263157894736842,
+        "reference_units": 19
+      },
+      "end_ms": 2953516,
+      "id": "u-000426-474e06191a",
+      "language": "en",
+      "reference": "Because you drop the e.",
+      "start_ms": 2950496,
+      "wer": {
+        "candidate_units": 5,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 5
+      }
+    },
+    {
+      "candidate": "our vine",
+      "cer": {
+        "candidate_units": 7,
+        "edits": 3,
+        "rate": 0.42857142857142855,
+        "reference_units": 7
+      },
+      "end_ms": 2973416,
+      "id": "u-000431-0fc8175576",
+      "language": "mixed",
+      "reference": "это vine",
+      "start_ms": 2970396,
+      "wer": {
+        "candidate_units": 2,
+        "edits": 1,
+        "rate": 0.5,
+        "reference_units": 2
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 19,
+        "rate": 1.0,
+        "reference_units": 19
+      },
+      "end_ms": 3049296,
+      "id": "u-000445-6fc41cc75a",
+      "language": "ru",
+      "reference": "веревка, вот, веревка",
+      "start_ms": 3045696,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 3,
+        "rate": 1.0,
+        "reference_units": 3
+      }
+    },
+    {
+      "candidate": "that",
+      "cer": {
+        "candidate_units": 4,
+        "edits": 4,
+        "rate": 1.0,
+        "reference_units": 4
+      },
+      "end_ms": 3080036,
+      "id": "u-000452-80c02536cd",
+      "language": "ru",
+      "reference": "Всё.",
+      "start_ms": 3076836,
+      "wer": {
+        "candidate_units": 1,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "that s a vineyard",
+      "cer": {
+        "candidate_units": 14,
+        "edits": 25,
+        "rate": 0.6578947368421053,
+        "reference_units": 38
+      },
+      "end_ms": 3081756,
+      "id": "u-000453-32611fb196",
+      "language": "en",
+      "reference": "So that's, that's a vinyard, that's a vinyard",
+      "start_ms": 3077976,
+      "wer": {
+        "candidate_units": 4,
+        "edits": 8,
+        "rate": 0.7272727272727273,
+        "reference_units": 11
+      }
+    },
+    {
+      "candidate": "не нужен i think it",
+      "cer": {
+        "candidate_units": 15,
+        "edits": 22,
+        "rate": 0.7586206896551724,
+        "reference_units": 29
+      },
+      "end_ms": 3229369,
+      "id": "u-000475-b0216d2cf5",
+      "language": "mixed",
+      "reference": "an не нужен, Нужен другой субъект.",
+      "start_ms": 3225449,
+      "wer": {
+        "candidate_units": 5,
+        "edits": 4,
+        "rate": 0.6666666666666666,
+        "reference_units": 6
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 0
+      },
+      "end_ms": 3327549,
+      "id": "u-000496-b7ddd9875e",
+      "language": "unknown",
+      "reference": "",
+      "start_ms": 3324529,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 0,
+        "rate": 0.0,
+        "reference_units": 0
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 2,
+        "rate": 1.0,
+        "reference_units": 2
+      },
+      "end_ms": 3619437,
+      "id": "u-000554-2519c6a247",
+      "language": "ko",
+      "reference": "어?",
+      "start_ms": 3616357,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 2,
+        "rate": 1.0,
+        "reference_units": 2
+      },
+      "end_ms": 3621237,
+      "id": "u-000555-0283c181b1",
+      "language": "ko",
+      "reference": "응 응",
+      "start_ms": 3617117,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 2,
+        "rate": 1.0,
+        "reference_units": 2
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      },
+      "end_ms": 3623417,
+      "id": "u-000556-40a57f887c",
+      "language": "ko",
+      "reference": "응",
+      "start_ms": 3619577,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      },
+      "end_ms": 3629497,
+      "id": "u-000557-c6a9472ba0",
+      "language": "ko",
+      "reference": "응",
+      "start_ms": 3626357,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 3,
+        "rate": 1.0,
+        "reference_units": 3
+      },
+      "end_ms": 3632877,
+      "id": "u-000558-8cd2fe7879",
+      "language": "ko",
+      "reference": "시크요",
+      "start_ms": 3629357,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 1,
+        "rate": 1.0,
+        "reference_units": 1
+      }
+    }
+  ]
+}

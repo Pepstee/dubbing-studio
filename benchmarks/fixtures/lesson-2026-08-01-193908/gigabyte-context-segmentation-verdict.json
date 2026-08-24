@@ -1,0 +1,59 @@
+{
+  "schema_version": "dubbing.gigabyte-context-segmentation-verdict.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "base_fixture_sha256": "6cd6156505123fa01b143847c8f4c9c04f6d8118a87cb69978b541cabfd6ae6f",
+  "model": "faster-whisper-large-v3-turbo-ct2",
+  "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+  "compute_type": "int8_float16",
+  "accuracy_certification_eligible": false,
+  "baseline_word_accuracy": 0.5454545454545454,
+  "experiments": [
+    {
+      "id": "left-channel-only",
+      "fixture_sha256": "fd68c4cf7264dc2b54839cf0468e09b234101010d5d223484d39bbacfecaae5f",
+      "sweep_sha256": "b31f197d3a900cad0597883dc5040f1420a76fdd860c53ec18a92ed6f93d4e1a",
+      "report_sha256": "602cdb8a6db514b9f1b65f2a2b5251526fe312cc91299d1cca53f9167f4b1930",
+      "runtime_seconds": 62.828,
+      "word_accuracy": 0.5353535353535354,
+      "verdict": "REJECTED"
+    },
+    {
+      "id": "right-channel-only",
+      "fixture_sha256": "51773777c3b3d07efd2cc12263d7e1101a811c2ecb79bdbea792194c0c23f6d2",
+      "sweep_sha256": "e202518707f8f13ff22032e61004f9cc0a744afdb6ed2846862b6c8093d6162d",
+      "report_sha256": "55d0ea6e0f7ab077c6c3d5c2c55dd4177ae5d294a74952b3dc389b2b472c207c",
+      "runtime_seconds": 63.375,
+      "word_accuracy": 0.48484848484848486,
+      "verdict": "REJECTED"
+    },
+    {
+      "id": "segment-padding-500ms",
+      "fixture_sha256": "02edf961df04ad7d1bc245c83b300df13176abd4fdf8accd55347af0491358c4",
+      "sweep_sha256": "06698e0a3911f83096bdab5cadfc3fce81766713a83e1c9b6cdb70a6793140fc",
+      "report_sha256": "c72dd17ab67a0630d4838fd933fa97b7f46b43ba6865dc83d7532f5ed3a16802",
+      "runtime_seconds": 60.5,
+      "word_accuracy": 0.36363636363636365,
+      "verdict": "REJECTED"
+    },
+    {
+      "id": "segment-padding-1000ms",
+      "fixture_sha256": "558ea849efee485b9d4f629df05d78b24fc74493d20b5b2ef04169e90517ed47",
+      "sweep_sha256": "5bd8ac058d43f61657d2561fc0284bd7c05250fc78f8ab3a82c7115f5619404b",
+      "report_sha256": "bc628461e8ad0c2d427194ef5466fbe6271046a01597374c50db2e9cf5905974",
+      "runtime_seconds": 64.75,
+      "word_accuracy": 0.43434343434343436,
+      "verdict": "REJECTED"
+    },
+    {
+      "id": "preceding-whisperkit-context-30s",
+      "context_transcript_sha256": "20ee9e6135929c1159d2bb162439f2a5640aa50c8549659ef2bc383130a224db",
+      "sweep_sha256": "694a8f13460e2e0acf20cc540f6ebfb109d6f25b879c8ae04ea8b8557d7767ce",
+      "report_sha256": "ef2fbe0404e2777509a9d0205242a2bca7a01bc053a5f93c99f657c8ae704558",
+      "runtime_seconds": 74.297,
+      "word_accuracy": 0.505050505050505,
+      "verdict": "REJECTED"
+    }
+  ],
+  "promotion_passed": false,
+  "giga_admission_emitted": false
+}

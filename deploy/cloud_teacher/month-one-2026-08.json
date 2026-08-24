@@ -1,0 +1,32 @@
+{
+  "schema_version": "dubbing.cloud-teacher-policy.v1",
+  "programme_id": "month-one-2026-08",
+  "provider": "elevenlabs",
+  "begins_at": "2026-08-20T00:00:00+09:00",
+  "ends_at": "2026-09-19T00:00:00+09:00",
+  "operator_authorization_id": "operator-authorized-cloud-teacher-2026-08-20",
+  "cloud_allowed": true,
+  "training_corpus_allowed": true,
+  "privacy": {
+    "model_improvement_opt_out_attested": true,
+    "retention_mode": "provider-storage; model-improvement opt-out verified in ElevenLabs account UI on 2026-08-21"
+  },
+  "limits": {
+    "max_total_audio_seconds": 1260000,
+    "max_estimated_cost_usd": 100.0,
+    "estimated_price_per_hour_usd": 0.22,
+    "chunk_seconds": 3600
+  },
+  "compaction": {
+    "enabled": true,
+    "padding_ms": 1500,
+    "merge_gap_ms": 15000,
+    "separator_ms": 500,
+    "maximum_slices_per_packet": 1,
+    "preserve_diarization_context": true
+  },
+  "training": {
+    "maximum_agreement_wer": 0.05,
+    "maximum_agreement_cer": 0.08
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "schema_version": "dubbing.historical-canary.v1",
+  "canary_id": "lessons-en-ru-canary-v1",
+  "description": "Hash-bound real-world English/Russian lesson canary. Lesson 6 is development-only; lessons 7 and 9 are untouched holdouts; lesson 8 is the long-duration stress fixture.",
+  "required_languages": [
+    "en",
+    "ru"
+  ],
+  "giga_admission_allowed": false,
+  "execution": {
+    "candidate_languages": [
+      "en",
+      "ru"
+    ],
+    "target_seconds": 240,
+    "minimum_seconds": 60,
+    "maximum_seconds": 480,
+    "overlap_seconds": 2.0,
+    "minimum_silence_seconds": 0.7,
+    "language_retry_policy": {}
+  },
+  "policy": {
+    "allowed_quality_statuses": [
+      "PASS"
+    ],
+    "maximum_realtime_factor": 0.25,
+    "maximum_provisional_reference_wer": 0.60,
+    "window_ms": 60000,
+    "accuracy_claim": false,
+    "diarization_claim": false
+  },
+  "entries": [
+    {
+      "id": "lesson-06",
+      "role": "development",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-01 19-39-08.mov",
+        "sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+        "duration_ms": 4987833,
+        "evaluation_end_ms": 3400000,
+        "processing_end_ms": 3400000,
+        "size_bytes": 3845699125
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-06.txt",
+        "sha256": "c81ef6c4f34bb2476615499da95d424466485a3cc0981a33e0c57c63e8d9ae4b",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "lesson-07",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-03 00-16-59.mov",
+        "sha256": "5657a0783a213b9bff781fd2ce8f3c1d7c1fe987c4968c11f17a7558d3f22c3f",
+        "duration_ms": 3753933,
+        "size_bytes": 2894325130
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-07.txt",
+        "sha256": "244afbe9da519a8b9c5d77c194e423828f25ad7f5959bc16cb470c70cc23af81",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "lesson-08",
+      "role": "stress",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-09 22-42-57.mov",
+        "sha256": "01532bf158a83f6e51621ebf1d3067e42eb550fa70a9df2202568ceef508100a",
+        "duration_ms": 14293700,
+        "size_bytes": 11020816961
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-08.txt",
+        "sha256": "e2e14ed76fc64ef8501e99198ec4b8a5cef590f9f56ea3b4c054f067aedea14f",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    },
+    {
+      "id": "lesson-09",
+      "role": "holdout",
+      "source": {
+        "path": "/Users/admin/Movies/2026-08-10 21-02-00.mov",
+        "sha256": "cd84f5ad37bc96919b10baaea8251f635783dcc05df51f2c75e3dbfb8ab7a1d2",
+        "duration_ms": 3540100,
+        "size_bytes": 2729452975
+      },
+      "reference": {
+        "path": "/Users/admin/Documents/giga-user/lesson-assessments/transcripts/lesson-09.txt",
+        "sha256": "3c7e6a1bc835bd4f3087c2ead4605e84d0425031602b844c7ea2c42f88aec625",
+        "kind": "macwhisper-provisional-untimed-text",
+        "human_ground_truth": false
+      }
+    }
+  ]
+}

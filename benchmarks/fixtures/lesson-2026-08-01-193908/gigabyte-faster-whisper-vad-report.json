@@ -1,0 +1,135 @@
+{
+  "backend": {
+    "configuration": {
+      "beam_size": 1,
+      "compute_type": "int8_float16",
+      "condition_on_previous_text": false,
+      "device": "cuda",
+      "multilingual": true,
+      "temperatures": [
+        0.0
+      ],
+      "vad_filter": true,
+      "word_timestamps": true
+    },
+    "model": "deepdml/faster-whisper-large-v3-turbo-ct2",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "promotion_state": "evaluation-only",
+    "provider": "faster-whisper"
+  },
+  "fixture_id": "lesson-2026-08-01-193908-gigabyte-faster-whisper-vad-v1",
+  "metrics": {
+    "cer": {
+      "candidate_units": 8066,
+      "edits": 9269,
+      "rate": 0.6211217583595792,
+      "reference_units": 14923
+    },
+    "language_note": "Script buckets are reported for this untimed mixed-language reference; language-labelled reference turns are required for true per-language WER.",
+    "per_script": {
+      "cyrillic": {
+        "wer": {
+          "candidate_units": 318,
+          "edits": 273,
+          "rate": 0.6546762589928058,
+          "reference_units": 417
+        }
+      },
+      "hangul": {
+        "wer": {
+          "candidate_units": 1,
+          "edits": 15,
+          "rate": 1.0,
+          "reference_units": 15
+        }
+      },
+      "latin": {
+        "wer": {
+          "candidate_units": 1667,
+          "edits": 2179,
+          "rate": 0.6899936668777708,
+          "reference_units": 3158
+        }
+      },
+      "other": {
+        "wer": {
+          "candidate_units": 10,
+          "edits": 19,
+          "rate": 0.8636363636363636,
+          "reference_units": 22
+        }
+      }
+    },
+    "per_time_window": [],
+    "schema_version": "dubbing.transcript-evaluation.v1",
+    "time_window_evaluation_available": false,
+    "time_window_limitation": "A timestamped reference is required for defensible window-level WER/CER.",
+    "wer": {
+      "candidate_units": 1996,
+      "edits": 2400,
+      "rate": 0.6644518272425249,
+      "reference_units": 3612
+    }
+  },
+  "quality": {
+    "approval_allowed": false,
+    "issues": [
+      {
+        "code": "pathological_repetition",
+        "end_ms": null,
+        "evidence": {
+          "adjacent_duplicate_segment_transitions": 10,
+          "max_adjacent_duplicate_chain": 5,
+          "max_phrase": "hello",
+          "max_phrase_run": 6,
+          "max_token": "hello",
+          "max_token_run": 6
+        },
+        "message": "Repeated decoding output indicates a hallucination loop.",
+        "severity": "critical",
+        "start_ms": null
+      },
+      {
+        "code": "large_unexplained_gaps",
+        "end_ms": null,
+        "evidence": {
+          "gap_count": 6,
+          "largest_gap_ms": 562800
+        },
+        "message": "Long gaps require comparison with VAD evidence.",
+        "severity": "review",
+        "start_ms": null
+      }
+    ],
+    "metrics": {
+      "adjacent_duplicate_segment_transitions": 10,
+      "covered_ms": 2526550,
+      "duration_ms": 4987833,
+      "explained_silence_gap_count": 0,
+      "explained_silence_gaps": [],
+      "large_gap_count": 6,
+      "max_adjacent_duplicate_chain": 5,
+      "max_phrase_run": 6,
+      "max_token_run": 6,
+      "script_counts": {
+        "cyrillic": 1478,
+        "hangul": 2,
+        "latin": 6128,
+        "other": 0
+      },
+      "segment_count": 310,
+      "speech_coverage_ratio": 0.506543,
+      "timestamp_overlap_count": 0,
+      "token_count": 1996,
+      "tokens_per_second_of_segment_time": 0.79,
+      "uncertain_segment_count": 0
+    },
+    "policy_version": "dubbing.transcript-quality-policy.v1",
+    "schema_version": "dubbing.transcript-quality-report.v1",
+    "status": "REPROCESS_REQUIRED"
+  },
+  "reference_is_human_ground_truth": false,
+  "reference_kind": "macwhisper-provisional-untimed-text",
+  "schema_version": "dubbing.regression-fixture-report.v1",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+}

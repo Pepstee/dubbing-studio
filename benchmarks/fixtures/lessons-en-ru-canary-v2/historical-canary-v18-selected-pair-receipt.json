@@ -1,0 +1,158 @@
+{
+  "artifact_responsibility": "Machine-readable outcome evidence for the v24 selected-pair historical canary. The immutable corpus manifest remains the input contract; this receipt records one real local execution and replay and does not certify accuracy, diarization or GIGA admission.",
+  "canary_id": "lessons-en-ru-canary-v2",
+  "cloud_allowed": false,
+  "entries": {
+    "lesson-06": {
+      "artifacts": {
+        "canary_report_sha256": "88343e456c014860580ce08e56290b0d93efc91e5afcc51b382a01bda221118b",
+        "quality_report_sha256": "df536aead8a3996050eec0b5ddcb31c5862da2768718f6d47b84ee191c502d71",
+        "result_sha256": "808b65869c8e60b05a5fd943258d10f68a0b1efd2caf133dceb8419bc6b6dc5f",
+        "run_receipt_sha256": "62ee24ab6868a10e269d22116a660c10bb078af87b47729e0cd334af59b0dd3e"
+      },
+      "chunk_count": 50,
+      "initial_run": {
+        "adjacent_duplicate_segment_transitions": 8,
+        "approval_allowed": false,
+        "quality_status": "PASS_WITH_UNCERTAIN_SPANS",
+        "realtime_factor": 0.24608176470588236,
+        "repetition_finding_count": 0,
+        "runtime_seconds": 836.678,
+        "segment_count": 492,
+        "targeted_span_redecode_count": 32,
+        "timestamp_out_of_bounds_count": 0,
+        "total_receipt_attempt_count": 205,
+        "uncertain_segment_count": 9,
+        "unsupported_script_segment_count": 0
+      },
+      "operational_gate": {
+        "failure_reasons": [
+          "QUALITY_PASS_WITH_UNCERTAIN_SPANS"
+        ],
+        "passed": false
+      },
+      "provisional_reference_observation": {
+        "accuracy_certified": false,
+        "cer": 0.5347450244588889,
+        "reference_is_human_ground_truth": false,
+        "wer": 0.5645071982281284
+      },
+      "replay": {
+        "checkpoint_replay": true,
+        "last_attempt_index": 2,
+        "replay_mismatch_count": 0,
+        "result_byte_identical_on_replay": true,
+        "runtime_accounting_complete": true,
+        "runtime_seconds": 14.328,
+        "unterminated_attempt_indices": []
+      },
+      "semantic_result_matches_v15_and_v16": true,
+      "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b"
+    },
+    "recording-2026-07-16": {
+      "artifacts": {
+        "canary_report_sha256": "c45cb8dec9531478236e3956cdfc485a5edcb18da636500474e416a36823bf7d",
+        "quality_report_sha256": "7bb651a42397e1408905deed24ca025a749c0f8d3468d45547997c616b43a3b2",
+        "result_sha256": "1b85e397c7f72ff9e7610dcf1a6caf72becc9aa2134cca460e5b26baedbbae51",
+        "run_receipt_sha256": "576a1f986f2c87c2e093baa0f9bbcecc2d3ee8a388b67911ced3dc872062426a"
+      },
+      "chunk_count": 69,
+      "comparison_to_v16": {
+        "chunk_67_receipt_entry_count_v16": 87,
+        "chunk_67_receipt_entry_count_v18": 8,
+        "chunk_67_receipt_reduction_percent": 90.804598,
+        "runtime_reduction_percent": 53.746647,
+        "runtime_reduction_seconds": 1356.022,
+        "speedup": 2.162005,
+        "targeted_span_redecode_count_v16": 240,
+        "targeted_span_redecode_count_v18": 104,
+        "targeted_span_redecode_reduction_percent": 56.666667,
+        "v16_runtime_seconds": 2522.989
+      },
+      "initial_run": {
+        "approval_allowed": false,
+        "local_retry_budget_exhaustion_count": 0,
+        "quality_status": "HUMAN_REVIEW_REQUIRED",
+        "realtime_factor": 0.219137744642663,
+        "repetition_finding_count": 0,
+        "runtime_seconds": 1166.967,
+        "segment_count": 486,
+        "targeted_span_redecode_count": 104,
+        "timestamp_out_of_bounds_count": 0,
+        "total_receipt_attempt_count": 259,
+        "uncertain_segment_count": 16,
+        "unsupported_script_segment_count": 0,
+        "unsupported_script_quarantine_count": 12
+      },
+      "operational_gate": {
+        "failure_reasons": [
+          "QUALITY_HUMAN_REVIEW_REQUIRED"
+        ],
+        "passed": false
+      },
+      "replay": {
+        "checkpoint_replay": true,
+        "last_attempt_index": 2,
+        "replay_mismatch_count": 0,
+        "result_byte_identical_on_replay": true,
+        "runtime_accounting_complete": true,
+        "runtime_seconds": 18.582,
+        "unterminated_attempt_indices": []
+      },
+      "source_sha256": "a18670193edbb700dbbbed697a7bda6cdf989a6aa0ead33b78e96bac8f45487e",
+      "unsupported_script_evidence": {
+        "chunk_67_local_retry_exhausted": false,
+        "chunk_67_selected_attempt": 7,
+        "clean_japanese_script_segment_count": 0,
+        "original_text_sha256_and_source_timestamps_preserved": true,
+        "quarantine_policy": "quarantine-without-local-brute-force-v1"
+      }
+    }
+  },
+  "execution": {
+    "coordinator_version": "adaptive-long-form-v24",
+    "execution_fingerprint_sha256": "b8fd28abb50b2a16e75b57a55ddba284e0978c266f59e577fb3b3cc94b3db25c",
+    "manifest_sha256": "ee75a7a1f76db068298ac706d0354f9fb25a68af674062c3d01fe362f33efee7",
+    "quality_policy_version": "dubbing.transcript-quality-policy.v6",
+    "repository_head": "f2a36e1db475acb300fab634943f0dbf23041242",
+    "selected_entries": [
+      "lesson-06",
+      "recording-2026-07-16"
+    ]
+  },
+  "giga_admission_allowed": false,
+  "limitations": [
+    "The provisional Lesson 6 reference is untimed and not human ground truth, so WER and CER are observation-only and accuracy remains uncertified.",
+    "The July 16 recording has no trusted reference transcript or speaker labels; its accuracy and diarization are not measured.",
+    "Both entries remain explicitly review-blocked; the successful result is fail-closed behavior and bounded work, not production transcript approval.",
+    "This selected pair does not replace the still-missing full 17-entry corpus execution."
+  ],
+  "recorded_at": "2026-08-21T19:02:22+09:00",
+  "replay_integrity": {
+    "chunk_aggregate_sha256_before_and_after": "99f4734d7b13c6356e239382d8824f83e738ae4e02123f56e8bfe0c963d88b77",
+    "chunk_checkpoint_count": 119,
+    "chunk_receipt_aggregate_sha256_before_and_after": "44daffd16af0e18903de642ac0c7334f31112e767c260372b0e3a258fc35f962",
+    "chunk_receipt_count": 119,
+    "quality_aggregate_sha256_before_and_after": "c71b91e7b2d37ec0354d1b7df7f7373fd21664b1ede9091ea47ae932b667ebfc",
+    "result_aggregate_sha256_before_and_after": "083b4deec343fe0d4a20d7fc9f857a2b0563b33c6df976e9019224f24c0c29ae",
+    "whisperkit_server_started_during_replay": false
+  },
+  "schema_version": "dubbing.historical-canary-selected-pair-receipt.v1",
+  "summary": {
+    "accuracy_certified": false,
+    "completed_entries": [
+      "lesson-06",
+      "recording-2026-07-16"
+    ],
+    "diarization_certified": false,
+    "giga_admission_allowed": false,
+    "invalid_evidence": {},
+    "operational_failures": [
+      "lesson-06",
+      "recording-2026-07-16"
+    ],
+    "sha256": "8d4b315de5848eaf8d894a319fd6fd4a76f4780b3b1a5348ec4a97b6519f6593",
+    "status": "FAIL"
+  },
+  "verdict": "SELECTED_PAIR_REPLAY_SAFE_AND_FAIL_CLOSED_FULL_CORPUS_AND_TRUSTED_ACCURACY_PENDING"
+}

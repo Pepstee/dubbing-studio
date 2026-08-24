@@ -3,14 +3,72 @@ name = "dubbing-studio"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "flask",
+    "flask>=3.0,<4",
+    "waitress>=3.0,<4",
 ]
 
 [project.scripts]
-dubbing-cli = "dubbing.__main__:main"
-dubbing-web = "dubbing.web:main"
+dubbing-cli = "dubbing.cli:main"
+dubbing-gpu = "dubbing.gpu_launcher:main"
+dubbing-web = "dubbing.apps.dubbing_web:main"
+dubbing-capture-watch = "dubbing.apps.personal_capture.watcher:main"
+dubbing-capture-ingest = "dubbing.apps.personal_capture.ingest:main"
+dubbing-capture-review = "dubbing.apps.personal_capture.review:main"
+dubbing-capture-preflight = "dubbing.apps.personal_capture.preflight:main"
+dubbing-capture-model-manifest = "dubbing.apps.personal_capture.model_manifest:main"
+dubbing-long-transcribe = "dubbing.control_plane.cli:main"
+dubbing-evaluate-transcript = "dubbing.evaluation.cli:main"
+dubbing-adjudicate-local = "dubbing.evaluation.adjudication_cli:main"
+dubbing-adjudicate-cloud = "dubbing.transcription.cloud_cli:main"
+dubbing-cloud-teacher = "dubbing.transcription.teacher_cli:main"
+dubbing-prepare-cloud-teacher-canary = "dubbing.evaluation.cloud_teacher_canary:main"
+dubbing-fuse-local-transcripts = "dubbing.evaluation.local_fusion:main"
+dubbing-review-ground-truth = "dubbing.evaluation.review_ground_truth:main"
+dubbing-evaluate-language-sweep = "dubbing.evaluation.language_sweep:main"
+dubbing-evaluate-accuracy-portfolio = "dubbing.evaluation.accuracy_gate:main"
+dubbing-canary = "dubbing.evaluation.canary:main"
+dubbing-transcript-review-package = "dubbing.apps.transcript_review.package:main"
+dubbing-transcript-review = "dubbing.apps.transcript_review.app:main"
+dubbing-calibration-package = "dubbing.apps.transcript_review.calibration:main"
+dubbing-calibration-review = "dubbing.apps.transcript_review.calibration_app:main"
 
 [project.optional-dependencies]
+diarization = [
+    "imageio-ffmpeg>=0.6",
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
+diarization-pyannote = [
+    "pyannote.audio>=4,<5",
+]
+transcription-mlx = [
+    "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+]
+transcription-faster = [
+    "faster-whisper>=1.2.1",
+    "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
+    "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
+]
+translation-local = [
+    "lingua-language-detector>=2.1",
+    "sentencepiece>=0.2",
+    "torch>=2.4",
+    "transformers>=4.50,<5",
+]
+understanding-mac = [
+    "imageio-ffmpeg>=0.6",
+    "mlx-whisper>=0.4.2; platform_system == 'Darwin' and platform_machine == 'arm64'",
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
+understanding-nvidia = [
+    "faster-whisper>=1.2.1",
+    "imageio-ffmpeg>=0.6",
+    "nvidia-cublas-cu12>=12.6; platform_system == 'Linux'",
+    "nvidia-cudnn-cu12>=9.1; platform_system == 'Linux'",
+    "numpy>=1.23",
+    "sherpa-onnx>=1.10.28",
+]
 dev = [
     "pytest",
     "ruff",
@@ -18,3 +76,21 @@ dev = [
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["audit", "build", "dist", "output"]
+
+[tool.ruff.lint]
+# Keep the repository's historical Ruff profile explicit across Ruff releases.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+pythonpath = [".", "tests"]
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", "audit", "build", "dist", "output"]
+
+[tool.setuptools.packages.find]
+include = ["dubbing*"]
+
+[tool.setuptools.package-data]
+"dubbing.apps.personal_capture" = ["templates/*.html", "static/*.css"]
+"dubbing.apps.transcript_review" = ["templates/*.html", "static/*.css", "static/*.js"]

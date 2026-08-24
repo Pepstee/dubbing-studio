@@ -1,0 +1,56 @@
+{
+  "schema_version": "dubbing.romanian-text-repair-diagnostic.v1",
+  "verdict": "REJECTED_INSUFFICIENT_CEILING",
+  "scope": "VALIDATION_DIAGNOSTIC_ONLY",
+  "candidate": {
+    "report_path": "benchmarks/fixtures/fleurs-noisy-codeswitch-rms20-snr30-25x4/multilingual-v5-report.json",
+    "report_sha256": "78738e28a4224db735b04c09f1990ab46f8dcdaceba7b83bd0915f341b762145",
+    "romanian_reference_words": 579,
+    "romanian_baseline_edits": 71,
+    "romanian_baseline_wer": 0.1226252158894646
+  },
+  "training_lexicon": {
+    "dataset": "google/fleurs",
+    "split": "train",
+    "language": "ro_ro",
+    "revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+    "url": "https://huggingface.co/datasets/google/fleurs/resolve/70bb2e84b976b7e960aa89f1c648e09c59f894dd/data/ro_ro/train.tsv?download=true",
+    "bytes": 1790902,
+    "sha256": "731f89692116ada275e0036fa5fd068b6ab5d1dd6d6e9ad6f3ee14aafddd22b2",
+    "rows": 2891,
+    "reference_partition_used_as_lexicon": false
+  },
+  "predeclared_grid": {
+    "maximum_word_edit_distance": [1, 2],
+    "minimum_training_frequency": [1, 2, 3, 5, 10],
+    "require_unique_nearest_distance": true,
+    "require_equal_diacritic_stripped_form": [false, true],
+    "preserve_tokens_containing_digits": true
+  },
+  "best_safe_policy": {
+    "maximum_word_edit_distance": 2,
+    "minimum_training_frequency": 1,
+    "require_unique_nearest_distance": true,
+    "require_equal_diacritic_stripped_form": true,
+    "changed_tokens": 3,
+    "changes": [
+      ["masina", "mașina"],
+      ["dupa", "după"],
+      ["detinuti", "deținuți"]
+    ],
+    "romanian_edits": 68,
+    "romanian_wer": 0.11744386873920553,
+    "romanian_word_accuracy": 0.8825561312607945,
+    "target_passed": false
+  },
+  "unsafe_policy_observation": "Dropping the diacritic-equivalence guard changed valid words such as sora to ora, isus to sus, and nevoi to nevoie, increasing WER.",
+  "local_llm_observation": "Qwen3 8B with a strict token-preserving prompt made no changes; explicitly encouraging correction produced plausible but wrong Romanian substitutions on the worst span. Free-form correction was rejected without producing an admissible candidate.",
+  "gates": {
+    "romanian_accuracy_at_least_90_percent": false,
+    "deployable_policy_frozen": false,
+    "holdout_accessed": false,
+    "production_scope_certified": false,
+    "giga_admission_emitted": false
+  },
+  "conclusion": "Safe text-only repair removes three of the fourteen edits needed to reach the Romanian gate. The remaining deficit requires stronger acoustic model evidence rather than more aggressive language-model guessing."
+}

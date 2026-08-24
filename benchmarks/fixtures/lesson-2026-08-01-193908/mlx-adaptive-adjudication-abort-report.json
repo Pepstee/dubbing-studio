@@ -1,0 +1,48 @@
+{
+  "schema_version": "dubbing.interrupted-provider-benchmark.v1",
+  "fixture_id": "lesson-2026-08-01-193908",
+  "source_sha256": "d174eb3d23182f7cba0d651ab785ab8f0003a1512ab0fc667d27c8cd7a541d3b",
+  "provider": "mlx-whisper",
+  "model": "mlx-community/whisper-large-v3-turbo",
+  "cloud_allowed": false,
+  "large_download_performed": false,
+  "giga_admission_emitted": false,
+  "runs": [
+    {
+      "configuration": {
+        "temperature": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        "condition_on_previous_text": false,
+        "word_timestamps": true
+      },
+      "checkpoint_directory": "output/control-plane-mlx-large-v3-turbo-adjudication-v1",
+      "manifest_sha256": "f42e9906b554df06910ca7ed172f5ced6acb48fdafc972e028002dec1901b5c6",
+      "progress_sha256": "b45f3b1da1b24b9286247eeead0da7cb4d7eb761065681a894ddd92458f4e63d",
+      "completed_chunks": 6,
+      "total_chunks": 19,
+      "observed_elapsed_minutes_before_stop": 44,
+      "stop_reason": "A 20-second targeted retry spent approximately 15 minutes in decoder fallback escalation."
+    },
+    {
+      "configuration": {
+        "temperature": [0.0],
+        "condition_on_previous_text": false,
+        "word_timestamps": true
+      },
+      "checkpoint_directory": "output/control-plane-mlx-large-v3-turbo-adjudication-v2-temp0",
+      "manifest_sha256": "c1b1c656f5ed6ce952d9df4eaecddf9563330164f2effc8420dde11235831fd4",
+      "progress_sha256": "f813f2bac93e3b6f405eaee7bf2c015a51f5506289beab563f1f2659e38ad82f",
+      "completed_chunks": 3,
+      "total_chunks": 19,
+      "observed_elapsed_minutes_before_stop": 32,
+      "stop_reason": "Deterministic decoding still stalled on difficult audio and word-timestamp alignment."
+    }
+  ],
+  "verdict": {
+    "status": "ABORTED_NOT_SPEED_VIABLE",
+    "complete_transcript_produced": false,
+    "accuracy_metrics_available": false,
+    "eligible_as_healthy_consensus_comparator": false,
+    "resume_policy": "Checkpoints are retained, but resume only after adding bounded per-span decoding timeouts.",
+    "interpretation": "The cached MLX model is not an appropriate automatic long-form adjudicator under the measured configuration. The existing defective fixed-chunk MLX transcript remains rejected negative evidence."
+  }
+}

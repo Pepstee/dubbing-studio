@@ -1,0 +1,7 @@
+# Optional Korean spacing stage for Gigabyte WSL x86_64 Python 3.12.
+# This is separate from the Windows requirements because the native wheel is platform-bound.
+# Install with: python -m pip install --no-deps --require-hashes -r requirements/kiwi-spacing-gigabyte.txt
+kiwipiepy==0.23.2 \
+    --hash=sha256:46a0a9fd36727736e8010ff54c655639f5df1c2ec34b92679cd3a94e8734d81f
+kiwipiepy_model==0.23.0 \
+    --hash=sha256:498a22f5585e6c4a162423d7557eb3ee3f71cddc6e0aeb2650c50467e85933e2

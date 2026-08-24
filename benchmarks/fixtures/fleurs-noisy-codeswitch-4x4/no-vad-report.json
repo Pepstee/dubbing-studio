@@ -1,0 +1,450 @@
+{
+  "accuracy_certification_eligible": false,
+  "candidate": {
+    "backend": "faster-whisper",
+    "model": "faster-whisper-large-v3-turbo-ct2"
+  },
+  "candidate_sha256": "8fd11308e9f9889d1efcdb0a5b3ae4c28547e278a6220d8744dd4162ac2401ef",
+  "fixture_gate_passed": false,
+  "fixture_sha256": "d00c3418da122d923e26356dc1b8d61bc2a96a91dd3224c6fbfa2778803bf474",
+  "giga_admission_emitted": false,
+  "metrics": {
+    "cer": {
+      "candidate_units": 801,
+      "edits": 713,
+      "rate": 0.4979050279329609,
+      "reference_units": 1432
+    },
+    "target_passed": false,
+    "wer": {
+      "candidate_units": 180,
+      "edits": 163,
+      "rate": 0.5397350993377483,
+      "reference_units": 302
+    },
+    "word_accuracy": 0.4602649006622517
+  },
+  "missing_word_timestamp_segments": [],
+  "per_language": {
+    "en": {
+      "cer": {
+        "candidate_units": 87,
+        "edits": 324,
+        "rate": 0.7883211678832117,
+        "reference_units": 411
+      },
+      "target_passed": false,
+      "wer": {
+        "candidate_units": 20,
+        "edits": 60,
+        "rate": 0.759493670886076,
+        "reference_units": 79
+      },
+      "word_accuracy": 0.240506329113924
+    },
+    "ko": {
+      "cer": {
+        "candidate_units": 215,
+        "edits": 35,
+        "rate": 0.14644351464435146,
+        "reference_units": 239
+      },
+      "target_passed": false,
+      "wer": {
+        "candidate_units": 67,
+        "edits": 18,
+        "rate": 0.23376623376623376,
+        "reference_units": 77
+      },
+      "word_accuracy": 0.7662337662337663
+    },
+    "ro": {
+      "cer": {
+        "candidate_units": 293,
+        "edits": 153,
+        "rate": 0.391304347826087,
+        "reference_units": 391
+      },
+      "target_passed": false,
+      "wer": {
+        "candidate_units": 54,
+        "edits": 43,
+        "rate": 0.5584415584415584,
+        "reference_units": 77
+      },
+      "word_accuracy": 0.4415584415584416
+    },
+    "ru": {
+      "cer": {
+        "candidate_units": 206,
+        "edits": 229,
+        "rate": 0.5856777493606138,
+        "reference_units": 391
+      },
+      "target_passed": false,
+      "wer": {
+        "candidate_units": 39,
+        "edits": 44,
+        "rate": 0.6376811594202898,
+        "reference_units": 69
+      },
+      "word_accuracy": 0.3623188405797102
+    }
+  },
+  "production_scope_certified": false,
+  "quality": {
+    "approval_allowed": true,
+    "issues": [],
+    "metrics": {
+      "adjacent_duplicate_segment_transitions": 0,
+      "covered_ms": 90860,
+      "duration_ms": 180440,
+      "explained_silence_gap_count": 0,
+      "explained_silence_gaps": [],
+      "large_gap_count": 0,
+      "max_adjacent_duplicate_chain": 0,
+      "max_phrase_run": 1,
+      "max_token_run": 1,
+      "script_counts": {
+        "cyrillic": 162,
+        "hangul": 210,
+        "latin": 422,
+        "other": 0
+      },
+      "segment_count": 14,
+      "speech_coverage_ratio": 0.503547,
+      "timestamp_overlap_count": 0,
+      "token_count": 181,
+      "tokens_per_second_of_segment_time": 1.9921,
+      "uncertain_segment_count": 0
+    },
+    "policy_version": "dubbing.transcript-quality-policy.v1",
+    "schema_version": "dubbing.transcript-quality-report.v1",
+    "status": "PASS"
+  },
+  "schema_version": "dubbing.timestamped-fixture-evaluation.v1",
+  "source_sha256": "87b5b6f59c626e7bfd5548d5c2d6812b6b7882979842d104ddbe9f5631d9ff63",
+  "spans": [
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 64,
+        "rate": 1.0,
+        "reference_units": 64
+      },
+      "end_ms": 7540,
+      "id": "codeswitch-000-fleurs-en_us-validation-000000-1548",
+      "language": "en",
+      "reference": "when you call someone who is thousands of miles away you are using a satellite",
+      "start_ms": 1000,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 15,
+        "rate": 1.0,
+        "reference_units": 15
+      }
+    },
+    {
+      "candidate": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу скрываясь с окружающей обстановкой а затем набрасываются на добычу",
+      "cer": {
+        "candidate_units": 162,
+        "edits": 3,
+        "rate": 0.018633540372670808,
+        "reference_units": 161
+      },
+      "end_ms": 21970,
+      "id": "codeswitch-001-fleurs-ru_ru-validation-000000-1614",
+      "language": "ru",
+      "reference": "они умеют отлично видеть в темноте при помощи ночного видения и почти незаметно передвигаться оцелоты выслеживают добычу сливаясь с окружающей обстановкой а затем набрасываются на добычу",
+      "start_ms": 8290,
+      "wer": {
+        "candidate_units": 26,
+        "edits": 1,
+        "rate": 0.038461538461538464,
+        "reference_units": 26
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 81,
+        "rate": 1.0,
+        "reference_units": 81
+      },
+      "end_ms": 28960,
+      "id": "codeswitch-002-fleurs-ro_ro-validation-000000-1598",
+      "language": "ro",
+      "reference": "cu toate că trei persoane se aflau în interiorul casei când mașina a lovit-o nimeni nu a fost rănit",
+      "start_ms": 22720,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 20,
+        "rate": 1.0,
+        "reference_units": 20
+      }
+    },
+    {
+      "candidate": "이제 과학적 데이터가 거대한 규모의 이 탄소경제는 지난 200만년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 보라냈음을 보여줍니다",
+      "cer": {
+        "candidate_units": 61,
+        "edits": 5,
+        "rate": 0.08333333333333333,
+        "reference_units": 60
+      },
+      "end_ms": 40270,
+      "id": "codeswitch-003-fleurs-ko_kr-validation-000000-1616",
+      "language": "ko",
+      "reference": "이제 과학적 데이터가 거대한 규모의 이 탄소 경제는 지난 이백만 년 동안 인류의 진화를 도왔던 안정적인 상태에서 생물권을 몰아냈음을 보여줍니다",
+      "start_ms": 29710,
+      "wer": {
+        "candidate_units": 18,
+        "edits": 5,
+        "rate": 0.25,
+        "reference_units": 20
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 213,
+        "rate": 1.0,
+        "reference_units": 213
+      },
+      "end_ms": 57400,
+      "id": "codeswitch-004-fleurs-en_us-validation-000001-1620",
+      "language": "en",
+      "reference": "now widely available throughout the archipelago javanese cuisine features an array of simply seasoned dishes the predominant flavorings the javanese favor being peanuts chillies sugar especially javanese coconut sugar and various aromatic spices",
+      "start_ms": 41020,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 33,
+        "rate": 1.0,
+        "reference_units": 33
+      }
+    },
+    {
+      "candidate": "he said that the source of the phone is working at wi fi",
+      "cer": {
+        "candidate_units": 44,
+        "edits": 42,
+        "rate": 0.9130434782608695,
+        "reference_units": 46
+      },
+      "end_ms": 65590,
+      "id": "codeswitch-005-fleurs-ru_ru-validation-000001-1554",
+      "language": "ru",
+      "reference": "он сказал что создал дверной звонок работающий от wifi",
+      "start_ms": 58150,
+      "wer": {
+        "candidate_units": 13,
+        "edits": 13,
+        "rate": 1.4444444444444444,
+        "reference_units": 9
+      }
+    },
+    {
+      "candidate": "in a normal way a course will discuss all the issues discussed here usually through practical experience",
+      "cer": {
+        "candidate_units": 88,
+        "edits": 72,
+        "rate": 0.7346938775510204,
+        "reference_units": 98
+      },
+      "end_ms": 74740,
+      "id": "codeswitch-006-fleurs-ro_ro-validation-000001-1576",
+      "language": "ro",
+      "reference": "în mod normal un curs va aborda mult mai detaliat toate problemele discutate aici de obicei prin experiență practică",
+      "start_ms": 66340,
+      "wer": {
+        "candidate_units": 17,
+        "edits": 18,
+        "rate": 0.9473684210526315,
+        "reference_units": 19
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 22,
+        "rate": 1.0,
+        "reference_units": 22
+      },
+      "end_ms": 80170,
+      "id": "codeswitch-007-fleurs-ko_kr-validation-000001-1648",
+      "language": "ko",
+      "reference": "가나안에는 큰 숲이 없었기 때문에 나무가 무척 비쌌다",
+      "start_ms": 75490,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 8,
+        "rate": 1.0,
+        "reference_units": 8
+      }
+    },
+    {
+      "candidate": "the un also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+      "cer": {
+        "candidate_units": 87,
+        "edits": 2,
+        "rate": 0.02247191011235955,
+        "reference_units": 89
+      },
+      "end_ms": 88840,
+      "id": "codeswitch-008-fleurs-en_us-validation-000002-1510",
+      "language": "en",
+      "reference": "the u.n. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts",
+      "start_ms": 80920,
+      "wer": {
+        "candidate_units": 20,
+        "edits": 2,
+        "rate": 0.09523809523809523,
+        "reference_units": 21
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 102,
+        "rate": 1.0,
+        "reference_units": 102
+      },
+      "end_ms": 101410,
+      "id": "codeswitch-009-fleurs-ru_ru-validation-000002-1634",
+      "language": "ru",
+      "reference": "в японии приблизительно 7000 островов самый большой из которых — хонсю что делает японию 7-м по величине островом в мире!",
+      "start_ms": 89590,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 20,
+        "rate": 1.0,
+        "reference_units": 20
+      }
+    },
+    {
+      "candidate": "exemplu învățarea și socializarea sunt fungerate ca fi motivații importante pentru folosirea internetului james et al 1995",
+      "cer": {
+        "candidate_units": 106,
+        "edits": 10,
+        "rate": 0.08849557522123894,
+        "reference_units": 113
+      },
+      "end_ms": 113920,
+      "id": "codeswitch-010-fleurs-ro_ro-validation-000002-1655",
+      "language": "ro",
+      "reference": "de exemplu învățarea” și socializarea” sunt sugerate ca fiind motivații importante pentru folosirea internetului james et al. 1995",
+      "start_ms": 102160,
+      "wer": {
+        "candidate_units": 17,
+        "edits": 3,
+        "rate": 0.16666666666666666,
+        "reference_units": 18
+      }
+    },
+    {
+      "candidate": "고대 신왕국 이륙트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 천년은 족히 넘은 건축물이었습니다",
+      "cer": {
+        "candidate_units": 54,
+        "edits": 5,
+        "rate": 0.08771929824561403,
+        "reference_units": 57
+      },
+      "end_ms": 130090,
+      "id": "codeswitch-011-fleurs-ko_kr-validation-000002-1631",
+      "language": "ko",
+      "reference": "고대 신왕국 이집트인들은 조상의 기념비적인 건축물을 보고 경탄했고 이것은 그 당시 기준으로 1000년은 족히 넘은 건축물이었습니다",
+      "start_ms": 114670,
+      "wer": {
+        "candidate_units": 16,
+        "edits": 2,
+        "rate": 0.125,
+        "reference_units": 16
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 45,
+        "rate": 1.0,
+        "reference_units": 45
+      },
+      "end_ms": 134980,
+      "id": "codeswitch-012-fleurs-en_us-validation-000003-1578",
+      "language": "en",
+      "reference": "then lakkha singh took the lead in singing the bhajans",
+      "start_ms": 130840,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 10,
+        "rate": 1.0,
+        "reference_units": 10
+      }
+    },
+    {
+      "candidate": "",
+      "cer": {
+        "candidate_units": 0,
+        "edits": 82,
+        "rate": 1.0,
+        "reference_units": 82
+      },
+      "end_ms": 142990,
+      "id": "codeswitch-013-fleurs-ru_ru-validation-000003-1615",
+      "language": "ru",
+      "reference": "тысячи лет назад человек по имени аристарх сказал что солнечная система вращается вокруг солнца",
+      "start_ms": 135730,
+      "wer": {
+        "candidate_units": 0,
+        "edits": 14,
+        "rate": 1.0,
+        "reference_units": 14
+      }
+    },
+    {
+      "candidate": "se pare că jacurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu paturau pe străzile bișchecului",
+      "cer": {
+        "candidate_units": 99,
+        "edits": 6,
+        "rate": 0.06060606060606061,
+        "reference_units": 99
+      },
+      "end_ms": 153220,
+      "id": "codeswitch-014-fleurs-ro_ro-validation-000003-1584",
+      "language": "ro",
+      "reference": "se pare că jafurile de amploare ar fi continuat pe timpul nopții când oamenii legii nu patrulau pe străzile bișkekului",
+      "start_ms": 143740,
+      "wer": {
+        "candidate_units": 20,
+        "edits": 3,
+        "rate": 0.15,
+        "reference_units": 20
+      }
+    },
+    {
+      "candidate": "이 도시는 정통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 정통적인 붉은 귀와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+      "cer": {
+        "candidate_units": 100,
+        "edits": 3,
+        "rate": 0.03,
+        "reference_units": 100
+      },
+      "end_ms": 178690,
+      "id": "codeswitch-015-fleurs-ko_kr-validation-000003-1525",
+      "language": "ko",
+      "reference": "이 도시는 전통적인 터키의 모습보다 지중해 유럽의 분위기를 더 많이 가지고 있지만 넓은 대로 정면이 유리로 장식된 건물 현대적인 쇼핑센터들 사이에 띄엄띄엄 전통적인 붉은 기와 지붕과 18세기 시장 그리고 오래된 모스크와 교회들이 있습니다",
+      "start_ms": 153970,
+      "wer": {
+        "candidate_units": 33,
+        "edits": 3,
+        "rate": 0.09090909090909091,
+        "reference_units": 33
+      }
+    }
+  ],
+  "word_timestamp_gate_passed": true
+}
