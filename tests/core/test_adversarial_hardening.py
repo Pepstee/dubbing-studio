@@ -24,12 +24,19 @@ import pytest
 from dubbing.aligner import TimedSegment
 from dubbing.assembler import MAX_TIMELINE_MS, assemble_timeline
 from dubbing.backends.say import _parse_int, _pbas_for_tags, _rate_for_tags
-from dubbing.models import ProsodyTag, Segment, SRTEntry, TTSResult
+from dubbing.models import (
+    DEFAULT_MAX_SYNTHESIS_SECONDS,
+    ProsodyTag,
+    Segment,
+    SRTEntry,
+    TTSResult,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _short_wav(frames: int = 220) -> bytes:
     buf = io.BytesIO()
@@ -52,6 +59,7 @@ def _pair(start_ms: int, end_ms: int) -> tuple[list[TimedSegment], list[TTSResul
 # ---------------------------------------------------------------------------
 # 1. Timeline-duration cap (hostile-timestamp memory DoS)
 # ---------------------------------------------------------------------------
+
 
 class TestTimelineCap:
     def test_99_hour_timestamp_rejected_without_allocation(self):
@@ -94,6 +102,7 @@ class TestTimelineCap:
 # ---------------------------------------------------------------------------
 # 2. Unicode-digit prosody values (isdigit-passes-int-crashes)
 # ---------------------------------------------------------------------------
+
 
 class TestUnicodeDigitProsody:
     def test_parse_int_rejects_superscript_two(self):
@@ -148,8 +157,7 @@ class _TimingOutBackend(TTSBackend):
 class _ShortWavBackend(TTSBackend):
     def synthesize(self, segments):
         return [
-            TTSResult(segment=seg, audio_bytes=_short_wav(), duration_ms=10)
-            for seg in segments
+            TTSResult(segment=seg, audio_bytes=_short_wav(), duration_ms=10) for seg in segments
         ]
 
 
@@ -185,15 +193,18 @@ class TestWebHardening:
     def test_hostile_timestamp_returns_error_not_oom(self, client, monkeypatch):
         monkeypatch.setattr("dubbing.backends.say.SayTTSBackend", _ShortWavBackend)
         resp = _post_srt(client, _SRT_HOSTILE_TIMESTAMP)
-        assert resp.status_code == 502
+        assert resp.status_code == 504
         body = json.loads(resp.data)
-        assert "error" in body and "timeline" in body["error"]
+        assert body["error_code"] == "time_budget_exceeded"
+        assert body["limit"] == DEFAULT_MAX_SYNTHESIS_SECONDS
+        assert body["requested"] > body["limit"]
         assert _jobs == {}
 
 
 # ---------------------------------------------------------------------------
 # 4. CLI: hostile SRT exits with a clean error, never a traceback
 # ---------------------------------------------------------------------------
+
 
 class TestCliHardening:
     def test_hostile_timestamp_yields_clean_error(self, tmp_path):
@@ -204,7 +215,8 @@ class TestCliHardening:
         srt.write_text(_SRT_HOSTILE_TIMESTAMP, encoding="utf-8")
         result = subprocess.run(
             [sys.executable, "-m", "dubbing", "dub", str(srt), "--output", str(tmp_path / "out")],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             cwd=str(Path(__file__).parents[2]),
         )
         assert result.returncode != 0

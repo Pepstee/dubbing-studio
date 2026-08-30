@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
 # ---------------------------------------------------------------------------
 # dub subcommand — happy path
 # ---------------------------------------------------------------------------
+
 
 class TestCliDub:
     def test_exit_code_zero(self, tmp_path):
@@ -99,6 +101,7 @@ class TestCliDub:
 # ---------------------------------------------------------------------------
 # dub subcommand — with --output
 # ---------------------------------------------------------------------------
+
 
 class TestCliDubOutput:
     def test_exit_code_zero_with_output(self, tmp_path):
@@ -204,6 +207,7 @@ class TestCliDubOutput:
 # dub subcommand — --lang
 # ---------------------------------------------------------------------------
 
+
 class TestCliLang:
     def test_lang_flag_accepted_and_produces_wav(self, tmp_path):
         srt = tmp_path / "sample.srt"
@@ -224,6 +228,7 @@ class TestCliLang:
 # ---------------------------------------------------------------------------
 # batch subcommand
 # ---------------------------------------------------------------------------
+
 
 class TestCliBatch:
     def test_exit_code_zero(self, tmp_path):
@@ -276,6 +281,7 @@ class TestCliBatch:
 # Error cases
 # ---------------------------------------------------------------------------
 
+
 class TestCliErrors:
     def test_unknown_backend_exits_nonzero(self, tmp_path):
         srt = tmp_path / "sample.srt"
@@ -301,3 +307,71 @@ class TestCliErrors:
         assert result.returncode != 0
         assert "Traceback" not in result.stderr
         assert "error:" in result.stderr
+
+
+class TestCliResourceLimitsAndInputValidation:
+    def test_dub_segment_limit_is_structured(self, tmp_path):
+        source = tmp_path / "two.srt"
+        source.write_text(_SRT_MULTI, encoding="utf-8")
+        result = _run("dub", str(source), "--max-segments", "1")
+        assert result.returncode != 0
+        assert "error_code=segment_count_exceeded" in result.stderr
+        assert "limit=1" in result.stderr
+        assert "requested=2" in result.stderr
+
+    def test_batch_uses_same_segment_limit(self, tmp_path):
+        source = tmp_path / "two.srt"
+        source.write_text(_SRT_MULTI, encoding="utf-8")
+        result = _run(
+            "batch",
+            str(tmp_path / "*.srt"),
+            "--output",
+            str(tmp_path / "out"),
+            "--max-segments",
+            "1",
+        )
+        assert result.returncode != 0
+        assert "error_code=segment_count_exceeded" in result.stderr
+
+    def test_environment_default_reaches_cli(self, tmp_path, monkeypatch):
+        source = tmp_path / "two.srt"
+        source.write_text(_SRT_MULTI, encoding="utf-8")
+        monkeypatch.setenv("DUBBING_MAX_SEGMENTS", "1")
+        result = _run("dub", str(source))
+        assert result.returncode != 0
+        assert "error_code=segment_count_exceeded" in result.stderr
+        assert "limit=1" in result.stderr
+
+    @pytest.mark.parametrize("value", ["-1", "nan", "inf", "-inf"])
+    def test_invalid_time_limit_is_rejected_by_parser(self, tmp_path, value):
+        source = tmp_path / "one.srt"
+        source.write_text(_SRT_SINGLE, encoding="utf-8")
+        result = _run("dub", str(source), "--max-synthesis-seconds", value)
+        assert result.returncode != 0
+        assert "Traceback" not in result.stderr
+
+    @pytest.mark.parametrize("payload", ["", "  \n", "1\n00:00:01,000 -->"])
+    def test_invalid_srt_file_is_rejected_cleanly(self, tmp_path, payload):
+        source = tmp_path / "invalid.srt"
+        source.write_text(payload, encoding="utf-8")
+        result = _run("dub", str(source))
+        assert result.returncode != 0
+        assert "no valid subtitle entries" in result.stderr
+        assert "Traceback" not in result.stderr
+
+    def test_nul_srt_file_is_rejected_cleanly(self, tmp_path):
+        source = tmp_path / "invalid.srt"
+        source.write_text(_SRT_SINGLE.replace("Hello", "Hello\x00"), encoding="utf-8")
+        result = _run("dub", str(source))
+        assert result.returncode != 0
+        assert "NUL" in result.stderr
+        assert "Traceback" not in result.stderr
+
+    @pytest.mark.parametrize("language", ["x" * 21, "한국어"])
+    def test_invalid_language_is_rejected_cleanly(self, tmp_path, language):
+        source = tmp_path / "one.srt"
+        source.write_text(_SRT_SINGLE, encoding="utf-8")
+        result = _run("dub", str(source), "--lang", language)
+        assert result.returncode != 0
+        assert "language" in result.stderr
+        assert "Traceback" not in result.stderr

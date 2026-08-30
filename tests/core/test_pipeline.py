@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 
+import pytest
 
 from dubbing.aligner import TimedSegment
 from dubbing.backends.base import TTSBackend
-from dubbing.models import Segment, TTSResult
+from dubbing.models import (
+    JobConfig,
+    Segment,
+    SegmentLimitExceeded,
+    SynthesisTimeBudgetExceeded,
+    TTSResult,
+    _env_float,
+    _env_int,
+)
 from dubbing.pipeline import DubbingPipeline
 
 
 # ---------------------------------------------------------------------------
 # Controllable test double — NOT the implementation's MockTTSBackend
 # ---------------------------------------------------------------------------
+
 
 class _FixedDurationBackend(TTSBackend):
     """Returns a fixed duration_ms for every segment; records all calls."""
@@ -72,6 +82,7 @@ _SRT_MULTI_TAG = """\
 # Basic return type and count
 # ---------------------------------------------------------------------------
 
+
 class TestPipelineReturnType:
     def test_run_returns_list(self):
         result = DubbingPipeline(_FixedDurationBackend()).run(_SRT_SINGLE)
@@ -93,6 +104,7 @@ class TestPipelineReturnType:
 # ---------------------------------------------------------------------------
 # Segment plan and timing
 # ---------------------------------------------------------------------------
+
 
 class TestPipelineTiming:
     def test_single_segment_start_ms(self):
@@ -126,6 +138,7 @@ class TestPipelineTiming:
 # ---------------------------------------------------------------------------
 # Prosody tag stripping
 # ---------------------------------------------------------------------------
+
 
 class TestPipelineProsody:
     def test_prosody_tag_stripped_from_segment_text(self):
@@ -164,6 +177,7 @@ class TestPipelineProsody:
 # Backend interaction — correct calls, no audio files
 # ---------------------------------------------------------------------------
 
+
 class TestPipelineBackendInteraction:
     def test_backend_called_once_per_segment(self):
         backend = _FixedDurationBackend()
@@ -193,6 +207,7 @@ class TestPipelineBackendInteraction:
 # Plain-text fallback (non-SRT string input)
 # ---------------------------------------------------------------------------
 
+
 class TestPipelinePlainTextFallback:
     def test_plain_text_produces_one_segment(self):
         result = DubbingPipeline(_FixedDurationBackend()).run("Just some words")
@@ -219,6 +234,7 @@ class TestPipelinePlainTextFallback:
 # File (Path) input
 # ---------------------------------------------------------------------------
 
+
 class TestPipelineFileInput:
     def test_path_input_reads_srt_file(self, tmp_path):
         srt = tmp_path / "sample.srt"
@@ -243,6 +259,7 @@ class TestPipelineFileInput:
 # ---------------------------------------------------------------------------
 # Backend injected directly — acceptance criteria coverage
 # ---------------------------------------------------------------------------
+
 
 class TestBackendInjected:
     def test_pipeline_accepts_backend(self):
@@ -276,6 +293,7 @@ class TestBackendInjected:
 # ---------------------------------------------------------------------------
 # Language field forwarded to backend
 # ---------------------------------------------------------------------------
+
 
 class TestLanguageFieldForwarded:
     def test_language_default_is_empty_string(self):
@@ -328,6 +346,7 @@ class TestLanguageFieldForwarded:
 # ---------------------------------------------------------------------------
 # ProsodyTag list forwarded to backend.synthesize
 # ---------------------------------------------------------------------------
+
 
 class TestProsodyTagsForwardedToBackend:
     def test_single_tag_forwarded_to_backend(self):
@@ -385,3 +404,86 @@ No tags here
         )
         assert len(all_segs[0].tags) == 1
         assert all_segs[1].tags == []
+
+
+class TestJobConfigLimits:
+    def test_segment_limit_refuses_before_backend(self):
+        backend = _FixedDurationBackend()
+        with pytest.raises(SegmentLimitExceeded) as exc_info:
+            DubbingPipeline(backend, JobConfig(max_segments=2)).run(_SRT_MULTI)
+        assert backend.calls == []
+        assert exc_info.value.error_code == "segment_count_exceeded"
+        assert exc_info.value.limit == 2
+        assert exc_info.value.requested == 3
+
+    def test_estimated_time_limit_refuses_before_backend(self):
+        backend = _FixedDurationBackend()
+        with pytest.raises(SynthesisTimeBudgetExceeded) as exc_info:
+            DubbingPipeline(backend, JobConfig(max_synthesis_seconds=5)).run(_SRT_MULTI)
+        assert backend.calls == []
+        assert exc_info.value.error_code == "time_budget_exceeded"
+        assert exc_info.value.limit == 5
+        assert exc_info.value.requested == 6
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"max_segments": -1}, "max_segments"),
+            ({"max_segments": True}, "max_segments"),
+            ({"max_synthesis_seconds": -1}, "max_synthesis_seconds"),
+            ({"max_synthesis_seconds": float("inf")}, "max_synthesis_seconds"),
+            ({"max_synthesis_seconds": float("nan")}, "max_synthesis_seconds"),
+            ({"max_synthesis_seconds": True}, "max_synthesis_seconds"),
+        ],
+    )
+    def test_job_config_rejects_invalid_values(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            JobConfig(**kwargs)
+
+    def test_none_limits_preserve_direct_api_behavior(self):
+        result = DubbingPipeline(_FixedDurationBackend(), JobConfig()).run(_SRT_MULTI)
+        assert len(result) == 3
+
+
+class TestEnvironmentLimitParsing:
+    @pytest.mark.parametrize("value", ["", "garbage", "0", "-1"])
+    def test_integer_env_drift_falls_back(self, monkeypatch, value):
+        monkeypatch.setenv("DUBBING_TEST_LIMIT", value)
+        assert _env_int("DUBBING_TEST_LIMIT", 17) == 17
+
+    @pytest.mark.parametrize("value", ["", "garbage", "0", "-1", "nan", "inf", "1e999"])
+    def test_float_env_drift_falls_back(self, monkeypatch, value):
+        monkeypatch.setenv("DUBBING_TEST_LIMIT", value)
+        assert _env_float("DUBBING_TEST_LIMIT", 2.5) == 2.5
+
+    def test_valid_environment_values_are_retained(self, monkeypatch):
+        monkeypatch.setenv("DUBBING_TEST_INT", "9")
+        monkeypatch.setenv("DUBBING_TEST_FLOAT", "1.25")
+        assert _env_int("DUBBING_TEST_INT", 17) == 9
+        assert _env_float("DUBBING_TEST_FLOAT", 2.5) == 1.25
+
+
+class TestStrictFileInputs:
+    @pytest.mark.parametrize("payload", ["", "  \n", "1\n00:00:01,000 -->"])
+    def test_no_valid_srt_entries_refuse_before_backend(self, tmp_path, payload):
+        source = tmp_path / "invalid.srt"
+        source.write_text(payload, encoding="utf-8")
+        backend = _FixedDurationBackend()
+        with pytest.raises(ValueError, match="no valid subtitle entries"):
+            DubbingPipeline(backend).run(source)
+        assert backend.calls == []
+
+    def test_nul_srt_refuses_before_backend(self, tmp_path):
+        source = tmp_path / "invalid.srt"
+        source.write_text(_SRT_SINGLE.replace("Hello", "Hello\x00"), encoding="utf-8")
+        backend = _FixedDurationBackend()
+        with pytest.raises(ValueError, match="NUL"):
+            DubbingPipeline(backend).run(source)
+        assert backend.calls == []
+
+    @pytest.mark.parametrize("language", ["x" * 21, "한국어", "en\n"])
+    def test_invalid_language_refuses_before_backend(self, language):
+        backend = _FixedDurationBackend()
+        with pytest.raises(ValueError, match="language"):
+            DubbingPipeline(backend).run(_SRT_SINGLE, language=language)
+        assert backend.calls == []

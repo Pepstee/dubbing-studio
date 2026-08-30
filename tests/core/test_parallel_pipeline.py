@@ -7,6 +7,7 @@ Acceptance criteria:
   - Output order matches ascending SRT index regardless of which segment's
     synthesize() call completes first.
 """
+
 from __future__ import annotations
 
 import io
@@ -16,13 +17,14 @@ import wave
 import pytest
 
 from dubbing.backends.base import TTSBackend
-from dubbing.models import Segment, TTSResult
+from dubbing.models import JobConfig, Segment, SynthesisTimeBudgetExceeded, TTSResult
 from dubbing.pipeline import DubbingPipeline
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _minimal_wav() -> bytes:
     buf = io.BytesIO()
@@ -103,14 +105,17 @@ First subtitle
 # Test backends
 # ---------------------------------------------------------------------------
 
+
 class _SleepingBackend(TTSBackend):
     """Sleeps SLEEP_S per call — simulates I/O-bound TTS without subprocesses."""
 
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
         time.sleep(SLEEP_S)
         wav = _minimal_wav()
-        return [TTSResult(segment=seg, audio_bytes=wav, duration_ms=int(SLEEP_S * 1000))
-                for seg in segments]
+        return [
+            TTSResult(segment=seg, audio_bytes=wav, duration_ms=int(SLEEP_S * 1000))
+            for seg in segments
+        ]
 
 
 class _ReverseCompletionBackend(TTSBackend):
@@ -146,6 +151,7 @@ class _InstantBackend(TTSBackend):
 # ---------------------------------------------------------------------------
 # Timing: 6 segments finish in < 3 × single-segment wall-clock time
 # ---------------------------------------------------------------------------
+
 
 class TestParallelSpeedup:
     def test_six_segments_faster_than_three_times_single_segment(self):
@@ -188,6 +194,7 @@ class TestParallelSpeedup:
 # ---------------------------------------------------------------------------
 # Output order: ascending SRT index regardless of completion order
 # ---------------------------------------------------------------------------
+
 
 class TestOutputOrder:
     def test_results_in_srt_index_order_despite_reverse_completion(self):
@@ -245,18 +252,24 @@ class TestOutputOrder:
         pipeline = DubbingPipeline(_ReverseCompletionBackend())
         _, results = pipeline.run_full(_SRT_SIX)
 
-        texts = ["Segment one", "Segment two", "Segment three",
-                 "Segment four", "Segment five", "Segment six"]
+        texts = [
+            "Segment one",
+            "Segment two",
+            "Segment three",
+            "Segment four",
+            "Segment five",
+            "Segment six",
+        ]
         for i, result in enumerate(results):
             assert result.segment.entry.text == texts[i], (
-                f"Position {i}: expected '{texts[i]}', "
-                f"got '{result.segment.entry.text}'"
+                f"Position {i}: expected '{texts[i]}', got '{result.segment.entry.text}'"
             )
 
 
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 class TestParallelErrorHandling:
     def test_failing_backend_raises_runtime_error(self):
@@ -279,9 +292,36 @@ class TestParallelErrorHandling:
         assert cause is not None or "TTS engine failure" in str(exc_info.value)
 
 
+class TestWallClockBudget:
+    def test_slow_backend_exceeds_wall_clock_budget(self):
+        class _BudgetBackend(_SleepingBackend):
+            def synthesize(self, segments):
+                time.sleep(0.2)
+                return super().synthesize(segments)
+
+        zero_duration_srt = """\
+1
+00:00:00,000 --> 00:00:00,000
+Brief
+
+"""
+        pipeline = DubbingPipeline(
+            _BudgetBackend(),
+            JobConfig(max_synthesis_seconds=0.01),
+        )
+        started_at = time.monotonic()
+        with pytest.raises(SynthesisTimeBudgetExceeded) as exc_info:
+            pipeline.run_full(zero_duration_srt)
+        assert time.monotonic() - started_at < 0.15
+        assert exc_info.value.limit == 0.01
+        assert exc_info.value.requested is not None
+        assert exc_info.value.requested >= 0.01
+
+
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_empty_segment_list_returns_empty_results(self):

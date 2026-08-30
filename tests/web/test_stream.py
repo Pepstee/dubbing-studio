@@ -4,9 +4,11 @@ Acceptance criteria:
   - GET /stream/<valid_id>  → 200, Content-Type audio/wav, Content-Disposition inline
   - GET /stream/<unknown>   → 404
 """
+
 from __future__ import annotations
 
 import io
+import threading
 import uuid
 import wave
 
@@ -22,6 +24,7 @@ from dubbing.apps.dubbing_web import _jobs, _store_job, app  # noqa: E402
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _minimal_wav() -> bytes:
     buf = io.BytesIO()
@@ -42,6 +45,7 @@ class _FixedBackend(TTSBackend):
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def client(monkeypatch):
@@ -79,6 +83,7 @@ def large_stored_job(client) -> str:
 # GET /stream/<job_id> — happy path
 # ---------------------------------------------------------------------------
 
+
 class TestStreamSuccess:
     def test_returns_200_for_stored_job(self, client, stored_job):
         resp = client.get(f"/stream/{stored_job}")
@@ -93,9 +98,7 @@ class TestStreamSuccess:
         cd = resp.headers.get("Content-Disposition", "")
         # Inline disposition (or no header) → browser plays in-page.
         # Attachment disposition → browser triggers a file download.
-        assert not cd.startswith("attachment"), (
-            f"Expected inline disposition, got: {cd!r}"
-        )
+        assert not cd.startswith("attachment"), f"Expected inline disposition, got: {cd!r}"
 
     def test_content_disposition_contains_inline(self, client, stored_job):
         # Flask sets "inline; filename=..." when as_attachment=False and
@@ -141,6 +144,7 @@ class TestStreamSuccess:
 # GET /stream/<job_id> — 404 paths
 # ---------------------------------------------------------------------------
 
+
 class TestStreamNotFound:
     def test_unknown_string_returns_404(self, client):
         resp = client.get("/stream/does-not-exist")
@@ -159,6 +163,7 @@ class TestStreamNotFound:
     def test_evicted_job_returns_404(self, client):
         # Fill the registry past MAX_JOBS to force eviction of the first job.
         from dubbing.apps.dubbing_web import MAX_JOBS
+
         first_job = _store_job(_minimal_wav())
         for _ in range(MAX_JOBS):
             _store_job(_minimal_wav())
@@ -173,10 +178,37 @@ class TestStreamNotFound:
         assert "Traceback" not in body
         assert "Exception" not in body
 
+    def test_uppercase_uuid_shape_is_rejected_before_lookup(self, client):
+        job_id = str(uuid.uuid4()).upper()
+        _jobs[job_id] = _minimal_wav()
+        assert client.get(f"/stream/{job_id}").status_code == 404
+
+
+class TestConcurrentRegistry:
+    def test_parallel_stores_create_distinct_retrievable_jobs(self, client):
+        created: list[str] = []
+        lock = threading.Lock()
+
+        def store() -> None:
+            job_id = _store_job(_minimal_wav())
+            with lock:
+                created.append(job_id)
+
+        threads = [threading.Thread(target=store) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        assert len(created) == 8
+        assert len(set(created)) == 8
+        assert all(client.get(f"/stream/{job_id}").status_code == 200 for job_id in created)
+
 
 # ---------------------------------------------------------------------------
 # Contrast with /download — same job, different disposition
 # ---------------------------------------------------------------------------
+
 
 class TestStreamVsDownloadDisposition:
     def test_stream_is_inline_while_download_is_attachment(self, client, stored_job):

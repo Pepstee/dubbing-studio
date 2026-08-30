@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import threading
 import uuid
 import wave
 
@@ -21,11 +22,13 @@ from dubbing.apps.dubbing_web import (  # noqa: E402
     _store_job,
     app,
 )
+from dubbing.models import DEFAULT_MAX_SEGMENTS, DEFAULT_MAX_SYNTHESIS_SECONDS  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _minimal_wav() -> bytes:
     """Single-frame silence WAV — valid but trivially small, no subprocess."""
@@ -58,15 +61,13 @@ def _is_valid_wav(data: bytes) -> bool:
 # Test double — named _FixedBackend, never Mock/fake/dummy/stub
 # ---------------------------------------------------------------------------
 
+
 class _FixedBackend(TTSBackend):
     """Returns pre-built silence WAV per segment; makes zero subprocess calls."""
 
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
         wav = _minimal_wav()
-        return [
-            TTSResult(segment=seg, audio_bytes=wav, duration_ms=100)
-            for seg in segments
-        ]
+        return [TTSResult(segment=seg, audio_bytes=wav, duration_ms=100) for seg in segments]
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ Second line
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client(monkeypatch):
     """Flask test client; real synthesis is replaced by _FixedBackend."""
@@ -123,6 +125,7 @@ def job_id(client) -> str:
 # ---------------------------------------------------------------------------
 # GET /
 # ---------------------------------------------------------------------------
+
 
 class TestIndexRoute:
     def test_returns_200(self, client):
@@ -158,6 +161,7 @@ class TestIndexRoute:
 # ---------------------------------------------------------------------------
 # POST /dub — happy path
 # ---------------------------------------------------------------------------
+
 
 class TestDubRouteSuccess:
     def _post(self, client, srt: str = _SRT_SINGLE):
@@ -195,7 +199,7 @@ class TestDubRouteSuccess:
 
     def test_download_link_uses_download_path(self, client):
         html = self._post(client).data.decode()
-        assert '/download/' in html
+        assert "/download/" in html
 
     def test_sequential_requests_produce_distinct_ids(self, client):
         id1 = _parse_job_id(self._post(client))
@@ -221,6 +225,7 @@ class TestDubRouteSuccess:
 # ---------------------------------------------------------------------------
 # POST /dub — error paths
 # ---------------------------------------------------------------------------
+
 
 class TestDubRouteErrors:
     def test_missing_srt_field_returns_400(self, client):
@@ -292,9 +297,148 @@ class TestDubRouteErrors:
         assert seen == ["es"]
 
 
+class TestStrictDubInputAndResourceLimits:
+    @staticmethod
+    def _post(client, payload: bytes, language: str = ""):
+        return client.post(
+            "/dub",
+            data={"srt": (io.BytesIO(payload), "test.srt"), "lang": language},
+            content_type="multipart/form-data",
+        )
+
+    @pytest.mark.parametrize(
+        "payload",
+        [b"", b"  \n", b"hello\x00world", b"1\n00:00:01,000 -->"],
+    )
+    def test_invalid_srt_refuses_before_backend(self, client, monkeypatch, payload):
+        calls: list[list[Segment]] = []
+
+        class _RecordingBackend(_FixedBackend):
+            def synthesize(self, segments):
+                calls.append(list(segments))
+                return super().synthesize(segments)
+
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _RecordingBackend(),
+        )
+        response = self._post(client, payload)
+        assert response.status_code == 400
+        assert response.is_json
+        assert calls == []
+        assert _jobs == {}
+
+    @pytest.mark.parametrize("language", ["x" * 21, "한국어", "en\n"])
+    def test_invalid_language_refuses_before_backend(self, client, monkeypatch, language):
+        calls: list[list[Segment]] = []
+
+        class _RecordingBackend(_FixedBackend):
+            def synthesize(self, segments):
+                calls.append(list(segments))
+                return super().synthesize(segments)
+
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _RecordingBackend(),
+        )
+        response = self._post(client, _SRT_SINGLE.encode(), language)
+        assert response.status_code == 400
+        assert calls == []
+
+    def test_segment_limit_returns_structured_413(self, client, monkeypatch):
+        monkeypatch.setattr("dubbing.backends.select_backend", lambda: _FixedBackend())
+        blocks = []
+        for index in range(1, DEFAULT_MAX_SEGMENTS + 2):
+            blocks.append(f"{index}\n00:00:00,000 --> 00:00:00,001\nsegment {index}\n")
+        response = self._post(client, "\n".join(blocks).encode())
+        assert response.status_code == 413
+        assert response.get_json() == {
+            "error": (
+                f"Segment count {DEFAULT_MAX_SEGMENTS + 1} exceeds limit {DEFAULT_MAX_SEGMENTS}"
+            ),
+            "error_code": "segment_count_exceeded",
+            "limit": DEFAULT_MAX_SEGMENTS,
+            "requested": DEFAULT_MAX_SEGMENTS + 1,
+        }
+
+    def test_time_budget_returns_structured_504(self, client, monkeypatch):
+        monkeypatch.setattr("dubbing.backends.select_backend", lambda: _FixedBackend())
+        seconds = int(DEFAULT_MAX_SYNTHESIS_SECONDS) + 1
+        payload = (f"1\n00:00:00,000 --> 00:02:{seconds - 120:02d},000\nlong segment\n").encode()
+        response = self._post(client, payload)
+        assert response.status_code == 504
+        body = response.get_json()
+        assert body["error_code"] == "time_budget_exceeded"
+        assert body["limit"] == DEFAULT_MAX_SYNTHESIS_SECONDS
+        assert body["requested"] == seconds
+
+    def test_unexpected_internal_failure_is_generic_json(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "dubbing.apps.dubbing_web._store_job",
+            lambda _audio: (_ for _ in ()).throw(KeyError("private detail")),
+        )
+        previous = app.config.get("PROPAGATE_EXCEPTIONS")
+        app.config["PROPAGATE_EXCEPTIONS"] = False
+        try:
+            response = self._post(client, _SRT_SINGLE.encode())
+        finally:
+            app.config["PROPAGATE_EXCEPTIONS"] = previous
+        assert response.status_code == 500
+        assert response.get_json() == {"error": "Internal server error"}
+        assert b"private detail" not in response.data
+
+
+class TestConcurrentRequestIsolation:
+    def test_over_limit_request_never_leaks_into_parallel_valid_request(self, client, monkeypatch):
+        calls: list[str] = []
+        calls_lock = threading.Lock()
+
+        class _RecordingBackend(_FixedBackend):
+            def synthesize(self, segments):
+                with calls_lock:
+                    calls.extend(segment.entry.text for segment in segments)
+                return super().synthesize(segments)
+
+        monkeypatch.setattr("dubbing.models.DEFAULT_MAX_SEGMENTS", 2)
+        monkeypatch.setattr(
+            "dubbing.backends.select_backend",
+            lambda: _RecordingBackend(),
+        )
+
+        def srt(tag: str, count: int) -> bytes:
+            return "\n".join(
+                f"{index}\n00:00:00,000 --> 00:00:00,001\n{tag}-{index}\n"
+                for index in range(1, count + 1)
+            ).encode()
+
+        payloads = [("VALID", srt("VALID", 2)), ("OVER", srt("OVER", 3))]
+        barrier = threading.Barrier(len(payloads))
+        responses: dict[str, int] = {}
+
+        def post(tag: str, payload: bytes) -> None:
+            barrier.wait()
+            with app.test_client() as thread_client:
+                response = thread_client.post(
+                    "/dub",
+                    data={"srt": (io.BytesIO(payload), "test.srt")},
+                    content_type="multipart/form-data",
+                )
+            responses[tag] = response.status_code
+
+        threads = [threading.Thread(target=post, args=item) for item in payloads]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+
+        assert responses == {"VALID": 200, "OVER": 413}
+        assert sorted(calls) == ["VALID-1", "VALID-2"]
+
+
 # ---------------------------------------------------------------------------
 # GET /download/<id> — happy path
 # ---------------------------------------------------------------------------
+
 
 class TestDownloadRouteSuccess:
     def test_valid_id_returns_200(self, client, job_id):
@@ -342,6 +486,7 @@ class TestDownloadRouteSuccess:
 # GET /download/<id> — error paths
 # ---------------------------------------------------------------------------
 
+
 class TestDownloadRouteErrors:
     def test_unknown_uuid_returns_404(self, client):
         assert client.get(f"/download/{uuid.uuid4()}").status_code == 404
@@ -362,6 +507,7 @@ class TestDownloadRouteErrors:
 # ---------------------------------------------------------------------------
 # POST /dub — upload size limit
 # ---------------------------------------------------------------------------
+
 
 class TestDubUploadSizeLimit:
     def _oversized_payload(self) -> bytes:
@@ -417,6 +563,7 @@ class TestDubUploadSizeLimit:
 # POST /dub — whole-request-body cap (MAX_CONTENT_LENGTH)
 # ---------------------------------------------------------------------------
 
+
 class TestRequestBodyCap:
     """The per-file cap alone is bypassable: request.files parses the whole
     multipart body first, so an oversized payload smuggled in any OTHER form
@@ -452,6 +599,7 @@ class TestRequestBodyCap:
 # ---------------------------------------------------------------------------
 # Job registry bounds — eviction by count and total bytes
 # ---------------------------------------------------------------------------
+
 
 class TestJobRegistryBounds:
     """Finished jobs must not accumulate without bound: a single legal

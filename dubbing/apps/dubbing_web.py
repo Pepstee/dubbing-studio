@@ -3,13 +3,17 @@ from __future__ import annotations
 import io
 import argparse
 import ipaddress
+import re
 import subprocess
+import threading
 import uuid
 
 from flask import Flask, jsonify, request, send_file
 
 app = Flask(__name__)
 _jobs: dict[str, bytes] = {}
+_jobs_lock = threading.Lock()
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 
 MAX_UPLOAD_BYTES = 1_048_576  # 1 MiB
 
@@ -68,12 +72,17 @@ def _store_job(audio: bytes) -> str:
     would waste the work without freeing anything sooner).
     """
     job_id = str(uuid.uuid4())
-    _jobs[job_id] = audio
-    while len(_jobs) > 1 and (
-        len(_jobs) > MAX_JOBS or sum(len(a) for a in _jobs.values()) > MAX_JOBS_BYTES
-    ):
-        _jobs.pop(next(iter(_jobs)))
+    with _jobs_lock:
+        _jobs[job_id] = audio
+        while len(_jobs) > 1 and (
+            len(_jobs) > MAX_JOBS or sum(len(a) for a in _jobs.values()) > MAX_JOBS_BYTES
+        ):
+            _jobs.pop(next(iter(_jobs)))
     return job_id
+
+
+def _valid_job_id(job_id: str) -> bool:
+    return _JOB_ID_RE.fullmatch(job_id) is not None
 
 
 @app.errorhandler(413)
@@ -81,6 +90,11 @@ def _request_too_large(_exc):
     # Raised by Werkzeug when the body exceeds MAX_CONTENT_LENGTH; keep the
     # JSON-error contract instead of Werkzeug's default HTML page.
     return jsonify({"error": "Upload exceeds maximum allowed size of 1 MB"}), 413
+
+
+@app.errorhandler(500)
+def _internal_error(_exc):
+    return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/")
@@ -104,17 +118,60 @@ def dub():
     except UnicodeDecodeError:
         # Binary or wrongly-encoded upload: a client error, not a server crash.
         return jsonify({"error": "SRT file is not valid UTF-8 text"}), 400
-    language = (request.form.get("lang") or "").strip()
+    if "\x00" in srt_text:
+        return jsonify({"error": "SRT file contains NUL bytes"}), 400
+    language = request.form.get("lang") or ""
+
+    from dubbing.models import validate_language
+    from dubbing.srt_parser import parse_srt_string
+
+    try:
+        language = validate_language(language)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid lang value"}), 400
+    if not parse_srt_string(srt_text):
+        return jsonify({"error": "SRT file contains no valid subtitle entries"}), 400
 
     from dubbing.assembler import assemble_timeline
     from dubbing.backends import select_backend
+    from dubbing.models import (
+        DEFAULT_MAX_SEGMENTS,
+        DEFAULT_MAX_SYNTHESIS_SECONDS,
+        JobConfig,
+        SegmentLimitExceeded,
+        SynthesisTimeBudgetExceeded,
+    )
     from dubbing.pipeline import DubbingPipeline
 
     backend = select_backend()
-    pipeline = DubbingPipeline(backend)
+    pipeline = DubbingPipeline(
+        backend,
+        JobConfig(
+            max_segments=DEFAULT_MAX_SEGMENTS,
+            max_synthesis_seconds=DEFAULT_MAX_SYNTHESIS_SECONDS,
+        ),
+    )
     try:
         timed, results = pipeline.run_full(srt_text, language=language)
         combined = assemble_timeline(timed, results)
+    except SegmentLimitExceeded as exc:
+        return jsonify(
+            {
+                "error": str(exc),
+                "error_code": exc.error_code,
+                "limit": exc.limit,
+                "requested": exc.requested,
+            }
+        ), 413
+    except SynthesisTimeBudgetExceeded as exc:
+        return jsonify(
+            {
+                "error": str(exc),
+                "error_code": exc.error_code,
+                "limit": exc.limit,
+                "requested": exc.requested,
+            }
+        ), 504
     except (RuntimeError, ValueError) as exc:
         # Synthesis genuinely failed — report it; never substitute silence.
         return jsonify({"error": str(exc)}), 502
@@ -130,10 +187,14 @@ def dub():
 
 @app.route("/stream/<job_id>")
 def stream(job_id: str):
-    if job_id not in _jobs:
+    if not _valid_job_id(job_id):
+        return "Not found", 404
+    with _jobs_lock:
+        audio = _jobs.get(job_id)
+    if audio is None:
         return "Not found", 404
     return send_file(
-        io.BytesIO(_jobs[job_id]),
+        io.BytesIO(audio),
         mimetype="audio/wav",
         download_name="dubbed.wav",
         as_attachment=False,
@@ -142,10 +203,14 @@ def stream(job_id: str):
 
 @app.route("/download/<job_id>")
 def download(job_id: str):
-    if job_id not in _jobs:
+    if not _valid_job_id(job_id):
+        return "Not found", 404
+    with _jobs_lock:
+        audio = _jobs.get(job_id)
+    if audio is None:
         return "Not found", 404
     return send_file(
-        io.BytesIO(_jobs[job_id]),
+        io.BytesIO(audio),
         mimetype="audio/wav",
         download_name="dubbed.wav",
         as_attachment=True,

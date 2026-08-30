@@ -6,6 +6,7 @@ from pathlib import Path
 from dubbing.aligner import TimedSegment, segment_plan
 from dubbing.assembler import assemble_timeline
 from dubbing.backends.base import TTSBackend
+from dubbing.models import DEFAULT_MAX_SEGMENTS, DEFAULT_MAX_SYNTHESIS_SECONDS, JobConfig
 from dubbing.pipeline import DubbingPipeline
 
 
@@ -14,6 +15,7 @@ def batch_dub(
     backend: TTSBackend,
     output_dir: str | Path,
     language: str = "",
+    job_config: JobConfig | None = None,
 ) -> dict[Path, list[TimedSegment]]:
     """Dub every input SRT independently, writing one WAV + JSON per input.
 
@@ -22,7 +24,12 @@ def batch_dub(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    pipeline = DubbingPipeline(backend)
+    if job_config is None:
+        job_config = JobConfig(
+            max_segments=DEFAULT_MAX_SEGMENTS,
+            max_synthesis_seconds=DEFAULT_MAX_SYNTHESIS_SECONDS,
+        )
+    pipeline = DubbingPipeline(backend, job_config)
     results: dict[Path, list[TimedSegment]] = {}
     for item in inputs:
         path = Path(item)

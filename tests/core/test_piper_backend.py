@@ -2,6 +2,7 @@
 
 All subprocess calls are mocked; no real piper binary or model file is needed.
 """
+
 from __future__ import annotations
 
 import io
@@ -14,7 +15,7 @@ import pytest
 
 from dubbing.backends import EspeakTTSBackend, PiperTTSBackend, SayTTSBackend, select_backend
 from dubbing.backends.base import TTSBackend
-from dubbing.backends.piper import _raw_to_wav, _wav_duration_ms
+from dubbing.backends.piper import _raw_to_wav, _validate_model_path, _wav_duration_ms
 from dubbing.models import ProsodyTag, Segment, SRTEntry, TTSResult
 
 
@@ -26,7 +27,9 @@ _MODEL_PATH = "/models/en_US-lessac-medium.onnx"
 _PCM_SILENT = b"\x00\x00" * 2205  # 100 ms of 16-bit silence at 22050 Hz
 
 
-def _make_entry(index: int = 1, start_ms: int = 0, end_ms: int = 2000, text: str = "Hello") -> SRTEntry:
+def _make_entry(
+    index: int = 1, start_ms: int = 0, end_ms: int = 2000, text: str = "Hello"
+) -> SRTEntry:
     return SRTEntry(index=index, start_ms=start_ms, end_ms=end_ms, text=text)
 
 
@@ -45,7 +48,9 @@ def _make_segment(
     )
 
 
-def _completed_process(stdout: bytes = _PCM_SILENT, stderr: bytes = b"") -> subprocess.CompletedProcess:
+def _completed_process(
+    stdout: bytes = _PCM_SILENT, stderr: bytes = b""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(["piper"], 0, stdout=stdout, stderr=stderr)
 
 
@@ -63,6 +68,7 @@ def _piper_patch(stdout: bytes = _PCM_SILENT, stderr: bytes = b""):
 # Class membership
 # ---------------------------------------------------------------------------
 
+
 class TestInheritance:
     def test_piper_backend_subclasses_tts_backend(self):
         assert issubclass(PiperTTSBackend, TTSBackend)
@@ -74,6 +80,7 @@ class TestInheritance:
 # ---------------------------------------------------------------------------
 # Happy path — subprocess.run mocked to return valid raw PCM
 # ---------------------------------------------------------------------------
+
 
 class TestHappyPath:
     def test_returns_list(self):
@@ -169,6 +176,7 @@ class TestHappyPath:
 # Error: piper binary absent
 # ---------------------------------------------------------------------------
 
+
 class TestPiperNotFound:
     def test_raises_runtime_error_when_which_returns_none(self):
         with patch("dubbing.backends.piper.shutil.which", return_value=None):
@@ -209,6 +217,7 @@ class TestPiperNotFound:
 # ---------------------------------------------------------------------------
 # Error: model not configured
 # ---------------------------------------------------------------------------
+
 
 class TestModelNotConfigured:
     def test_raises_when_model_not_set_and_no_env_var(self, monkeypatch):
@@ -251,9 +260,24 @@ class TestModelNotConfigured:
         assert "/env/model.onnx" not in captured_calls[0]
 
 
+class TestModelPathValidation:
+    @pytest.mark.parametrize("model", ["bad;model", "bad$model", "bad\nmodel", "bad\x00model"])
+    def test_forbidden_model_path_refuses_before_subprocess(self, model):
+        run = MagicMock()
+        with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
+            with patch("dubbing.backends.piper.subprocess.run", run):
+                with pytest.raises(ValueError, match="forbidden"):
+                    PiperTTSBackend(model=model).synthesize([_make_segment()])
+        run.assert_not_called()
+
+    def test_printable_path_is_accepted(self):
+        _validate_model_path("/models/voice model.onnx")
+
+
 # ---------------------------------------------------------------------------
 # Subprocess argv — model path and flags reach piper
 # ---------------------------------------------------------------------------
+
 
 class TestSubprocessArgv:
     def _capture(self) -> tuple[list[list[str]], MagicMock]:
@@ -342,6 +366,7 @@ class TestSubprocessArgv:
 # Prosody tags — preserved in result; text reaches subprocess stdin
 # ---------------------------------------------------------------------------
 
+
 class TestProsodyTagsAndText:
     def test_tags_preserved_in_result(self):
         tag = ProsodyTag(name="rate", value="slow")
@@ -379,6 +404,7 @@ class TestProsodyTagsAndText:
 # Language code — preserved in TTSResult
 # ---------------------------------------------------------------------------
 
+
 class TestLanguagePassThrough:
     def test_language_preserved_in_result(self):
         seg = _make_segment(language="de-DE")
@@ -395,7 +421,10 @@ class TestLanguagePassThrough:
         assert result.segment.language == ""
 
     def test_language_for_each_result_matches_input_segment(self):
-        segments = [_make_segment(language=lang, index=i) for i, lang in enumerate(["en-US", "fr-FR", "de-DE"], 1)]
+        segments = [
+            _make_segment(language=lang, index=i)
+            for i, lang in enumerate(["en-US", "fr-FR", "de-DE"], 1)
+        ]
         with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
             with patch("dubbing.backends.piper.subprocess.run", return_value=_completed_process()):
                 results = PiperTTSBackend(model=_MODEL_PATH).synthesize(segments)
@@ -407,10 +436,13 @@ class TestLanguagePassThrough:
 # Sample rate extraction from piper's stderr JSON
 # ---------------------------------------------------------------------------
 
+
 class TestSampleRateFromStderr:
     def test_default_sample_rate_when_no_stderr(self):
         with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
-            with patch("dubbing.backends.piper.subprocess.run", return_value=_completed_process(stderr=b"")):
+            with patch(
+                "dubbing.backends.piper.subprocess.run", return_value=_completed_process(stderr=b"")
+            ):
                 result = PiperTTSBackend(model=_MODEL_PATH).synthesize([_make_segment()])[0]
         with wave.open(io.BytesIO(result.audio_bytes)) as wf:
             assert wf.getframerate() == 22050
@@ -431,7 +463,10 @@ class TestSampleRateFromStderr:
     def test_non_json_stderr_falls_back_to_default_rate(self):
         stderr = b"[S] Starting synthesis\n[S] Done\n"
         with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
-            with patch("dubbing.backends.piper.subprocess.run", return_value=_completed_process(stderr=stderr)):
+            with patch(
+                "dubbing.backends.piper.subprocess.run",
+                return_value=_completed_process(stderr=stderr),
+            ):
                 result = PiperTTSBackend(model=_MODEL_PATH).synthesize([_make_segment()])[0]
         with wave.open(io.BytesIO(result.audio_bytes)) as wf:
             assert wf.getframerate() == 22050
@@ -456,7 +491,10 @@ class TestSampleRateFromStderr:
     def test_stderr_json_without_audio_key_uses_default(self):
         stderr = json.dumps({"status": "ok"}).encode()
         with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
-            with patch("dubbing.backends.piper.subprocess.run", return_value=_completed_process(stderr=stderr)):
+            with patch(
+                "dubbing.backends.piper.subprocess.run",
+                return_value=_completed_process(stderr=stderr),
+            ):
                 result = PiperTTSBackend(model=_MODEL_PATH).synthesize([_make_segment()])[0]
         with wave.open(io.BytesIO(result.audio_bytes)) as wf:
             assert wf.getframerate() == 22050
@@ -464,7 +502,10 @@ class TestSampleRateFromStderr:
     def test_malformed_sample_rate_in_json_uses_default(self):
         stderr = json.dumps({"audio": {"sample_rate": "not-a-number"}}).encode()
         with patch("dubbing.backends.piper.shutil.which", return_value="/usr/local/bin/piper"):
-            with patch("dubbing.backends.piper.subprocess.run", return_value=_completed_process(stderr=stderr)):
+            with patch(
+                "dubbing.backends.piper.subprocess.run",
+                return_value=_completed_process(stderr=stderr),
+            ):
                 # int("not-a-number") raises ValueError → falls back to default
                 # The implementation uses int(info["audio"].get("sample_rate", sample_rate))
                 # so if the value is already an int it works; a non-numeric string causes ValueError.
@@ -479,6 +520,7 @@ class TestSampleRateFromStderr:
 # ---------------------------------------------------------------------------
 # subprocess failure propagates
 # ---------------------------------------------------------------------------
+
 
 class TestSubprocessFailure:
     def test_called_process_error_propagates(self):
@@ -519,6 +561,7 @@ class TestSubprocessFailure:
 # ---------------------------------------------------------------------------
 # Internal helpers — _raw_to_wav and _wav_duration_ms
 # ---------------------------------------------------------------------------
+
 
 class TestRawToWav:
     def test_returns_bytes(self):
@@ -572,6 +615,7 @@ class TestWavDurationMs:
 # ---------------------------------------------------------------------------
 # select_backend() auto-select logic
 # ---------------------------------------------------------------------------
+
 
 class TestSelectBackend:
     def test_returns_piper_backend_when_piper_on_path(self):

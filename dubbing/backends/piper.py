@@ -13,6 +13,7 @@ from dubbing.models import Segment, TTSResult
 _DEFAULT_SAMPLE_RATE = 22050
 _CHANNELS = 1
 _SAMPLE_WIDTH = 2  # 16-bit PCM
+_FORBIDDEN_MODEL_CHARS = frozenset(";&|$`<>")
 
 
 def _raw_to_wav(raw_bytes: bytes, sample_rate: int) -> bytes:
@@ -28,6 +29,15 @@ def _raw_to_wav(raw_bytes: bytes, sample_rate: int) -> bytes:
 def _wav_duration_ms(wav_bytes: bytes) -> int:
     with wave.open(io.BytesIO(wav_bytes)) as wf:
         return int(wf.getnframes() * 1000 / wf.getframerate())
+
+
+def _validate_model_path(model: str) -> None:
+    if any(
+        character in _FORBIDDEN_MODEL_CHARS or not character.isprintable() for character in model
+    ):
+        raise ValueError(
+            "piper voice model path contains forbidden shell metacharacters or control characters"
+        )
 
 
 class PiperTTSBackend(TTSBackend):
@@ -52,6 +62,7 @@ class PiperTTSBackend(TTSBackend):
                 "no piper voice model configured; pass model= to PiperTTSBackend "
                 "or set the PIPER_MODEL environment variable"
             )
+        _validate_model_path(self._model)
         results: list[TTSResult] = []
         for seg in segments:
             wav = self._synthesize_one(seg.entry.text)

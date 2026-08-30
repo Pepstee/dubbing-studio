@@ -9,12 +9,13 @@ import pytest
 from dubbing.aligner import TimedSegment
 from dubbing.backends.base import TTSBackend
 from dubbing.batch import batch_dub
-from dubbing.models import Segment, TTSResult
+from dubbing.models import JobConfig, Segment, SegmentLimitExceeded, TTSResult
 
 
 # ---------------------------------------------------------------------------
 # Test double — returns real (tiny) WAV audio, no subprocess calls
 # ---------------------------------------------------------------------------
+
 
 def _tiny_wav(duration_ms: int = 1000) -> bytes:
     buf = io.BytesIO()
@@ -29,8 +30,7 @@ def _tiny_wav(duration_ms: int = 1000) -> bytes:
 class _MockBackend(TTSBackend):
     def synthesize(self, segments: list[Segment]) -> list[TTSResult]:
         return [
-            TTSResult(segment=seg, audio_bytes=_tiny_wav(), duration_ms=1000)
-            for seg in segments
+            TTSResult(segment=seg, audio_bytes=_tiny_wav(), duration_ms=1000) for seg in segments
         ]
 
 
@@ -85,6 +85,7 @@ def two_srt_files(tmp_path: Path):
 # Return value shape — two mock SRT inputs
 # ---------------------------------------------------------------------------
 
+
 class TestBatchDubOutputShape:
     def test_returns_dict(self, two_srt_files, tmp_path):
         a, b = two_srt_files
@@ -112,6 +113,7 @@ class TestBatchDubOutputShape:
 # Segment integrity — counts
 # ---------------------------------------------------------------------------
 
+
 class TestBatchDubSegmentCounts:
     def test_first_file_has_one_segment(self, two_srt_files, tmp_path):
         a, b = two_srt_files
@@ -133,6 +135,7 @@ class TestBatchDubSegmentCounts:
 # ---------------------------------------------------------------------------
 # Segment integrity — timing and text
 # ---------------------------------------------------------------------------
+
 
 class TestBatchDubSegmentContent:
     def test_segments_are_timed_segment_instances(self, two_srt_files, tmp_path):
@@ -177,6 +180,7 @@ class TestBatchDubSegmentContent:
 # ---------------------------------------------------------------------------
 # Output directory
 # ---------------------------------------------------------------------------
+
 
 class TestBatchDubOutputDir:
     def test_creates_output_directory(self, two_srt_files, tmp_path):
@@ -226,6 +230,7 @@ class TestBatchDubOutputDir:
 # Edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestBatchDubEdgeCases:
     def test_empty_input_list_returns_empty_dict(self, tmp_path):
         results = batch_dub([], _MockBackend(), tmp_path / "out")
@@ -251,9 +256,44 @@ class TestBatchDubEdgeCases:
         assert srt in results
 
 
+class TestBatchResourceLimits:
+    def test_explicit_job_config_reaches_each_batch_job(self, tmp_path):
+        source = tmp_path / "three.srt"
+        source.write_text(_SRT_THREE_SEGMENTS, encoding="utf-8")
+        with pytest.raises(SegmentLimitExceeded) as exc_info:
+            batch_dub(
+                [source],
+                _MockBackend(),
+                tmp_path / "out",
+                job_config=JobConfig(max_segments=2),
+            )
+        assert exc_info.value.limit == 2
+        assert exc_info.value.requested == 3
+
+    def test_language_and_limits_propagate_together(self, tmp_path):
+        seen: list[str] = []
+
+        class _RecordingBackend(_MockBackend):
+            def synthesize(self, segments):
+                seen.extend(item.language for item in segments)
+                return super().synthesize(segments)
+
+        source = tmp_path / "one.srt"
+        source.write_text(_SRT_ONE_SEGMENT, encoding="utf-8")
+        batch_dub(
+            [source],
+            _RecordingBackend(),
+            tmp_path / "out",
+            language="fr",
+            job_config=JobConfig(max_segments=1, max_synthesis_seconds=2),
+        )
+        assert seen == ["fr"]
+
+
 # ---------------------------------------------------------------------------
 # Two-SRT batch acceptance: explicit coverage of acceptance criteria
 # ---------------------------------------------------------------------------
+
 
 class TestBatchDubTwoSRTs:
     def test_batch_two_srt_files_returns_two_results(self, tmp_path):

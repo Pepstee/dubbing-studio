@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import glob as _glob
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,13 @@ from dubbing.cli.factories import (
     speaker_constraints,
 )
 from dubbing.pipeline import DubbingPipeline
+from dubbing.models import (
+    DEFAULT_MAX_SEGMENTS,
+    DEFAULT_MAX_SYNTHESIS_SECONDS,
+    JobConfig,
+    SegmentLimitExceeded,
+    SynthesisTimeBudgetExceeded,
+)
 from dubbing.srt_parser import parse_srt
 from dubbing.transcription import (
     AudioUnderstandingPipeline,
@@ -38,9 +46,58 @@ from dubbing.transcription import (
 from dubbing.translation import LinguaLanguageDetector, NLLBTranslationBackend
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer value: {value!r}") from None
+    if parsed < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative integer, got {parsed}")
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid number: {value!r}") from None
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError(f"must be a non-negative finite number, got {parsed}")
+    return parsed
+
+
+def _make_job_config(args: argparse.Namespace) -> JobConfig:
+    return JobConfig(
+        max_segments=(args.max_segments if args.max_segments is not None else DEFAULT_MAX_SEGMENTS),
+        max_synthesis_seconds=(
+            args.max_synthesis_seconds
+            if args.max_synthesis_seconds is not None
+            else DEFAULT_MAX_SYNTHESIS_SECONDS
+        ),
+    )
+
+
+def _add_job_limits(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--max-segments",
+        type=_non_negative_int,
+        default=None,
+        help=f"Maximum allowed segment count (default: {DEFAULT_MAX_SEGMENTS})",
+    )
+    parser.add_argument(
+        "--max-synthesis-seconds",
+        type=_non_negative_float,
+        default=None,
+        help=(
+            "Maximum estimated and wall-clock synthesis time in seconds "
+            f"(default: {DEFAULT_MAX_SYNTHESIS_SECONDS})"
+        ),
+    )
+
+
 def _cmd_dub(args: argparse.Namespace) -> None:
     backend = make_tts_backend(args.backend)
-    pipeline = DubbingPipeline(backend)
+    pipeline = DubbingPipeline(backend, _make_job_config(args))
     output = Path(args.output) if args.output else None
 
     diarization = None
@@ -97,7 +154,13 @@ def _cmd_batch(args: argparse.Namespace) -> None:
         print(f"No files matched: {args.glob}", file=sys.stderr)
         sys.exit(1)
     output_dir = args.output or "."
-    results = batch_dub(paths, backend, output_dir, language=args.lang or "")
+    results = batch_dub(
+        paths,
+        backend,
+        output_dir,
+        language=args.lang or "",
+        job_config=_make_job_config(args),
+    )
     for path, segs in results.items():
         print(f"{path}: {len(segs)} segment(s)")
 
@@ -250,10 +313,7 @@ def _cmd_capture(args: argparse.Namespace) -> None:
     for outcome in outcomes:
         suffix = f" error={outcome.error}" if outcome.error else ""
         replayed = " replayed" if outcome.replayed else ""
-        print(
-            f"{outcome.capture_id} {outcome.state}{replayed} "
-            f"{outcome.source_name}{suffix}"
-        )
+        print(f"{outcome.capture_id} {outcome.state}{replayed} {outcome.source_name}{suffix}")
 
 
 def _add_diarization_options(parser: argparse.ArgumentParser) -> None:
@@ -313,6 +373,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Source audio/video to diarize and map onto the subtitle plan",
     )
     _add_diarization_options(dub_p)
+    _add_job_limits(dub_p)
 
     batch_p = sub.add_parser("batch", help="Dub multiple SRT files matching a glob")
     batch_p.add_argument("glob", help="Glob pattern matching .srt files")
@@ -323,6 +384,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     batch_p.add_argument("--lang", default=None, help="Target language code")
     batch_p.add_argument("--output", default=None, help="Output directory")
+    _add_job_limits(batch_p)
 
     diarize_p = sub.add_parser(
         "diarize",
@@ -502,10 +564,7 @@ def _build_parser() -> argparse.ArgumentParser:
     capture_approve.add_argument(
         "--diarization-review-acknowledged",
         action="store_true",
-        help=(
-            "Confirm manual review/correction of HUMAN_REVIEW_REQUIRED speaker "
-            "attribution"
-        ),
+        help=("Confirm manual review/correction of HUMAN_REVIEW_REQUIRED speaker attribution"),
     )
 
     capture_list = capture_sub.add_parser("list", help="List capture-ledger state")
@@ -530,6 +589,11 @@ def main() -> None:
             _cmd_transcribe(args)
         elif args.command == "capture":
             _cmd_capture(args)
+    except (SegmentLimitExceeded, SynthesisTimeBudgetExceeded) as exc:
+        raise SystemExit(
+            f"error: {exc} "
+            f"(error_code={exc.error_code}, limit={exc.limit}, requested={exc.requested})"
+        ) from exc
     except (RuntimeError, ValueError, FileNotFoundError, subprocess.SubprocessError) as exc:
         # ValueError: hostile SRT rejected by the renderer (e.g. a timestamp
         # beyond the timeline cap); SubprocessError: `say`/`afconvert`
